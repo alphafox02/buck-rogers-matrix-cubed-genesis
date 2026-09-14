@@ -710,3 +710,59 @@ That is independent confirmation that the Genesis port kept the DOS ECL
 block layout wholesale, and it validates the decompressor: a wrong decoder
 would not produce five well-formed `GOTO`s with a consistent `onInit`
 offset across 27 blocks.
+
+---
+
+## Genesis ECL disassembly — WORKING, but argument counts limit coverage
+
+`tools/genesis_disasm.py` walks the extracted bytecode from the five event
+hooks, follows jump targets, and resolves string arguments against the
+block's companion text resource.
+
+Sample from block `0x60` (56.5% reached):
+
+```
+00000  GOTO             [0x6B54]        ; onMove
+00004  GOTO             [0x6C22]        ; onSearchLocation
+00008  GOTO             [0x6B53]        ; onRest
+0000C  GOTO             [0x6B53]        ; onRestInterruption
+00010  GOTO             [0x6B0A]        ; onInit
+00014  SOUND            0x32
+00017  SAVE             0x60, [0x9BCB]
+00029  COMPARE          [0x97E8], 0x60
+0002F  IFEQ
+0005E  AND              [0x9AF9], 0x3F, [0x9E6F]
+00067  COMPAREAND       [0x9E6F], 0x26, [0x9AFA], 0x1
+0013B  ONGOTO           [0x9E6F], 0x2A, [0x6CB5], [0x72E6], ... (42 targets)
+001C8  COMPARE          [0x9800], 0x14
+001EB  IFNE
+001EC  GOTO             [0x6CEC]
+```
+
+That is unambiguously correct: a 42-entry jump table whose count matches its
+`0x2A` argument, sane flag addresses clustered at `0x97xx`/`0x9Axx`, and a
+correctly structured event-hook header.
+
+### Coverage is 19.6%, and the cause is known
+
+Blocks range from 1.4% to 56.5%. The limiting factor is the nine opcodes
+whose argument counts are still uncertain — a single wrong count desyncs the
+instruction stream for the rest of that run, so the walk terminates early.
+
+This is not a format problem. The format is understood. It is a
+data-gathering problem, and the fix is a live instruction trace: consecutive
+values of `a2` (the ECL program counter) at the fetch in `0x03346` give
+exact instruction sizes, hence exact argument counts.
+
+### Open question: string argument base
+
+In block `0x60`, a `PRINTCLEAR` resolved to text starting 68 bytes into a
+string rather than at its start. Two candidate explanations, not yet
+distinguished:
+
+1. the walk desynced at that site and the string offset is simply garbage
+   (the instruction was reached by a jump, not by fall-through), or
+2. string arguments are not raw byte offsets into the text resource.
+
+The first is more likely given the surrounding instructions decode cleanly
+and the site was jump-reached. Resolve it once argument counts are solid.
