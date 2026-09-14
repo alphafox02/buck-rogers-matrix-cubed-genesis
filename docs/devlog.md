@@ -6,6 +6,94 @@ what failed, and why we changed direction. Structured findings live in
 
 ---
 
+## 2026-09-14 -- Day 2: both sides decode, and the live trace pays off
+
+Ran mostly unattended overnight after Aaron got BlastEm's debugger working.
+
+### The trace
+
+BlastEm would not take piped input, but `di/x a2` at a breakpoint on the
+opcode fetch prints the ECL program counter on every instruction -- so the
+gaps between samples are exact instruction sizes. Aaron hand-fed `c` for a
+few hundred iterations and pasted the output.
+
+That trace did three things:
+
+1. **Identified the running block as id `0x10`**, uniquely, from six
+   independent instruction boundaries -- which independently validates the
+   LZW decompressor and the `0x6AF6` code base.
+2. **Caught a real bug.** `12 80 00 00` measured 4 bytes where the
+   DOS-derived reading predicted 3. Genesis argument type `0x80` is a 2-byte
+   string OFFSET, not DOS's inline packed string. Every string argument in
+   every script had been mis-sized.
+3. **Confirmed `FOR` at 2 arguments**, previously uncertain.
+
+The nicest piece of evidence was accidental: the same `IFNE` at `0x7EF`
+showed a 2-byte gap in one run and 1 byte in another. `0x7F0` is a one-byte
+`EXIT`, and the conditional skips it or does not depending on the test. That
+is only visible by running the same code twice.
+
+It is now a regression test (`tests/check_trace.py`): 55 exact size matches,
+9 explained by control flow, zero mismatches.
+
+### Coverage: 11% to 94%
+
+Two bugs, both reachability rather than decoding.
+
+**Conditionals guard the following instruction.** `IF*` runs the next
+instruction on success and skips it on failure, so both continuations are
+reachable. Following only fall-through truncated every walk at the first
+IF-guarded `EXIT` -- and Gold Box code is full of `IFEQ` / `EXIT` pairs.
+Block `0x10` made it obvious: the walk died at `0x3F IFEQ`, `0x40 EXIT`,
+while the trace proved execution continues well past `0x41`.
+**11.1% -> 52.5%.**
+
+**`ONGOTO` has two fixed arguments, not three.** With three, the first jump
+target is eaten as a fixed argument, the tail reads one entry too many, and
+the whole instruction fails -- and `ONGOTO` sits near the head of most large
+blocks. Neither derivation method could have caught this: the static pass
+counts fetcher calls inside the tail loop, the inference pass has no model of
+a variable tail. **52.5% -> 94.4%.**
+
+The same conditional fix applied to the DOS disassembler took it from 11.4%
+to **98.4%**, past the 83.1% a naive linear scan had claimed while cheerfully
+decoding data as instructions.
+
+### Where the remaining gaps are
+
+Checked rather than assumed. Block `0x03`'s unreached region is
+`6a 00 64 36 00 / 6b 00 64 36 00 / 6c 00 64 0e` -- opcode `0x6A` is past the
+94-opcode range and the incrementing first byte is a data table. Block `0x00`
+mixes data with code reached from native routines rather than ECL jumps.
+23 of 27 blocks are above 90%.
+
+### The answer
+
+`docs/compatibility.md`, generated from the full disassembly:
+
+- 25,063 instructions, 71 distinct opcodes
+- **58 of 71 opcodes covered, 90.64% of instructions**
+- 13 orphans, and `INPUT_RETURN` is 76% of them -- it occupies the same slot
+  as Genesis `CONTINUE` and has the same role, so it is very likely a direct
+  map. Assume it and the unresolved surface is **2.25%**.
+- `CALL` is the one real worry: it invokes a native routine, so call sites
+  need individual attention rather than a table substitution.
+
+### Lesson, third time
+
+Static analysis found the formats; the emulator found the bugs in my reading
+of them. Neither alone was enough. The trace was worth more than the previous
+several hours of parameter guessing, and it took Aaron about ten minutes.
+
+### Next
+
+1. Reconciling the last gaps in blocks `0x00` and `0x03` (likely data tables).
+2. An ECL **re-compressor**, to write blocks back into the ROM.
+3. The map/GEO format, still untouched on the Genesis side.
+4. A trace from combat or a menu, to exercise opcodes the intro never reaches.
+
+---
+
 ## 2026-09-13 -- Day 1, part 2: the Genesis engine opens up
 
 Part 1 solved the DOS side. This session went after the Genesis ROM, which
