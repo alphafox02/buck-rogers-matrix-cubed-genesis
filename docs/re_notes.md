@@ -766,3 +766,50 @@ distinguished:
 
 The first is more likely given the surrounding instructions decode cleanly
 and the site was jump-reached. Resolve it once argument counts are solid.
+
+---
+
+## Save system — RESOLVED: undeclared 8 KB SRAM
+
+The ROM header declares no external RAM (the field at `0x1B0` is blank), but
+the game does use battery-backed SRAM. Running it under BlastEm produces:
+
+```
+Saved SRAM to ~/.local/share/blastem/countdown/save.sram
+```
+
+an 8192-byte file beginning `00 00 12 34 03 03 03 00`.
+
+### Evidence in the ROM
+
+SRAM is mapped at the standard Genesis location, `0x200000`. Nine direct
+references exist, e.g.:
+
+| ROM offset | target |
+|---|---|
+| `0x01246` | `lea $200000,a0` |
+| `0x0196E` | `lea $200011,a3` |
+| `0x0230A` | `lea $200009,a0` |
+| `0x03B3A` | `lea $200001,a0` |
+| `0x07DF4` | `move.l #...,$200017` |
+| `0x1716A`, `0x176E8`, `0x19208` | `move.l #...,$20001A` |
+
+The save-validity check sits at `0x19D5C`:
+
+```
+19D56: 10 18                move.b  (a0)+,d0
+19D58: 51 c9 ff f8          dbra    d1,$19D52
+19D5C: b0 bc 12 34 56 78    cmpi.l  #$12345678,d0
+19D62: 66 c2                bne.s   ...
+```
+
+**The save signature is `0x12345678`.** A save whose magic does not match is
+rejected, which is the mechanism to mimic or extend for a port.
+
+### Why this matters
+
+"Stable saves" is a stated project goal and the blank header field made the
+mechanism an open question. It is now answered: the port needs 8 KB of SRAM,
+and a patched build must either declare it in the header (`RA` at `0x1B0`)
+or continue relying on emulators and flashcarts tolerating the omission.
+Declaring it is the safer choice for real hardware.
