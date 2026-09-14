@@ -10,3 +10,11 @@
 6bae 6bb9 6bbe 6bc9 6bce 6bd9 6bda 6bea 6bf5 6bfa 6c05 6c06 6c13 6c19 6c22 6c2b
 72dc 72e5 72e7 72f0 72f7 72fd 7301 7302 7303 7307 7308 730c 730d 730e 730f
 72dc 72e5 72e6
+# Second capture: player moved and entered combat, exercising opcodes the
+# intro never reaches.
+6c06 6c13 6c19 6c22 6c2b 6c85 6c8e 6c8f 6ca4 6caa 6cac 6cb2 6cb8 6cb9
+6bae 6bb9 6bbe 6bc9 6bce 6bd9 6bda 6bea 6bf5 6bfa 6c05 6c06 6c13 6c19 6c22 6c2b
+6c85 6c8e 6c8f 6ca4 6caa 6cac 6cb2 6cb8 6cba 6cc0 6cc6 6ccb 6cd1 6cd7 6cdc 6ce3 6cea 6ceb 6d03
+6cdc 6ce3 6cea 6ceb 6d03
+6d03 6d04
+6d0e 6d14 6d15 6d26 6d2a 6d30 6d39 6d3d 6d3e 6d44 6d4d 6d4e 6d56 6d5d 6d63 6d64 6d6c 6d6d

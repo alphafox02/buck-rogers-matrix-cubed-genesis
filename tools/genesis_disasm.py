@@ -47,8 +47,12 @@ JUMPS = {"GOTO", "GOSUB", "ONGOTO", "ONGOSUB"}
 CONDITIONAL = ("IFEQ", "IFNE", "IFLT", "IFGT", "IFLE", "IFGE")
 
 
-def load_opcodes(doc="docs/opcode_args.md"):
+DOC = Path(__file__).resolve().parent.parent / "docs" / "opcode_args.md"
+
+
+def load_opcodes(doc=None):
     """Parse the generated opcode table into {op: (name, argc)}."""
+    doc = DOC if doc is None else doc
     rows = re.findall(
         r"\| `0x([0-9A-F]{2})` \| `(\w+)` \| (\d+) \| (\d+|\?) \| \d+/\d+ \| ([^|]+)\|",
         Path(doc).read_text(),
