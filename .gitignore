@@ -1,0 +1,26 @@
+# ---- Commercial game data: NEVER commit ----
+# Mega Drive ROMs live in roms/ (note: .md is also the Markdown extension,
+# so we scope by directory rather than by extension).
+roms/
+dos_game/
+matrix/
+*.gen
+*.zip
+*.DAX
+*.OVR
+*.EXE
+*.XMI
+*.ADV
+*.BNK
+*.CAT
+
+# ---- Generated output ----
+extracted/
+generated/
+build/
+__pycache__/
+*.pyc
+
+# ---- Local tooling (fetched, never vendored) ----
+emu/
+third_party/
