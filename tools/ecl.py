@@ -228,6 +228,11 @@ EVENT_HOOKS = ("onMove", "onSearchLocation", "onRest", "onRestInterruption", "on
 _JUMPS = {"GOTO", "GOSUB", "ON_GOTO", "ON_GOSUB"}
 # Instructions after which control does not fall through.
 _TERMINAL = {"EXIT", "RETURN", "GOTO", "ON_GOTO"}
+# IF* opcodes run the following instruction when the test passes and skip it
+# when it fails, so BOTH continuations are reachable. Missing this truncates
+# a walk at every IF-guarded EXIT.
+_CONDITIONAL = {"IF_EQUALS", "IF_NOT_EQUALS", "IF_LESS", "IF_GREATER",
+                "IF_LESS_EQUALS", "IF_GREATER_EQUALS"}
 
 
 def code_start(block: bytes) -> int:
@@ -307,6 +312,16 @@ def disassemble_block(block: bytes):
             for t in _targets(ins, start):
                 if 0 <= t < len(block) and t not in found:
                     queue.append(t)
+            if ins.name in _CONDITIONAL:
+                guarded = None
+                try:
+                    guarded = parse_instruction(block, pos + ins.size)
+                except EclError:
+                    pass
+                if guarded is not None:
+                    skip = pos + ins.size + guarded.size
+                    if skip < len(block):
+                        queue.append(skip)
             if ins.name in _TERMINAL:
                 break
             pos += ins.size
