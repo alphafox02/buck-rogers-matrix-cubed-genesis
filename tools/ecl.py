@@ -216,3 +216,104 @@ def disassemble(block: bytes, start: int = 0):
         instructions.append(ins)
         pos += ins.size
     return instructions, pos, None
+
+
+CODE_BASE = 0x8000   # ECL blocks are addressed from 0x8000 (ssi-engine: code.base)
+
+# An ECL block opens with five instructions -- one per engine event hook.
+# Each is normally a GOTO to the real handler, so these five give us the
+# entry points for a proper reachability walk.
+EVENT_HOOKS = ("onMove", "onSearchLocation", "onRest", "onRestInterruption", "onInit")
+
+_JUMPS = {"GOTO", "GOSUB", "ON_GOTO", "ON_GOSUB"}
+# Instructions after which control does not fall through.
+_TERMINAL = {"EXIT", "RETURN", "GOTO", "ON_GOTO"}
+
+
+def code_start(block: bytes) -> int:
+    """Offset of the event-hook header (past the 5000 marker, if present)."""
+    if len(block) >= 2 and struct.unpack_from("<H", block, 0)[0] == 5000:
+        return 2
+    return 0
+
+
+def parse_header(block: bytes):
+    """
+    Decode the five event-hook instructions at the head of a block.
+
+    Returns (hooks, offset_after_header) where hooks is a list of
+    (name, Instruction) pairs. Raises EclError if the header is malformed.
+    """
+    pos = code_start(block)
+    hooks = []
+    for name in EVENT_HOOKS:
+        ins = parse_instruction(block, pos)
+        hooks.append((name, ins))
+        pos += ins.size
+    return hooks, pos
+
+
+def _targets(ins, base):
+    """
+    Jump destinations named by an instruction, as block offsets.
+
+    ECL code is addressed from 0x8000, and that address refers to the first
+    byte *after* the 5000 marker -- so `base` (the marker size) is added back.
+    """
+    for arg in list(ins.args) + list(ins.dyn_args):
+        if arg.is_memory and isinstance(arg.value, int):
+            yield arg.value - CODE_BASE + base
+
+
+def disassemble_block(block: bytes):
+    """
+    Reachability-based disassembly.
+
+    Walks from each event hook and follows every jump target, rather than
+    scanning linearly. ECL blocks interleave code and data, so a linear scan
+    stops dead at the first data byte and under-reports badly; it also happily
+    decodes data as instructions where it does not stop.
+
+    Returns (instructions, entry_points, errors) with instructions keyed by
+    block offset.
+    """
+    found = {}
+    errors = []
+    queue = []
+
+    try:
+        hooks, after_header = parse_header(block)
+    except EclError as exc:
+        return found, [], [(code_start(block), f"bad header: {exc}")]
+
+    start = code_start(block)
+    pos = start
+    for _name, ins in hooks:
+        found[pos] = ins
+        pos += ins.size
+        queue.extend(_targets(ins, start))
+    entries = sorted({t for t in queue if 0 <= t < len(block)})
+    queue = list(entries) + [after_header]
+
+    while queue:
+        pos = queue.pop()
+        while 0 <= pos < len(block) and pos not in found:
+            try:
+                ins = parse_instruction(block, pos)
+            except EclError as exc:
+                errors.append((pos, str(exc)))
+                break
+            found[pos] = ins
+            for t in _targets(ins, start):
+                if 0 <= t < len(block) and t not in found:
+                    queue.append(t)
+            if ins.name in _TERMINAL:
+                break
+            pos += ins.size
+
+    return found, entries, errors
+
+
+def coverage(block: bytes, found: dict) -> float:
+    """Fraction of the block claimed as instruction bytes."""
+    return sum(i.size for i in found.values()) / len(block) if block else 0.0
