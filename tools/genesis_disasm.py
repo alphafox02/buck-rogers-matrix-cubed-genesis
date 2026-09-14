@@ -30,6 +30,14 @@ DYNAMIC = {0x15: 2, 0x25: 1, 0x26: 1, 0x27: 1, 0x2B: 1, 0x31: 1, 0x5D: 0}
 TERMINAL = {"EXIT", "RETURN", "GOTO", "ONGOTO"}
 JUMPS = {"GOTO", "GOSUB", "ONGOTO", "ONGOSUB"}
 
+# IF* opcodes execute the following instruction only when the test passes,
+# and skip over it when it fails. BOTH continuations are reachable, so a
+# walk must queue the address past the guarded instruction as well --
+# otherwise any IF-guarded EXIT looks like the end of the run and truncates
+# everything after it. Confirmed by live trace: the same IFNE shows a gap of
+# 1 byte when it falls through and 2 when it skips a one-byte EXIT.
+CONDITIONAL = ("IFEQ", "IFNE", "IFLT", "IFGT", "IFLE", "IFGE")
+
 
 def load_opcodes(doc="docs/opcode_args.md"):
     """Parse the generated opcode table into {op: (name, argc)}."""
@@ -147,6 +155,12 @@ def disassemble(code, table):
             if ins.name in JUMPS:
                 queue += [a.value - CODE_BASE for a in ins.args
                           if a.kind == "mem" and 0 <= a.value - CODE_BASE < len(code)]
+            if ins.name.startswith("IF") and ins.name in CONDITIONAL:
+                guarded = decode(code, p + ins.size, table)
+                if guarded is not None:
+                    skip = p + ins.size + guarded.size
+                    if skip < len(code):
+                        queue.append(skip)
             if ins.name in TERMINAL:
                 break
             p += ins.size
