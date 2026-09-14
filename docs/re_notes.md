@@ -992,3 +992,45 @@ yet.
 
 This strengthens the case for reimplementing the engine rather than patching
 the original, which never has to satisfy whatever this check is.
+
+---
+
+## The cartridge can be expanded to 2 MB — CONFIRMED
+
+The anti-tamper sum at `0x0FFFB0` iterates `0x3FFEC` longwords, which is
+`0xFFFB0` bytes: **the first megabyte only.** Anything placed above that is
+never summed.
+
+BlastEm's ROM database maps the cartridge generously:
+
+```
+T-50286 {
+    map {
+        0        { device ROM  last 1FFFFF }    <- 2 MB of ROM space
+        200000   { device SRAM last 3FFFFF }
+    }
+}
+```
+
+So `0x100000`-`0x1FFFFF` is addressable, unchecked, and unused.
+
+### Verified
+
+`roms/countdown_2mb.gen` is a 2 MB image with the GEO stream relocated to
+`0x100000`, the loader retargeted, and the header's ROM-end field at `0x1A4`
+updated to `0x1FFFFF`. It boots to **985 distinct executed addresses — the
+stock ROM's exact count.**
+
+### Why this matters
+
+Matrix Cubed's transpiled content needs 159,374 compressed bytes against the
+99,289 that Countdown's resources occupy — **1.61x**. That was the strongest
+remaining argument that the original cartridge could not host the game.
+
+It can. Doubling the ROM yields roughly 1 MB of free space, six times what
+the shortfall requires, and the checksum does not object because it never
+looks there. Growing further to 4 MB needs only a database entry for an
+emulator, and nothing at all on a flash cart.
+
+The relocation technique is the same one already used for the GEO stream:
+write the resource into new space and retarget the loader's pointer.
