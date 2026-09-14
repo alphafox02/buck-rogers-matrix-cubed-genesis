@@ -75,34 +75,29 @@ def _codes(data: bytes):
     Produce the code sequence, assigning dictionary indices exactly as the
     decoder will.
 
-    An entry becomes usable only one step AFTER it is created, which avoids
-    ever emitting the code for a string the decoder has not finished
-    building -- the "KwKwK" case, where an encoder references an entry whose
-    final byte the decoder can only infer from the code itself.
+    Entries become usable immediately, including the "KwKwK" case where a
+    code refers to an entry whose final byte the decoder can only infer from
+    the code itself. The engine handles it at 0x09F5C, and SSI's own
+    compressor emits it (block 0x61's text is the one example in this ROM).
 
-    SSI's compressor does emit that case (block 0x61's text is the single
-    example in this ROM), and the engine has a path for it at 0x09F5C. But
-    that path reconstructs the string differently from the straightforward
-    reading, and a stream built on the straightforward reading boots to a
-    black screen. Avoiding the case entirely costs a few bytes and removes
-    the whole question.
+    An earlier version delayed entry availability by one step to avoid the
+    case. That was a misdiagnosis: rebuilt ROMs were hanging because of the
+    cartridge checksum at 0x0FFFB0, not because of KwKwK. Avoiding it cost
+    about 1.3% in size, which matters where a stream has to fit its original
+    footprint.
     """
     table = {bytes([i]): i for i in range(256)}
     nxt, top, width = 0x102, 0x1FF, 9
     out = []
     current = b""
-    pending = None          # created last step, not yet usable
     for byte in data:
         candidate = current + bytes([byte])
         if candidate in table:
             current = candidate
             continue
         out.append(table[current])
-        if pending is not None:
-            table[pending[0]] = pending[1]
-            pending = None
         if nxt <= top:
-            pending = (candidate, nxt)
+            table[candidate] = nxt
             nxt += 1
             if nxt == top and width < 12:
                 width += 1

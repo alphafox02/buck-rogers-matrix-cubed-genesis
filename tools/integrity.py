@@ -38,8 +38,14 @@ SKIP = 0x18C
 EXPECTED = 0x10D1310C
 
 # A longword inside the largest run of zero padding (17,500 bytes at
-# 0x1BBA4), far from any code or resource, used to absorb the correction.
-SLACK = 0x1DDD0
+# 0x1BBA4), used to absorb the correction. Placed near the end of that run so
+# relocated resources can be written at its start without colliding.
+SLACK = 0x1FF00
+
+# Usable free space in the same run, for relocating resources that no longer
+# fit their original footprint.
+FREE_START = 0x1BBA8
+FREE_END = 0x1FE00
 
 
 def checksum(rom: bytes) -> int:

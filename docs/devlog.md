@@ -277,3 +277,73 @@ opcode enum, and the two game configs. Opcode numbers and RAM addresses are
 facts, not copyrightable expression, and our implementations are written
 fresh — but if any of its code is ever pasted into this tree, this project
 becomes GPLv3. Keep the boundary clean.
+
+---
+
+## Later: the cartridge checksum, and the first content transplant
+
+### The anti-tamper check
+
+Hidden in the last 80 bytes of the ROM at `0x0FFFB0`: a 32-bit sum of every
+longword in the cartridge, skipping the header checksum and the routine
+itself, compared against `0x10D1310C`. On mismatch it blanks the VDP and
+`bra.b $FFFFE` — hangs forever. That is the black screen.
+
+Two things about how this was found are worth recording.
+
+**The answer had been in my own trace for hours.** Addresses `0xFFFB0`
+through `0xFFFC4` appear right at the divergence point in the very first
+comparison I ran. I read them as RAM and moved on. They are ROM, eighty
+bytes from the end of the cartridge.
+
+**I could not read them until Capstone was installed.** Every earlier
+attempt was pattern-matching byte sequences rather than disassembling, and
+the routine uses `add.l (a0)+,d0` inside a `bgt` loop rather than the
+`add.w` / `dbra` idiom I had been grepping for.
+
+It is repaired, not defeated: because the check is a plain additive sum, one
+spare longword in the zero padding at `0x1BBA4` absorbs the difference. The
+cartridge still verifies itself and still passes. `rebuild_ecl` and
+`patch_rom` apply it automatically.
+
+### A misdiagnosis, reverted
+
+While hunting the hang I had changed the compressor to avoid the KwKwK case,
+theorising the hardware reconstructed it differently. That was wrong — the
+hangs were the checksum all along. The change cost about 1.3% in size and
+dropped byte-identity with SSI from 51/54 streams to 22/54. Reverted;
+byte-identity is now 53/54 and the GEO stream is 38 bytes over SSI's rather
+than 98.
+
+### First content transplant
+
+Matrix Cubed map 18 now lives in Genesis area `0x10`.
+
+Maps need no conversion beyond dropping the DOS 2-byte id header, so the
+work is: decompress the GEO stream, substitute 1024 bytes, recompress,
+relocate, retarget the loader's pointer, repair the checksum.
+
+Our recompressed stream does not fit its original footprint, so it moves
+into the zero padding at `0x1BBA8` and the loader is retargeted:
+
+```
+0576E  lea.l  $8FA8D,a0   ->   lea.l  $1BBA8,a0
+```
+
+That relocation technique is what a full port needs regardless, since Matrix
+Cubed's content is 1.61x the size of Countdown's.
+
+Verified: the ROM reads back area `0x10` as Matrix Cubed map 18 byte for
+byte, every other area is untouched, the checksum passes, and it boots to
+985 distinct executed addresses — exactly the stock ROM's count.
+
+**Not yet verified:** that the map renders correctly on screen. That needs
+someone to play into the area. Booting proves the data is loadable and the
+ROM is structurally sound, not that the geometry displays.
+
+### Path A and Path B are not exclusive
+
+With the checksum solved, the original cartridge becomes a test harness:
+content conversions can be proven inside SSI's own engine before a
+reimplementation exists. Everything validated there is trustworthy in a
+reimplementation. Path A proves, Path B expands.
