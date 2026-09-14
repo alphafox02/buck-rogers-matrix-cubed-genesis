@@ -1,8 +1,85 @@
 # Development Log
 
-Newest entries at the top. This is the narrative record — what we tried,
+Newest entries at the top. This is the narrative record -- what we tried,
 what failed, and why we changed direction. Structured findings live in
 `re_notes.md` and `formats.md`; this file is for the story.
+
+---
+
+## 2026-09-13 -- Day 1, part 2: the Genesis engine opens up
+
+Part 1 solved the DOS side. This session went after the Genesis ROM, which
+had been almost entirely unexplored.
+
+### What we found
+
+**The ECL virtual machine**, at `0x03344`. A textbook bytecode interpreter:
+fetch a byte from `(a2)+`, index a 94-entry dispatch table at `0x0336E`,
+`jsr` the handler, loop. `a2` is the ECL program counter.
+
+**A single-step debugger SSI left in the retail cartridge.** The VM tests
+RAM `$FF9BB9` before every dispatch and, if set, prints the instruction
+address, the next six raw bytes, and the opcode mnemonic -- then waits for
+a button press. One byte turns the shipped ROM into a script debugger.
+
+**All 94 opcodes mapped** (`docs/opcode_map.md`), and a definitive
+comparison against DOS: `0x00`-`0x1C` identical, first divergence at
+`0x1D`, 60 of 77 shared slots aligned, `0x4D`-`0x5D` Genesis-only.
+
+**The argument encoding is identical to DOS.** Decoding the shared fetcher
+at `0x0404A` showed the same type-byte scheme, same size rules, same flag
+bits. Arguments are even stored little-endian on a big-endian CPU -- the
+scenario data came across from the DOS toolchain without byte swapping.
+The one real difference: strings moved out of line, from inline packed text
+to an offset added to the ECL base at `$FFB9A4`.
+
+### What did not work
+
+**Driving BlastEm headlessly.** Installed fine (0.6.3.4, runs at 59.9 fps),
+but the `-d` debugger would not talk over a pipe, a pty, or a FIFO. Burned
+real time on it.
+
+**The naive tracer patch.** NOPing the branch at `0x0334E` forces the
+tracer on, but it waits for a button on *every* instruction and ECL runs
+before the screen is up, so the game boots to black. The patch tool is
+correct -- its checksum routine reproduces the stock `0xD7B6` exactly --
+the approach was just too blunt.
+
+Self-inflicted: `pkill -f blastem` matched the shell command that contained
+the string and killed the shell. Use `pkill -x`.
+
+**Lesson repeated from part 1:** static analysis got the answer that the
+emulator was supposed to provide, and got it faster. The argument encoding
+came out of reading `0x0404A`, not from running anything. Reach for the
+disassembly first.
+
+### Where this leaves the port
+
+The scenario translation problem is now fully characterised:
+
+1. **Opcodes** -- table remap; a third of them already match
+2. **Arguments** -- no change required at all
+3. **Strings** -- extract inline text into a pool, rewrite args as offsets
+
+That is a compiler back-end, not a research project.
+
+### Resume here
+
+Highest value next, in order:
+
+1. **Confirm `0x11DC4` is the Genesis text pointer table.** It is a large
+   monotonic 16-bit self-relative table pointing into `0x120D6`+. If it is
+   the main string pool, that plus the out-of-line string finding gives us
+   the whole text pipeline.
+2. **Find how ECL blocks are stored in ROM.** We know `$FFB9A4` is the ECL
+   base pointer -- find what writes it, and the resource table it indexes.
+3. **Make the tracer usable**: patch out the button-wait at the end of
+   `0x0438C` as well, or find the `"debug ecl"` menu entry (ROM `0x12651`).
+4. **Entry-point headers** for the six Matrix Cubed ECL blocks that only
+   decoded partially (36, 48, 49, 64, 65, 81).
+
+Known unknowns unchanged: map/GEO format on Genesis, whether the resource
+loader uses 32-bit ROM pointers, and the save mechanism.
 
 ---
 
