@@ -27,6 +27,14 @@ CODE_BASE = 0x6AF6
 # fixed argument that gives the tail length. Mirrors the DOS engine.
 DYNAMIC = {0x15: 2, 0x25: 1, 0x26: 1, 0x27: 1, 0x2B: 1, 0x31: 1, 0x5D: 0}
 
+# Fixed-argument counts for the dynamic opcodes, taken from the DOS engine.
+# Neither derivation method can measure these correctly: the static pass
+# counts fetcher calls inside the tail loop, and the inference pass has no
+# model of a variable tail. Getting ONGOTO wrong (3 instead of 2) consumes
+# the first jump target as a fixed argument, then reads one entry too many
+# and fails on the last -- which is what truncated most large blocks.
+DYNAMIC_FIXED = {0x15: 3, 0x25: 2, 0x26: 2, 0x27: 2, 0x2B: 2, 0x31: 2, 0x5D: 1}
+
 TERMINAL = {"EXIT", "RETURN", "GOTO", "ONGOTO"}
 JUMPS = {"GOTO", "GOSUB", "ONGOTO", "ONGOSUB"}
 
@@ -50,7 +58,9 @@ def load_opcodes(doc="docs/opcode_args.md"):
         op = int(op_hex, 16)
         # Trust the static count where inference cannot apply, or where the
         # two disagree and inference had no clear majority.
-        if "dynamic" in conf or inferred == "?":
+        if op in DYNAMIC_FIXED:
+            argc = DYNAMIC_FIXED[op]
+        elif "dynamic" in conf or inferred == "?":
             argc = int(static)
         else:
             argc = int(inferred)
