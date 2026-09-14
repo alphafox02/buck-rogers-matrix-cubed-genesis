@@ -399,3 +399,47 @@ differs past `0x1C` — but it is a table remap, not a rewrite.** Combined
 with the earlier finding that only 13 opcodes used by Matrix Cubed lack a
 Genesis counterpart (and one of those is 76% of the orphan uses), the
 scenario-translation problem is now well-bounded.
+
+---
+
+## The debug tracer is a single-step ECL debugger — HIGH CONFIDENCE
+
+Decoding the routine at `0x0438C` (called from the VM loop whenever RAM
+`$FF9BB9` is non-zero) shows it is not a simple logger. It:
+
+1. Saves the current text cursor state
+2. Opens a window at roughly `(0x02, 0x1B)`–`(0x26, 0x1C)` — a two-line
+   strip at the bottom of the screen
+3. Prints `a2 - 1`, the **address of the instruction about to execute**
+   (via `jsr $133B4`, a hex-long printer)
+4. Prints the **next six bytes** at `(a2)` through `5(a2)` as hex
+   (`jsr $133AA`, a hex-byte printer, with `jsr $11CA0` between for spacing)
+5. Looks up `d7` in the name table at `0x446E` and prints the **mnemonic**
+   (`jsr $11CA4`)
+6. `bsr $06C66`, then `btst #5,d0` / `beq` — **loops until a button is
+   pressed**
+7. Restores the cursor state and returns
+
+So with one RAM byte set, the retail ROM displays a live disassembly line
+for every ECL instruction and waits for a button press between each.
+
+**This is a single-step script debugger that SSI left in the shipped
+cartridge.** It gives us:
+
+- live confirmation of our opcode numbering, for free
+- the ability to watch any scripted scene execute instruction by instruction
+- ground truth for the argument encoding, by comparing the six raw bytes
+  against our own disassembler's output
+
+It is the single highest-leverage thing found so far, and it requires no
+patching — only a memory write.
+
+### How to reach it
+
+`$FF9BB9` is presumably set by a menu option (`"debug ecl"` appears at ROM
+`0x12651`). Either route works:
+
+- find and trigger the menu, or
+- write the byte directly from an emulator debugger
+
+The second is easier and is the plan.
