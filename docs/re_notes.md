@@ -443,3 +443,108 @@ patching — only a memory write.
 - write the byte directly from an emulator debugger
 
 The second is easier and is the plan.
+
+---
+
+## Genesis ECL argument encoding — CONFIRMED, and it is identical to DOS
+
+The `GOTO` handler at `0x3438` calls `bsr $0404A`. That routine is the
+shared argument fetcher for every opcode. Decoded:
+
+```
+0404A: 10 1a           move.b  (a2)+,d0          ; read the TYPE byte
+0404C: 12 00           move.b  d0,d1
+0404E: 42 b8 d5 f8     clr.l   ($FFD5F8).w       ; clear 32-bit accumulator
+04052: 11 da d5 fb     move.b  (a2)+,($FFD5FB).w ; payload byte 0 -> LSB
+04056: 4a 01           tst.b   d1
+04058: 67 12           beq.s   $0406C            ; type 0 -> 1 byte, done
+0405A: 11 da d5 fa     move.b  (a2)+,($FFD5FA).w ; payload byte 1
+0405E: b2 3c 00 04     cmp.b   #4,d1
+04062: 66 08           bne.s   $0406C            ; type != 4 -> 2 bytes, done
+04064: 11 da d5 f9     move.b  (a2)+,($FFD5F9).w ; payload byte 2
+04068: 11 da d5 f8     move.b  (a2)+,($FFD5F8).w ; payload byte 3
+0406C: 4a 01           tst.b   d1
+0406E: 6b 3a           bmi.s   $040AA            ; type & 0x80 -> string
+04070: 08 01 00 00     btst    #0,d1
+04074: 67 2e           beq.s   $040A4            ; type & 0x01 clear -> immediate
+04076: 70 ff           moveq   #-1,d0
+04078: 30 38 d5 fa     move.w  ($FFD5FA).w,d0    ; else treat as memory address
+0407C: 20 40           movea.l d0,a0
+0407E: 61 00 02 60     bsr     $042E0            ; resolve address
+...
+040AA: b2 3c 00 80     cmp.b   #$80,d1
+040AE: 66 0c           bne.s   $040BC
+040B0: 20 38 d5 f8     move.l  ($FFD5F8).w,d0
+040B4: d0 b8 b9 a4     add.l   ($FFB9A4).w,d0    ; + ECL base -> string pointer
+040B8: 20 40           movea.l d0,a0
+040BA: 4e 75           rts
+```
+
+### The rules are the same as the DOS engine
+
+| type | payload | meaning |
+|---|---|---|
+| `0x00` | 1 byte | immediate |
+| `0x04` | 4 bytes | immediate long |
+| anything else | 2 bytes | immediate or address |
+| bit 0 set | — | value is a **memory address**, resolved via `$042E0` |
+| bit 7 set | — | value is a **string** |
+
+This is exactly the DOS scheme. The type-byte semantics, the size rules and
+the address/string flag bits all carry over unchanged.
+
+### Two details that matter
+
+**Arguments are stored little-endian.** Payload bytes are written LSB-first
+(`$FFD5FB`, then `$FFD5FA`, `$FFD5F9`, `$FFD5F8`) on a big-endian CPU. The
+Genesis port kept the DOS byte order in the bytecode rather than
+byte-swapping the data — strong evidence the scenario data was carried
+across from the DOS toolchain essentially as-is.
+
+**Strings moved out of line.** In DOS, type `0x80` is an *inline* packed
+string (a length byte followed by 6-bit packed characters). On the Genesis,
+type `0x80` is an *offset* added to the ECL base pointer at `$FFB9A4` —
+the text was pulled out into a separate pool, which is the sensible choice
+for a cartridge.
+
+### Why this matters
+
+Combined with the opcode mapping, the scenario translation problem is now
+fully characterised:
+
+1. **Opcodes** — remap through a table; `0x00`–`0x1C` is already identical
+2. **Arguments** — no change needed; same types, same sizes, same byte order
+3. **Strings** — the one real transformation: extract inline strings and
+   emit them into a pool, rewriting the argument to an offset
+
+That is a well-understood compiler back-end, not a research problem.
+
+### Other addresses learned
+
+| address | meaning |
+|---|---|
+| `$FFB9A4` | ECL base pointer (added to string offsets) |
+| `$FFD5F8`–`$FFD5FB` | 32-bit argument accumulator, little-endian |
+| `0x042E0` | memory-address resolver |
+| `0x0404A` | argument fetch routine |
+| `0x040EA` | `"cant load ecl"` error path |
+
+---
+
+## Emulator status
+
+BlastEm 0.6.3.4 is installed and runs the ROM at full speed. Two notes for
+whoever picks this up:
+
+- **The naive tracer patch hangs the game.** `tools/patch_rom.py trace`
+  NOPs the branch at `0x0334E` so the tracer always fires. Because the
+  tracer waits for a button press on *every* instruction, and ECL runs
+  before the screen is set up, the result is a black screen. A usable
+  version must also patch out the button-wait loop at the end of `0x0438C`,
+  or set `$FF9BB9` at the right moment from a debugger instead.
+- **`pkill -f blastem` will kill your own shell** if the command line
+  containing that pattern is still running. Use `pkill -x blastem`.
+
+`tools/patch_rom.py` verifies the original bytes before patching and fixes
+up the Genesis header checksum at `0x18E`. Its checksum routine reproduces
+the stock ROM's `0xD7B6` exactly, so the implementation is known good.
