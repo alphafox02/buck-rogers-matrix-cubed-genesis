@@ -317,3 +317,85 @@ This was the project's central feasibility gate. It is now largely cleared
 on the DOS side. **The remaining risk has moved to the Genesis side**,
 which is still almost entirely unexplored: the ROM's resource layout, map
 format, text encoding and ECL dispatch table are all UNKNOWN.
+
+---
+
+## The Genesis ECL virtual machine — CONFIRMED
+
+Located and decoded. This is the heart of the engine.
+
+### Main dispatch loop at `0x03344`
+
+```
+03344: 72 00              moveq   #0,d1
+03346: 12 1a              move.b  (a2)+,d1        ; fetch opcode; a2 = ECL program counter
+03348: 2e 01              move.l  d1,d7           ; d7 = current opcode
+0334A: 4a 38 9b b9        tst.b   ($FF9BB9).w     ; debug trace flag
+0334E: 67 04              beq.s   +4
+03350: 61 00 10 3a        bsr     $0438C          ; print opcode name (debug tracer)
+03354: 32 07              move.w  d7,d1
+03356: e3 41              asl.w   #1,d1           ; opcode * 2
+03358: 47 f9 00 00 33 6e  lea     $0000336E,a3    ; dispatch table
+0335E: 32 33 10 00        move.w  (a3,d1.w),d1    ; 16-bit self-relative offset
+03362: 4e b3 10 00        jsr     (a3,d1.w)       ; call handler
+03366: 60 a0              bra.s   $03308          ; loop
+```
+
+A textbook bytecode VM. Registers: **`a2` is the ECL program counter**,
+**`d7` holds the current opcode**.
+
+### Key addresses
+
+| address | meaning |
+|---|---|
+| `0x0336E` | **opcode dispatch table** — 94 entries, 16-bit big-endian, self-relative to `0x336E` |
+| `0x0342A` | first handler (`EXIT`); also the exact end of the dispatch table |
+| `0x0446E` | **opcode name table** — 94 entries, 16-bit big-endian, self-relative to `0x446E` |
+| `0x0452A` | opcode name strings, NUL-terminated |
+| `0x03324` | `"Bad ECL address"`, printed via `lea $3324,a0 / jsr $132A6` |
+| `0x0438C` | debug opcode-name printer |
+| `0x011DC4` | large monotonic 16-bit self-relative pointer table into `0x120D6`+ — **probable main text/string pointer table**, not yet confirmed |
+
+The dispatch table is exactly 94 entries: `0x336E + 94*2 = 0x342A`, which is
+precisely where the first handler begins. So the Genesis ECL has exactly
+**94 opcodes, numbered 0x00–0x5D**.
+
+### The debug tracer is one RAM byte — HIGH CONFIDENCE
+
+`tst.b ($FF9BB9).w` before every instruction dispatch. If RAM `$FF9BB9` is
+non-zero, the VM prints the mnemonic of each opcode before executing it.
+
+**Setting one byte in RAM turns the retail ROM into an ECL instruction
+tracer.** This should be the first thing tested in an emulator — it makes
+the entire scripting layer observable without any patching.
+
+---
+
+## Genesis vs DOS opcode numbering — CONFIRMED
+
+Full 94-entry comparison (see `docs/opcode_map.md` for the table):
+
+- **`0x00`–`0x1C`: a perfect 29-opcode run.** Identical numbering and
+  meaning, including `SAVE` = `WRITE_MEM` and `SETUPMONSTERS` =
+  `SPRITE_START` where SSI's internal name differs from the
+  reverse-engineered one.
+- **First divergence at `0x1D`.** Genesis `SETTIMER` vs DOS
+  `PARTY_STRENGTH`.
+- **60 of 77 shared slots align; 17 differ.**
+- **`0x4D`–`0x5D` are Genesis-only** — the 17 console additions
+  (`ANIMATE`, `STAIRCASE`, the `ADDFIGURE`/`ADDCORPSE` family, `PALETTE`,
+  `ICONMENU`, the step/half-step movement opcodes).
+
+### What this means for the port
+
+Several "mismatches" are renumbering, not loss. Genesis `0x22`/`0x23` are
+`SKILL`/`PRINTSKILL` where DOS has `PARTY_SKILL_CHECK`/`SKILL_CHECK` — the
+same pair, swapped. Others are plausible semantic equivalents under
+different names: Genesis `GETABLE` (`0x2A`) against DOS `COPY_MEM`,
+`SAVETABLE` (`0x35`) against `WRITE_MEM_BASE_OFF`.
+
+**Conclusion: an ECL transpiler is required — the numbering genuinely
+differs past `0x1C` — but it is a table remap, not a rewrite.** Combined
+with the earlier finding that only 13 opcodes used by Matrix Cubed lack a
+Genesis counterpart (and one of those is 76% of the orphan uses), the
+scenario-translation problem is now well-bounded.
