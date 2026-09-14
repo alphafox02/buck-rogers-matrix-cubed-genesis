@@ -886,72 +886,109 @@ problem, now precisely specified.
 
 ## BLOCKER: the ROM refuses to run if a single byte is changed
 
-Discovered by boot-testing a rebuilt ROM. This invalidates the naive
-patch-the-cartridge approach until the mechanism is found.
+Found by boot-testing a rebuilt ROM. This blocks the patch-the-cartridge
+approach until the mechanism is understood.
 
-### The experiments
+### Measuring this correctly
 
-Each ROM was launched in BlastEm with fresh SRAM and sampled at 2 fps for
-30 seconds (60 frames), counting frames that are not black. The intro
-legitimately contains black frames, so a single sample proves nothing --
-an earlier 6-frame test produced a false positive that cost time.
+Screen capture proved unreliable and produced contradictory results -- the
+intro contains genuine black frames, windows move between runs, and other
+windows can occlude the capture region. Two different sampling rates gave
+two different answers for the same ROM.
 
-| ROM | change | result |
-|---|---|---|
-| `countdown.gen` | none | 48/60 non-black — **boots** |
-| `countdown_copy.gen` | byte-identical copy, new filename | 48/60 — **boots** |
-| `countdown_inplace.gen` | all blocks recompressed at original offsets (280 bytes differ) | 0/60 — **black** |
-| `countdown_only61.gen` | one text block recompressed | 0/60 — **black** |
-| `countdown_1byte.gen` | **one byte** flipped, checksum corrected | 0/60 — **black** |
-| `countdown_far.gen` | one byte flipped in a graphics region | 0/60 — **black** |
-| `countdown_pad.gen` | one byte flipped in **unused 0xFF padding** | 0/60 — **black** |
+The sound method is BlastEm's `-l` flag, which logs every distinct 68000
+address executed to `address.log`. It is fully deterministic: repeated runs
+of the same ROM give identical counts.
 
-The padding case is decisive: that byte is not read by any game logic, so
-this is not data corruption. It is an integrity check over the whole image.
+```
+tools/... or:  blastem -l rom.gen ; sort -u address.log | wc -l
+```
 
-### What it is not
+| ROM | change | 25s | 60s |
+|---|---|---|---|
+| `countdown.gen` | none | 985 | 986 |
+| `countdown_copy.gen` | byte-identical, new filename | 983 | — |
+| `countdown_rebuilt.gen` | all ECL streams recompressed | 947 | — |
+| `countdown_hello.gen` | rebuild + one edited string | 947 | 947 |
+| `countdown_late.gen` | **one byte** flipped in block 0x63's text | 947 | — |
 
-- **Not the header checksum.** `countdown_1byte.gen` and
-  `countdown_inplace.gen` both carry correctly recomputed values at `0x18E`
-  (verified stored == computed) and both still fail. The standard Sega
-  checksum loop (`add.w (a0)+,dN` before a `dbra`) does not appear anywhere
-  in the ROM.
-- **Not an emulator configuration difference.** BlastEm keys its ROM
-  database off the product ID `T-50286`, which every variant preserves. The
-  failing ROMs log the same `Product ID`, the same database match and the
-  same SRAM mapping as the working one. Only the SHA1 differs.
-- **Not a measurement artifact.** A byte-identical copy under a different
-  filename boots, so filename and SRAM state are controlled for.
+The counts are stable from 25s to 60s, so the modified ROMs are genuinely
+stuck rather than merely slower.
 
-### What it might be
+### The decisive case
 
-Unresolved. Candidates worth checking:
+`countdown_late.gen` flips a single byte 500 bytes into the compressed text
+of ECL block `0x63` -- the last block, a late-game area the boot sequence
+never loads. It stalls identically. Boot cannot be reading that data, so
+this is an integrity check over the ROM image rather than resource
+corruption.
 
-1. A bespoke sum or hash compared against a constant stored somewhere other
-   than the header.
-2. A check tied to the SRAM signature routine at `0x19D5C` — note the
-   failing ROMs never reach the point of writing SRAM, while the working
-   one does.
-3. Several partial checksums over different regions.
+(An earlier version of this note cited a byte flipped in "unused padding" at
+`0xF2000`. That evidence was weak: the region past `0xF1FD8` contains a long
+`0xFF` run but is not uniformly unused, so corruption could not be ruled
+out. The block `0x63` case replaces it.)
 
-The next step needs the debugger rather than static search: break on the
-VDP display-enable write, or single-step from reset on a working and a
-failing ROM and find where they diverge.
+### Where it stalls
+
+All ROMs execute an identical first 947 addresses; the working one then
+reaches 36 more, in the decompression code around `0x2328`-`0x2850` and at
+`0xDE8C`-`0xDFEC`. So the modified ROMs never get as far as decompressing
+their resources.
+
+The stall region disassembles (Capstone, m68k) as an SRAM surface test
+followed by a hang loop:
+
+```
+19CEC  move.w  #$1FFF,d2          ; 8192 words
+19CF0  move.w  #$1,d1
+19CF4  move.w  #$7,d0             ; walk 8 bits
+19CF8  move.w  d1,(a0)            ; write pattern to SRAM
+19CFA  cmp.b   $1(a0),d1          ; read back (bus odd -> byte at +1)
+19CFE  bne.b   $19D26             ; mismatch -> hang
+19D02  dbra    d0,$19CF8
+19D08  dbra    d2,$19CF0
+19D0C  movea.l #$200000,a0
+19D12  move.l  #$120034,(a0)+     ; write the 0x12345678 signature,
+19D18  move.l  #$560078,(a0)+     ;   interleaved for the odd bus
+
+19D26  move.w  d3,d0              ; <-- hang loop
+19D28  move.l  #$C0000000,$C00004 ; CRAM write address 0
+19D36  move.w  d1,$C00000         ; write a colour
+19D44  tst.b   $B4C2.w
+19D48  beq.b   $19D44             ; wait for vblank
+19D4A  sub.w   d4,d0              ; fade
+19D4C  bra.b   $19D28             ; forever
+```
+
+That loop is the black screen: it fades the palette and never exits. Several
+failure paths branch into it, so reaching `0x19D26` is the engine's generic
+"give up" state rather than proof that the SRAM test specifically failed.
+
+### Still unknown
+
+What computes the verdict. Ruled out so far:
+
+- **The header checksum.** Variants carrying correctly recomputed values at
+  `0x18E` still fail (stored == computed, verified), and the standard Sega
+  checksum loop (`add.w (a0)+,dN` before a `dbra`) does not appear anywhere.
+- **A stored constant.** Nine candidate whole-ROM aggregates (byte/word/long
+  sums and XORs, several ranges) were computed and searched for in the ROM;
+  every hit landed in high-entropy compressed data.
+- **Emulator configuration.** BlastEm keys its database off product ID
+  `T-50286`, which every variant preserves; failing ROMs log the same
+  database match and SRAM mapping.
+
+Next step is to find which branch leads to `0x19D26` on a modified ROM. With
+Capstone now available, the practical approach is to enumerate every branch
+targeting `0x19D26`, then use BlastEm's debugger to see which one is taken.
 
 ### Consequences
 
-**Patching the shipped cartridge is blocked until this is understood.**
-Everything else in the pipeline is verified working:
+The rest of the pipeline is verified sound -- the compressor reproduces
+SSI's output byte-for-byte on 51 of 54 streams, the identity rebuild is
+byte-perfect, and rebuilt resources decompress to the original bytes. The
+tooling is correct; the cartridge simply will not accept modified content
+yet.
 
-- the LZW compressor reproduces SSI's output byte-for-byte on 51 of 54
-  streams (the rest differ only where SSI used a KwKwK code)
-- the ROM rebuilder's identity rebuild is byte-perfect, so table layout and
-  offset arithmetic are correct
-- a rebuild with our own compressed data verifies every resource
-  decompresses to the original bytes
-
-So the tooling is sound; the cartridge simply will not accept it yet.
-
-This materially strengthens the case for reimplementing the engine rather
-than patching the original, since a reimplementation never has to satisfy
-whatever this check is.
+This strengthens the case for reimplementing the engine rather than patching
+the original, which never has to satisfy whatever this check is.
