@@ -175,3 +175,70 @@ the name strings. Confirming it is the next Genesis-side task.
 4. Saves: undeclared SRAM, or passwords?
 5. Is the map model really grid-step, with only the camera changed?
 6. Which Matrix Cubed opcodes have no Genesis equivalent?
+
+---
+
+## The Genesis port ADDED substantial engine features — HIGH CONFIDENCE
+
+An earlier draft of this file overstated how similar the two engines are.
+A proper set-difference between the Genesis mnemonic table and the DOS
+opcode enum (allowing for 40 justified name equivalences such as
+`SAVE`/`WRITE_MEM`) gives **32 Genesis-only** and **33 DOS-only** opcodes.
+
+The Genesis-only set is not random. It clusters:
+
+**Animated isometric figures — the console exploration/combat layer**
+`ADDFIGURE` `ADDFIGURE2` `ADDCORPSE` `ADDCORPSE2` `UPDATEFRAME`
+`REMOVEFIGURE` `ANIMATE` `EXPLOSION`
+
+**Stepped movement with intermediate frames**
+`STEPFORWARD` `STEPBACK` `HALFSTEP` `HALFBACK` `STAIRCASE` `HOWFAR`
+
+The presence of *half* steps is the giveaway: DOS moved a full grid square
+at a time, the Genesis animates between squares.
+
+**Console UI**
+`ICONMENU` `DRAWINDOW` `WHMENU` `VIEW` `PALETTE`
+
+**A real save system**
+`SAVECHARACTER` `SAVETABLE` `GETABLE` `DUMP`
+
+This is relevant to the blank SRAM header field — the Genesis port clearly
+implements saving at the script level.
+
+**Gameplay additions**
+`DUEL` `SKILLDAMAGE` `UNLOCKDOOR` `HIDEITEMS` `ENCEXIT` `NEWREGION`
+`SETTIMER` `CONTINUE` `SOUND`
+
+### The DOS-only set is the actual risk list
+
+These exist in the DOS engine — and therefore potentially in Matrix Cubed's
+scripts — with no obvious Genesis counterpart:
+
+`PARLAY` `SURPRISE` `ENCOUNTER_MENU` `SELECT_ACTION` `NPC_FIND`
+`NPC_REMOVE` `HAS_EFFECT` `PRINT_RUNES` `LOGBOOK_ENTRY` `TREASURE_MULTICOIN`
+`TREASURE_MULTICOIN4` `CALL` `COPY_MEM` `WRITE_MEM_BASE_OFF` `RANDOM0`
+`PICTURE2` `CLOCK2` `PARTY_STRENGTH` `SPRITE_OFF` `STOP_MOVE_23`
+`LOAD_AREA_MAP_DECO` `SOUND_EVENT_2C` `SOUND_EVENT_43` plus several
+unidentified (`GTTSF_32`, `GTTSF_40`, `POD_29`, `INPUT_RETURN_*`).
+
+`PARLAY` (conversation/negotiation) and `SURPRISE` are the notable
+gameplay losses; the rest are largely plumbing.
+
+### What this means
+
+The brief's Phase 6 ("Deal With Rule Differences") now has a concrete
+starting table rather than a hypothetical one. Each DOS-only opcode needs a
+decision: translate, reimplement in 68k, edit the scenario, or drop.
+
+**Crucially, this list is a worst case.** It counts opcodes the DOS *engine*
+supports, not opcodes *Matrix Cubed actually uses*. Disassembling
+`ECL1.DAX` converts "33 orphans" into "N real call sites", which is the
+number that actually determines difficulty. That is the next task.
+
+### On space combat specifically
+
+`SPACECOMBAT` exists in both engines at the same position, so the
+script-level hook for ship fights transfers directly. The *presentation*
+is Genesis-specific and lives below the ECL layer — which is exactly what
+we want, since the goal is to reuse the console presentation.
