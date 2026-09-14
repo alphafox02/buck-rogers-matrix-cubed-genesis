@@ -1,0 +1,12 @@
+# Live ECL program counter (a2) captured under BlastEm with a breakpoint at
+# 0x03346 and `di/x a2`. Running block is id 0x10. Base 0x6AF6.
+# Gaps exist where the display was inactive; non-consecutive samples are
+# filtered by the checker.
+6b4e 6b51 6b55
+6b60 6b63 6b68 6b72 6b73
+6b68 6b72 6b73 6b68 6b72 6b73 6b68 6b72 6b73 6b68 6b72 6b73
+6b74 6b77 6b7a 6b7b 6b7e 6b7f 6b82 6b83 6b86 6b8b 6b8f 6b92 6b93 6b96 6b97
+6b9d 6ba3 6ba8
+6bae 6bb9 6bbe 6bc9 6bce 6bd9 6bda 6bea 6bf5 6bfa 6c05 6c06 6c13 6c19 6c22 6c2b
+72dc 72e5 72e7 72f0 72f7 72fd 7301 7302 7303 7307 7308 730c 730d 730e 730f
+72dc 72e5 72e6
