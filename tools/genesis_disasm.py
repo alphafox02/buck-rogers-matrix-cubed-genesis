@@ -15,7 +15,12 @@ import re
 import struct
 from pathlib import Path
 
-ARG_SIZE = {0x00: 1, 0x01: 2, 0x02: 2, 0x03: 2, 0x04: 4, 0x05: 2, 0x81: 2}
+# Payload sizes by argument type. Type 0x80 is 2 bytes on the Genesis -- a
+# string OFFSET, not the DOS engine's inline packed string. Confirmed by a
+# live trace: `12 80 00 00` (PRINTCLEAR) measured 4 bytes, and the argument
+# fetcher at 0x0404A adds type-0x80 values to the ECL base at $FFB9A4.
+ARG_SIZE = {0x00: 1, 0x01: 2, 0x02: 2, 0x03: 2, 0x04: 4, 0x05: 2,
+            0x80: 2, 0x81: 2}
 CODE_BASE = 0x6AF6
 
 # Opcodes taking a fixed head plus a variable tail, with the index of the
@@ -67,11 +72,6 @@ def read_arg(code, pos):
     if pos >= len(code):
         return None
     t = code[pos]
-    if t == 0x80:                      # inline packed string (rare here)
-        if pos + 1 >= len(code):
-            return None
-        n = code[pos + 1]
-        return Arg("str", pos + 2, 2 + n)
     if t not in ARG_SIZE:
         return None
     size = ARG_SIZE[t]
@@ -81,7 +81,7 @@ def read_arg(code, pos):
     value = (raw[0] if size == 1 else
              struct.unpack("<H", raw)[0] if size == 2 else
              struct.unpack("<I", raw)[0])
-    kind = "str" if t == 0x81 else ("mem" if t & 1 else "imm")
+    kind = "str" if t in (0x80, 0x81) else ("mem" if t & 1 else "imm")
     return Arg(kind, value, 1 + size)
 
 

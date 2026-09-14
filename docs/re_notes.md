@@ -813,3 +813,71 @@ mechanism an open question. It is now answered: the port needs 8 KB of SRAM,
 and a patched build must either declare it in the header (`RA` at `0x1B0`)
 or continue relying on emulators and flashcarts tolerating the omission.
 Declaring it is the safer choice for real hardware.
+
+---
+
+## Live trace validation — the disassembler is correct
+
+A breakpoint at the ECL opcode fetch (`0x03346`) with BlastEm's
+`di/x a2` produces the script program counter on every instruction. The
+differences between consecutive values are exact instruction sizes.
+
+### The running block is id 0x10
+
+Matching observed instruction boundaries against all 27 extracted blocks
+identifies block `0x10` uniquely — six independent boundaries all agree.
+That simultaneously validates the LZW decompressor (RAM contents match our
+decompressed output) and the code base of `0x6AF6`.
+
+### Results: 16 of 16 consecutive pairs match
+
+```
+offset  expected  got  instruction
+0x058      3       3   PICTURE          0x48
+0x05B      4       4   PRINTCLEAR       str[0x0000]
+0x06A      3       3   PICTURE          0xFF
+0x06D      5       5   FOR              0x0, 0x7
+0x072     10      10   GETABLE          [0x7310], [0x98EC], [0x9AFA]
+0x07C      1       1   STEPFORWARD
+0x07D      1       1   ENDFOR
+0x07E      3       3   SOUND            0x2C
+0x081      3       3   EXPLOSION        0x5
+0x084      1       1   DELAY
+0x085      3       3   EXPLOSION        0x1
+0x088      1       1   DELAY
+0x089      3       3   EXPLOSION        0x2
+0x08C      1       1   DELAY
+0x08D      3       3   EXPLOSION        0x6
+0x090      5       5   VIEW             0x1, 0x78
+```
+
+The one apparent mismatch (`0x05F`, expected 11) spans a gap in the capture
+where the trace display was not active, so those two samples are not
+consecutive instructions.
+
+This confirms argument counts for `PICTURE`, `PRINTCLEAR`, `FOR`,
+`GETABLE`, `STEPFORWARD`, `ENDFOR`, `SOUND`, `EXPLOSION`, `DELAY` and
+`VIEW`. `FOR` was previously uncertain and is now confirmed at 2.
+
+It also reads as real code: a `FOR` loop wrapping `GETABLE`/`STEPFORWARD`,
+then a sequence of `EXPLOSION`/`DELAY` pairs — an animated explosion.
+
+### Argument type 0x80 is a string OFFSET, not an inline string — CONFIRMED
+
+The trace measured `12 80 00 00` (`PRINTCLEAR`) at **4 bytes**. Under the
+DOS interpretation, type `0x80` is an inline packed string introduced by a
+length byte, which would have made it 3.
+
+On the Genesis, type `0x80` takes the ordinary 2-byte payload and that value
+is a string offset — exactly matching the argument fetcher at `0x0404A`,
+which adds type-`0x80` values to the ECL base at `$FFB9A4`.
+
+This was the cause of the earlier "string resolved 68 bytes into the text"
+anomaly: every string argument was being mis-sized, desyncing the stream
+after it. `str[0x0000]` in block `0x10` resolves correctly to the opening
+narration.
+
+**Both DOS string forms therefore need conversion for a port**: the DOS
+engine's inline 6-bit packed text must be lifted into a separate pool and
+rewritten as 2-byte offsets. That is the string half of the translation
+problem, now precisely specified.
