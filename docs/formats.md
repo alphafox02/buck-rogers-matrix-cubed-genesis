@@ -168,3 +168,60 @@ Genesis kept the DOS grid model and changed only the camera, exactly as the
 Both sets render as coherent architecture — rooms with internal walls, doors
 in sensible places, open terrain. A wrong plane order would not produce
 connected rooms.
+
+---
+
+## Wall sets — the one place the two engines genuinely diverge
+
+### DOS: first-person display geometry
+
+`WALLDEF1.DAX` holds 11 blocks of 2340 bytes = **15 wall types x 156 bytes**.
+Each 156-byte record is a set of 8x8-tile index grids describing how to draw
+that wall at three distances and three placements in the corridor view:
+
+| field | grid | bytes |
+|---|---|---|
+| `farForward` | 2x1 | 2 |
+| `farLeft` / `farRight` | 4x1 | 4 each |
+| `medForward` | 4x3 | 12 |
+| `medLeft` / `medRight` | 8x2 | 16 each |
+| `closeForward` | 8x7 | 56 |
+| `closeLeft` / `closeRight` | 11x2 | 22 each |
+| `farFiller` | 2x1 | 2 |
+
+156 exactly. Left/right pairs are mirrored (`farLeft 01 70 27 73` against
+`farRight 01 71 28 72`), which is a useful structural check.
+
+### Genesis: a lookup table
+
+The isometric renderer computes its own geometry, so it needs only a mapping
+from wall value to graphic. `LOADPIECES` (opcode `0x37`) resolves it:
+
+```
+158C4  divu.w  #$3,d0          ; wallset index = argument / 3
+158CE  lea.l   $51836,a0       ; wall set table
+158D4  adda.w  (a0,d0.w),a0    ; 16-bit self-relative offsets
+158D8  move.l  a0,$B41A.w      ; -> the set
+158DC  adda.w  #$10,a0
+158E0  move.l  a0,$B41E.w      ; -> its second half
+```
+
+**10 wall sets of 32 bytes** at `0x51836`: 16 graphic indices followed by 16
+attribute bytes, indexed directly by the map's wall nibble (0-15, with 0
+meaning open and stored as `0xFF`).
+
+The `divu #3` explains the leftover debug prompt at ROM `0x12EB0`,
+`"Enter wallset as decimal (1,4,7..)"` — wall set arguments are `3n + 1`.
+
+### What this means for the port
+
+**Wall definitions do not transfer.** Matrix Cubed's 2340-byte blocks are
+first-person corridor geometry that the Genesis renderer has no use for.
+
+That is good news rather than bad: converting an area means authoring a
+**32-byte** wall set — a graphic index and an attribute per wall value —
+instead of converting 2340 bytes of view geometry. The map's wall nibbles
+already index it directly.
+
+This is the only content type so far where the two engines are structurally
+incompatible, and it is the cheapest one to redo.
