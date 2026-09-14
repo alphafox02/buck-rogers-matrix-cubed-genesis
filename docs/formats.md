@@ -107,3 +107,64 @@ in `farmboy0/ssi-engine` (`data/image/VGAImage.java`).
 ---
 
 ## Genesis ROM — see `docs/re_notes.md`
+
+---
+
+## Dungeon maps (GEO) — CONFIRMED, and they transfer almost 1:1
+
+### Layout
+
+A map is a 16x16 grid stored as four parallel 256-byte planes, indexed
+`y * 16 + x`:
+
+| plane | offset | contents |
+|---|---|---|
+| 0 | `0x000` | walls NORTH (high nibble) / EAST (low nibble) |
+| 1 | `0x100` | walls SOUTH (high nibble) / WEST (low nibble) |
+| 2 | `0x200` | per-square info, one byte |
+| 3 | `0x300` | door flags: WEST bits 7-6, SOUTH 5-4, EAST 3-2, NORTH 1-0 |
+
+A wall value of 0 is open; non-zero selects a graphic from the area's wall
+set. A direction is a door when its flag pair is non-zero.
+
+Note that 1026 bytes also fits a 32x32 grid at one byte per square, which is
+the wrong answer — the structure was cross-checked against `ssi-engine`'s
+`DungeonMap` rather than inferred from the size.
+
+### DOS
+
+`GEO1.DAX`, 25 maps, 1026 bytes each: a 2-byte id followed by the four
+planes.
+
+### Genesis
+
+One continuous LZW stream at ROM `0x8FA8D`, read by the loader at `0x05766`:
+
+```
+0576E  lea.l   $8FA8D,a0      ; the GEO resource
+05774  bsr.w   $9E76          ; initialise the decompressor
+0577E  bsr.w   $9ED8 (2)      ; map count
+0578A  bsr.w   $9ED8 (count)  ; id list
+...    bsr.w   $9ED8 ($400)   ; then one 1024-byte map at a time
+```
+
+So: `u16 count`, `count` id bytes, then `count` maps of 1024 bytes. The
+Genesis drops the 2-byte id header because ids are listed up front.
+
+The stream decompresses to **18,452 bytes — exactly 2 + 18 + 18*1024** — and
+the 18 area ids (`03 10 11 20 23 30 31 32 34 41 42 43 51 52 60 61 62 63`)
+match the ECL area numbering.
+
+### Why this matters for the port
+
+**The map formats are identical apart from the 2-byte header.** Converting
+a Matrix Cubed map to Genesis means stripping two bytes and appending the id
+to the list. No geometry conversion, no re-authoring.
+
+This settles the biggest open question about the isometric change: the
+Genesis kept the DOS grid model and changed only the camera, exactly as the
+`STEPFORWARD` / `HALFSTEP` opcodes suggested back on day one.
+
+Both sets render as coherent architecture — rooms with internal walls, doors
+in sensible places, open terrain. A wrong plane order would not produce
+connected rooms.
