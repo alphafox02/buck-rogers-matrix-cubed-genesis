@@ -548,3 +548,98 @@ whoever picks this up:
 `tools/patch_rom.py` verifies the original bytes before patching and fixes
 up the Genesis header checksum at `0x18E`. Its checksum routine reproduces
 the stock ROM's `0xD7B6` exactly, so the implementation is known good.
+
+---
+
+## Genesis text storage — CONFIRMED
+
+### Text is plain ASCII, not 6-bit packed
+
+A significant departure from the DOS games. The DOS engine packs four
+6-bit characters into three bytes; the Genesis port stores NUL-terminated
+ASCII directly. Text extraction on the Genesis side is therefore trivial.
+
+### String tables are self-describing
+
+The engine stores text as a table of 16-bit big-endian offsets, each
+self-relative to the table's own base, immediately followed by the string
+data it indexes. That makes `entry[0]` equal to the table length in bytes,
+which is a reliable signature for finding these tables.
+
+Offsets are **not** monotonic — the engine deduplicates and shares strings,
+so tables routinely point backwards into text they have already indexed.
+(An earlier version of the scanner required monotonicity and found only one
+table as a result.)
+
+`tools/find_text.py` scans for them. The ROM contains only two:
+
+| address | entries | contents |
+|---|---|---|
+| `0x0446E` | 94 | ECL opcode mnemonics |
+| `0x11DC4` | 393 | item names — `knife`, `mono`, `cutlass`, `sword`, `d.r. x-bow` |
+
+**The campaign dialogue is not in a global ROM table.** That is consistent
+with the argument encoding: ECL string arguments are offsets added to the
+ECL base pointer at `$FFB9A4`, so text lives inside each loaded ECL
+resource, not in a shared pool.
+
+---
+
+## The Genesis ECL resource directory — CONFIRMED
+
+The loader at `0x040CE` resolves an ECL block by id:
+
+```
+040D4: 41 f9 00 03 8c e6   lea     $38CE6,a0       ; id list
+040DA: 12 18               move.b  (a0)+,d1        ; next id
+040DC: 6a 1a               bpl.s   $040F8          ; 0xFF terminates
+040DE: 41 f9 00 00 40 ea   lea     $040EA,a0       ; "cant load ecl"
+040F8: b0 01               cmp.b   d1,d0           ; requested id?
+040FA: 67 04               beq.s   $04100
+040FC: 58 82               addq.l  #4,d2           ; else advance index by 4
+040FE: 60 da               bra.s   $040DA
+04100: 20 79 00 03 8c e2   movea.l ($38CE2),a0     ; -> offset table
+04106: d1 f0 20 00         adda.l  (a0,d2.w),a0    ; a0 = block data
+0410A: 61 00 5d 6a         bsr     $09E76
+0410E: 20 3c ff ff 6a f6   move.l  #$FFFF6AF6,d0   ; destination
+04114: 32 3c 2c 00         move.w  #$2C00,d1       ; 11264 bytes
+04118: 61 00 5d be         bsr     $09ED8
+0411C: 21 c0 b9 a4         move.l  d0,($FFB9A4).w  ; ECL base pointer
+04120: 20 79 00 04 2b 0a   movea.l ($42B0A),a0     ; SECOND directory
+04126: d1 f0 20 00         adda.l  (a0,d2.w),a0
+0412A: 61 00 5d 4a         bsr     ...
+```
+
+### Structure
+
+| address | contents |
+|---|---|
+| `0x38CE6` | id list, one byte per block, `0xFF` terminated — **27 blocks** |
+| `0x38CE2` | pointer to the stream-1 offset table (`0x38D02`) |
+| `0x38D02` | 27 big-endian 32-bit offsets, self-relative to `0x38D02` |
+| `0x42B0A` | pointer to the stream-2 offset table (`0x42B2A`) |
+| `0x42B2A` | 27 big-endian 32-bit offsets, self-relative to `0x42B2A` |
+
+Block ids: `00 01 03 10 11 20 21 22 23 30 31 32 34 40 41 42 43 50 51 52 53
+5E 5F 60 61 62 63`. The high nibble groups blocks by region, the same
+scheme the DOS games use.
+
+Self-validating: `offsets[0]` is `0x6C` in both tables, exactly `27 * 4` —
+the size of the offset table itself, so block data begins immediately after.
+
+### Two parallel streams, both compressed
+
+**Stream 1 is ECL bytecode.** Every block begins `01 00` followed by
+high-entropy data, and block sizes (210–1427 bytes) are far smaller than
+the multi-kilobyte scripts they must contain.
+
+**Stream 2 is the text pool.** Block 0 begins with readable ASCII
+(`DO YOU WANT T`) before turning to high-entropy data.
+
+Both are decompressed into RAM at load time, which explains the
+`"compression overflow"` string at `0x220C`. The 11264-byte size constant
+at `0x04114` is presumably the decompression buffer.
+
+**Next: the decompressor, reachable via `bsr $09E76` and `bsr $09ED8`.**
+Cracking it opens every Genesis script and every line of Genesis dialogue,
+and gives us the compressor we will need to write blocks back.
