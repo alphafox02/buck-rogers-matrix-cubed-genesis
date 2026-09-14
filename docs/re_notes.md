@@ -881,3 +881,77 @@ narration.
 engine's inline 6-bit packed text must be lifted into a separate pool and
 rewritten as 2-byte offsets. That is the string half of the translation
 problem, now precisely specified.
+
+---
+
+## BLOCKER: the ROM refuses to run if a single byte is changed
+
+Discovered by boot-testing a rebuilt ROM. This invalidates the naive
+patch-the-cartridge approach until the mechanism is found.
+
+### The experiments
+
+Each ROM was launched in BlastEm with fresh SRAM and sampled at 2 fps for
+30 seconds (60 frames), counting frames that are not black. The intro
+legitimately contains black frames, so a single sample proves nothing --
+an earlier 6-frame test produced a false positive that cost time.
+
+| ROM | change | result |
+|---|---|---|
+| `countdown.gen` | none | 48/60 non-black — **boots** |
+| `countdown_copy.gen` | byte-identical copy, new filename | 48/60 — **boots** |
+| `countdown_inplace.gen` | all blocks recompressed at original offsets (280 bytes differ) | 0/60 — **black** |
+| `countdown_only61.gen` | one text block recompressed | 0/60 — **black** |
+| `countdown_1byte.gen` | **one byte** flipped, checksum corrected | 0/60 — **black** |
+| `countdown_far.gen` | one byte flipped in a graphics region | 0/60 — **black** |
+| `countdown_pad.gen` | one byte flipped in **unused 0xFF padding** | 0/60 — **black** |
+
+The padding case is decisive: that byte is not read by any game logic, so
+this is not data corruption. It is an integrity check over the whole image.
+
+### What it is not
+
+- **Not the header checksum.** `countdown_1byte.gen` and
+  `countdown_inplace.gen` both carry correctly recomputed values at `0x18E`
+  (verified stored == computed) and both still fail. The standard Sega
+  checksum loop (`add.w (a0)+,dN` before a `dbra`) does not appear anywhere
+  in the ROM.
+- **Not an emulator configuration difference.** BlastEm keys its ROM
+  database off the product ID `T-50286`, which every variant preserves. The
+  failing ROMs log the same `Product ID`, the same database match and the
+  same SRAM mapping as the working one. Only the SHA1 differs.
+- **Not a measurement artifact.** A byte-identical copy under a different
+  filename boots, so filename and SRAM state are controlled for.
+
+### What it might be
+
+Unresolved. Candidates worth checking:
+
+1. A bespoke sum or hash compared against a constant stored somewhere other
+   than the header.
+2. A check tied to the SRAM signature routine at `0x19D5C` — note the
+   failing ROMs never reach the point of writing SRAM, while the working
+   one does.
+3. Several partial checksums over different regions.
+
+The next step needs the debugger rather than static search: break on the
+VDP display-enable write, or single-step from reset on a working and a
+failing ROM and find where they diverge.
+
+### Consequences
+
+**Patching the shipped cartridge is blocked until this is understood.**
+Everything else in the pipeline is verified working:
+
+- the LZW compressor reproduces SSI's output byte-for-byte on 51 of 54
+  streams (the rest differ only where SSI used a KwKwK code)
+- the ROM rebuilder's identity rebuild is byte-perfect, so table layout and
+  offset arithmetic are correct
+- a rebuild with our own compressed data verifies every resource
+  decompresses to the original bytes
+
+So the tooling is sound; the cartridge simply will not accept it yet.
+
+This materially strengthens the case for reimplementing the engine rather
+than patching the original, since a reimplementation never has to satisfy
+whatever this check is.

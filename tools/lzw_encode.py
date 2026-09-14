@@ -71,20 +71,38 @@ def _emit(writer, code, width, thresh):
 
 
 def _codes(data: bytes):
-    """Produce the code sequence, assigning dictionary indices as the
-    decoder will assign them."""
+    """
+    Produce the code sequence, assigning dictionary indices exactly as the
+    decoder will.
+
+    An entry becomes usable only one step AFTER it is created, which avoids
+    ever emitting the code for a string the decoder has not finished
+    building -- the "KwKwK" case, where an encoder references an entry whose
+    final byte the decoder can only infer from the code itself.
+
+    SSI's compressor does emit that case (block 0x61's text is the single
+    example in this ROM), and the engine has a path for it at 0x09F5C. But
+    that path reconstructs the string differently from the straightforward
+    reading, and a stream built on the straightforward reading boots to a
+    black screen. Avoiding the case entirely costs a few bytes and removes
+    the whole question.
+    """
     table = {bytes([i]): i for i in range(256)}
     nxt, top, width = 0x102, 0x1FF, 9
     out = []
     current = b""
+    pending = None          # created last step, not yet usable
     for byte in data:
         candidate = current + bytes([byte])
         if candidate in table:
             current = candidate
             continue
         out.append(table[current])
+        if pending is not None:
+            table[pending[0]] = pending[1]
+            pending = None
         if nxt <= top:
-            table[candidate] = nxt
+            pending = (candidate, nxt)
             nxt += 1
             if nxt == top and width < 12:
                 width += 1

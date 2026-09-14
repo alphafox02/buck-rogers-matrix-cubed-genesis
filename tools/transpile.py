@@ -13,8 +13,20 @@ assembles in two passes: lay out instructions to learn the new offsets, then
 emit with corrected targets. Jump arguments are also rebased from the DOS
 code base (0x8000) to the Genesis one (0x6AF6).
 
-What this does NOT do is invent semantics. Opcodes with no Genesis
-counterpart are reported, not guessed at -- see docs/compatibility.md.
+Two classes of memory argument must be told apart. Arguments of a jump
+instruction are code addresses and get rebased through the new layout;
+everything else is a variable address and must not be touched by the
+rebase.
+
+What this does NOT do is invent semantics:
+
+  * Opcodes with no Genesis counterpart are reported, not guessed at --
+    see docs/compatibility.md.
+  * Variable addresses are passed through unchanged. The two engines have
+    DIFFERENT memory maps (DOS party flags sit around 0x4C00-0x7F00, the
+    Genesis around 0x97xx-0x9Bxx), so a real port needs a variable mapping
+    that does not exist yet. Until it does, transpiled output is
+    structurally correct but reads the wrong addresses.
 """
 
 import struct
@@ -57,6 +69,9 @@ def genesis_opcodes():
     return {name: (op, argc) for op, (name, argc) in table.items()}
 
 
+STUB_OPCODE = 0xFF          # outside the valid 0x00-0x5D range
+
+
 class Unsupported(Exception):
     pass
 
@@ -85,8 +100,8 @@ def _encode_arg(kind, value):
     """Emit a Genesis argument. Types match the DOS engine exactly."""
     if kind == "str":
         return bytes([0x80]) + struct.pack("<H", value)
-    if kind == "mem":
-        return bytes([0x01]) + struct.pack("<H", value)
+    if kind in ("code", "var"):
+        return bytes([0x01]) + struct.pack("<H", value & 0xFFFF)
     if value <= 0xFF:
         return bytes([0x00, value])
     if value <= 0xFFFF:
@@ -102,6 +117,10 @@ def transpile(block: bytes):
     instructions that could not be translated.
     """
     found, _entries, _errors = ecl.disassemble_block(block)
+    # DOS code is addressed from 0x8000, and 0x8000 is the first byte AFTER
+    # the 5000 marker -- so converting a jump target to a block offset must
+    # add the marker size back, exactly as ecl._targets does.
+    marker = ecl.code_start(block)
     gen = genesis_opcodes()
     pool = StringPool()
     report = []
@@ -113,19 +132,28 @@ def transpile(block: bytes):
     for off in order:
         ins = found[off]
         name = NAME_MAP.get(ins.name, ins.name)
-        if name not in gen:
+        if name in gen:
+            opcode, _ = gen[name]
+        else:
+            # Emit a stub rather than dropping the instruction. Dropping it
+            # would remove its offset from the layout and strand every jump
+            # that targets it, turning one untranslatable opcode into dozens
+            # of broken branches. 0xFF is outside the 94-opcode range, so a
+            # stub is unmistakable and cannot be mistaken for working code.
             report.append((off, ins.name, "no Genesis counterpart"))
-            continue
-        opcode, _ = gen[name]
+            opcode = STUB_OPCODE
+        is_jump = ins.name in ecl._JUMPS
         args = []
         for arg in list(ins.args) + list(ins.dyn_args):
             if arg.type == 0x80:
                 args.append(("str", pool.intern(str(arg.value))))
             elif arg.is_memory:
-                args.append(("mem", arg.value))    # rebased in pass 2
+                # Only a jump's operands are code addresses.
+                args.append(("code" if is_jump else "var", arg.value))
             else:
                 args.append(("imm", arg.value))
-        size = 1 + sum(len(_encode_arg(k, v if k != "mem" else 0)) for k, v in args)
+        size = 1 + sum(len(_encode_arg(k, 0 if k in ("code", "var") else v))
+                       for k, v in args)
         layout[off] = pos
         pieces.append((off, opcode, args))
         pos += size
@@ -135,11 +163,12 @@ def transpile(block: bytes):
     for off, opcode, args in pieces:
         out.append(opcode)
         for kind, value in args:
-            if kind == "mem":
-                target = value - DOS_BASE
+            if kind == "code":
+                target = value - DOS_BASE + marker
                 if target in layout:
                     value = layout[target] + GEN_BASE
                 else:
-                    value = value - DOS_BASE + GEN_BASE
+                    report.append((off, "jump", f"target 0x{value:04X} not in layout"))
+                    value = GEN_BASE
             out += _encode_arg(kind, value)
     return bytes(out), pool.build(), report
