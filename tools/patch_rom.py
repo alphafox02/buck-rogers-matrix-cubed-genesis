@@ -15,6 +15,13 @@ import sys
 from pathlib import Path
 
 PATCHES = {
+    "trace_nowait": {
+        "desc": "Remove the button-wait at the end of the ECL tracer so it "
+                "runs free instead of single-stepping",
+        "offset": 0x04462,
+        "before": bytes([0x67, 0xF6]),   # beq.s (loop until button)
+        "after":  bytes([0x4E, 0x71]),   # nop
+    },
     "trace": {
         "desc": "Force the ECL single-step tracer on (NOP the branch that "
                 "skips it when RAM $FF9BB9 is zero)",
