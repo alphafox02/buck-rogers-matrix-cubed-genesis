@@ -643,3 +643,70 @@ at `0x04114` is presumably the decompression buffer.
 **Next: the decompressor, reachable via `bsr $09E76` and `bsr $09ED8`.**
 Cracking it opens every Genesis script and every line of Genesis dialogue,
 and gives us the compressor we will need to write blocks back.
+
+---
+
+## Genesis ECL compression cracked — ALL 27 BLOCKS EXTRACTED
+
+Both resource streams are LZW compressed with a variable-width code and an
+unusual disambiguation scheme. Transcribed from `0x09ED8` (main loop) and
+`0x0A092` (code reader).
+
+### The algorithm
+
+State after a CLEAR: `width` 9, `next` 0x102, `max` 0x1FF, `thresh` 2.
+
+Codes are read MSB-first into a 32-bit accumulator. Each read takes the top
+`width - 1` bits as a candidate:
+
+- if that value is **greater than `thresh`** it is unambiguously a literal,
+  and only `width - 1` bits are consumed;
+- otherwise one more bit is consumed and, if set, `0x100` is added.
+
+`thresh` is exactly the count of dictionary entries allocated beyond 256 —
+precisely the range where a literal and a dictionary code could collide. So
+the extra bit is spent only when it is actually needed. Neat, and it is why
+naive fixed-width LZW decoders fail on this data after ~10 bytes.
+
+Adding an entry increments both `next` and `thresh`. When `next` reaches
+`max`, `width` grows (ceiling 12), `max` becomes `(1 << width) - 1`, and
+`thresh` is reset to `0xFFFF` — forcing full-width reads until it catches up.
+
+One further detail: the ROM branches on `code >= next` (`bcs` at `0x09F5A`),
+not on equality, routing anything at or past the dictionary frontier through
+the KwKwK path. One text block (id `0x61`) genuinely needs this.
+
+### Results
+
+`tools/genesis_ecl.py` extracts everything:
+
+- **27 blocks**, both streams, every one terminating on a clean END code
+- **61,173 bytes of ECL bytecode**
+- **110,088 bytes of text, 100% printable ASCII**
+
+Sample from text block `0x11`:
+
+```
+A NEO OFFICER GREETS YOU.
+'I AM CARLTON TURABIAN. WELCOME TO SALVATION III. WHEN YOU ARE READY,
+ COME SEE ME AT HEADQUARTERS FOR YOUR FIRST ASSIGNMENT.'
+'RAM HAS KIDNAPPED THE DESERT RUNNER ATHA. THEY THREATEN TO KILL HER
+ IF YOU DON'T TRAVEL TO JUNO.'
+```
+
+**The entire Genesis campaign script is now readable.**
+
+### Structural confirmation
+
+ECL is loaded to `$FFFF6AF6` (the destination constant at `0x0410E`), so
+the Genesis code base is `0x6AF6`. Every decompressed block opens with five
+`GOTO` instructions — the event hooks — and in every one `onInit` targets
+`0x6B0A`, which is offset `0x14`.
+
+The DOS blocks are identical in shape: base `0x8000`, `onInit` at offset
+`0x14`, and `onRest`/`onRestInterruption` pointing to the same handler.
+
+That is independent confirmation that the Genesis port kept the DOS ECL
+block layout wholesale, and it validates the decompressor: a wrong decoder
+would not produce five well-formed `GOTO`s with a consistent `onInit`
+offset across 27 blocks.
