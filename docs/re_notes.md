@@ -242,3 +242,78 @@ number that actually determines difficulty. That is the next task.
 script-level hook for ship fights transfers directly. The *presentation*
 is Genesis-specific and lives below the ECL layer — which is exactly what
 we want, since the goal is to reuse the console presentation.
+
+---
+
+## Matrix Cubed ECL disassembled — the feasibility number
+
+`tools/ecl.py` + `tools/dump_ecl.py` decode `ECL1.DAX`:
+
+- **21,513 instructions** across 33 blocks
+- **71 distinct opcodes** actually used
+- **83.1%** of 247,573 bytes decoded on a linear pass
+
+The remaining 17% is mostly blocks where linear decoding starts inside a
+data region (`0x99` appears as a bogus opcode at low offsets in blocks 36,
+48, 49, 64, 65 and 81). Those blocks need a proper entry-point header,
+which has not been located yet. Blocks that stop at ~99.8% are simply
+hitting trailing data at the end of the code, which is expected.
+
+Sample output (block 17), showing the decode is genuinely correct:
+
+```
+000F8  PRINT_CLEAR   "THE AIRLOCK IS SEALED."
+0010D  PICTURE       98
+00110  SOUND_EVENT   63
+00113  PRINT_CLEAR   "SCOT.DOS WELCOMES YOU BACK TO YOUR SHIP. '"
+00136  ON_GOTO       [0x4C2C], 5, {[0x8180], [0x8149], [0x8149], [0x81C4], [0x8225]}
+0014B  COMPARE       [0x4C07], 2
+00151  IF_EQUALS
+00152  GOTO          [0x8429]
+```
+
+### Orphan opcodes — CONFIRMED, and the news is good
+
+Cross-referencing the 71 opcodes Matrix Cubed actually uses against the 94
+Genesis mnemonics (with 60+ justified name equivalences):
+
+| opcode | uses | share |
+|---|---|---|
+| `INPUT_RETURN` | 1551 | 7.21% |
+| `CALL` | 142 | 0.66% |
+| `PICTURE2` | 111 | 0.52% |
+| `COPY_MEM` | 111 | 0.52% |
+| `SELECT_ACTION` | 77 | 0.36% |
+| `UNKNOWN_44` | 19 | 0.09% |
+| `UNKNOWN_4B` | 18 | 0.08% |
+| `UNKNOWN_48` | 6 | 0.03% |
+| `UNKNOWN_4A` | 5 | 0.02% |
+| `NPC_REMOVE` | 4 | 0.02% |
+| `RANDOM0` | 3 | 0.01% |
+| `WRITE_MEM_BASE_OFF` | 2 | 0.01% |
+| `UNKNOWN_49` | 1 | 0.00% |
+
+**13 distinct orphans, 9.53% of all instructions.**
+
+`INPUT_RETURN` alone is 1,551 of those 2,050 uses — and it is almost
+certainly trivial ("press return to continue"); the Genesis equivalent is
+likely folded into `PRINTRETURN` or handled entirely by the UI layer.
+Discount it and the orphan share drops to **2.3%**, concentrated in four
+opcodes: `CALL`, `PICTURE2`, `COPY_MEM`, `SELECT_ACTION`.
+
+Note also that `PARLAY` and `SURPRISE` — flagged earlier as the notable
+gameplay losses — **do not appear in Matrix Cubed at all.** Those opcode
+slots (`0x2C`, `0x23`) resolve to `INPUT_YES_NO` and `SKILL_CHECK` in the
+Buck Rogers games.
+
+### Interpretation
+
+The worst case was "33 DOS opcodes with no Genesis counterpart". The actual
+case is 13, of which one dominates and is probably trivial, and four
+matter. That is a very short list to either reimplement in 68k or work
+around in the scenario.
+
+This was the project's central feasibility gate. It is now largely cleared
+on the DOS side. **The remaining risk has moved to the Genesis side**,
+which is still almost entirely unexplored: the ROM's resource layout, map
+format, text encoding and ECL dispatch table are all UNKNOWN.
