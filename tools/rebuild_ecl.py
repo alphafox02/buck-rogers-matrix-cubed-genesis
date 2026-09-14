@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 import genesis_ecl
+import integrity
 import lzw_encode
 
 # The first byte after each stream that must not be overwritten, measured by
@@ -75,7 +76,9 @@ def rebuild(rom: bytes, blocks) -> bytes:
             out[p] = 0
 
     struct.pack_into(">H", out, 0x18E, _checksum(out))
-    return bytes(out)
+    # The cartridge verifies itself with a 32-bit longword sum (see
+    # tools/integrity.py). Without this the ROM boots to a permanent hang.
+    return integrity.repair(bytes(out))
 
 
 def _checksum(rom) -> int:

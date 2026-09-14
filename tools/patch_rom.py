@@ -14,6 +14,8 @@ import struct
 import sys
 from pathlib import Path
 
+import integrity
+
 PATCHES = {
     "trace_nowait": {
         "desc": "Remove the button-wait at the end of the ECL tracer so it "
@@ -54,7 +56,9 @@ def apply(rom: bytes, names) -> bytes:
         print(f"  {name}: 0x{off:05X} {before.hex()} -> {after.hex()}  "
               f"({patch['desc']})")
     struct.pack_into(">H", data, 0x18E, checksum(bytes(data)))
-    return bytes(data)
+    # Satisfy the cartridge's own anti-tamper sum as well as the Sega header
+    # checksum; a patched ROM hangs on boot without it.
+    return integrity.repair(bytes(data))
 
 
 if __name__ == "__main__":
