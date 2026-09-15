@@ -1360,3 +1360,61 @@ with multiple frames, and `BIGPIC1` is 304x120 against the Genesis 288x120.
 Because the palette travels with the image, injected art is not stuck with
 whatever the area has loaded — the measured gap between an image's own
 sixteen colours and a borrowed palette was 21 against 63.
+
+## The intro and attract sequence — CONFIRMED
+
+The intro is a routine at `0x012FC`, not a directory. It plays a music track
+and loads screens by absolute address:
+
+```
+01304: move.w #$2e, d0
+01308: jsr    $1b900.l      ; title music, track 0x2E
+01338: lea.l  $99b5f.l, a0  ; SSI "presents", 320x224, flags 0x0004
+013A8: lea.l  $96d4a.l, a0  ; the scene behind the titles, 320x200
+013B8: lea.l  $9ab8b.l      ; and six overlays stamped on top
+013C8: lea.l  $9acf7.l
+0144E: lea.l  $9ae4d.l
+0148E: lea.l  $962d9.l      ; Earth
+0151A: lea.l  $9b0b9.l
+```
+
+Each screen is named by a `lea` operand, so replacing one needs no table to
+grow — which is why `tools/inject_title.py` is safe where expanding the
+picture directory was not.
+
+### The palette flag selects a CRAM line
+
+Bit 2 means the embedded palette loads into **line 2**, bit 3 into **line
+3**, and the nametable must ask for the same line in bits 13-14. Getting
+this wrong is not subtle: the injected title drew in blues and pinks because
+its palette went to line 2 while its cells asked for line 0. The stock
+screens confirm it — `0x99B5F` has flags `0x0004` and every one of its 1120
+cells selects line 2.
+
+### The attract demo is an ECL area
+
+Leaving the title alone long enough reaches a gameplay view with a portrait
+and narration. That is **area `0x03`**, reached from the entry dispatch when
+`0xBA5A` is set, and it is an ordinary script:
+
+```
+0014: SOUND      0x2E
+0023: LOADFILES  0x3, 0x7F, 0xFF
+003F: NEWREGION  0x0, 0x1, 0x0, 0x0, 0x3, 0x4
+0060: PICTURE    0x48
+0063: PRINTCLEAR "THE ONCE-PROUD EARTH HAS BEEN REDUCED TO DESOLATE RUINS..."
+0067: DELAY  (x6)
+006D: PICTURE    0x3E
+0070: PRINTCLEAR "BUCK ROGER'S TIRELESS EFFORTS FOR THE NEW EARTH ORGANIZATION..."
+0079: STEPBACK / STEPFORWARD      ; the party walking in the map window
+```
+
+Ten narration panels, each a picture, a line of text and a delay, with the
+party stepped around the map between them. Being a script, it is as
+replaceable as any other area.
+
+**Matrix Cubed has no attract demo to port.** Searching all 33 of its ECL
+blocks for the narration's distinctive phrases finds nothing: the sequence
+is a Genesis-port addition, and DOS Matrix Cubed has no equivalent. Giving
+it a Matrix Cubed intro would mean writing one, which is authoring rather
+than porting, and is a decision worth making deliberately.
