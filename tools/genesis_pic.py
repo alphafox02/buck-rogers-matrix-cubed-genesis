@@ -57,7 +57,9 @@ def decode(blob):
     n, map_bytes, flags = struct.unpack_from(">HHH", blob, 0)
     if n == 0 or map_bytes == 0 or map_bytes % 2 or map_bytes > 8192 or n > 4000:
         return None
-    pal_bytes = 32 if flags & 8 else 0
+    # Bit 3 and bit 2 both mean a 16-word palette follows the nametable. The
+    # title screen and the world maps use bit 2; the ECL pictures use bit 3.
+    pal_bytes = 32 if flags & 0x0C else 0
     if len(blob) != 6 + map_bytes + pal_bytes + 32 * n:
         return None
     entries = map_bytes // 2

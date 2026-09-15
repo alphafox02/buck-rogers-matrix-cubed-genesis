@@ -147,6 +147,12 @@ def main():
             raise SystemExit(rc)
     if not bigpics:
         raise SystemExit(0)
+    # The intro screens are named by lea operands rather than a directory,
+    # so replacing them needs no table to grow.
+    rc = subprocess.call(
+        [sys.executable, str(REPO / "tools/inject_title.py"), str(out), str(out)])
+    if rc:
+        raise SystemExit(rc)
     raise SystemExit(subprocess.call(
         [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out),
          "--bigpic"] + [f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS]))

@@ -65,7 +65,14 @@ SIDE = 11
 # reading nonsense.
 ART_BASE = 0x1C0000        # big pictures
 PORTRAIT_BASE = 0x1E0000   # portraits
+# The flag bit does not merely say "a palette follows" -- it says WHICH CRAM
+# line that palette is loaded into. Bit 2 means line 2, bit 3 means line 3.
+# The nametable has to reference the same line in bits 13-14 or the picture
+# is drawn with somebody else's colours: the injected title came out in
+# blues and pinks because its palette went to line 2 while its cells asked
+# for line 0.
 FLAG_PALETTE = 0x0008
+PALETTE_LINE = {0x0004: 2, 0x0008: 3}
 
 
 def directory(rom, big=False):
@@ -134,7 +141,7 @@ def nearest(px, rgb):
     return best
 
 
-def encode(images, frames, w=SIDE, h=SIDE, budget=None):
+def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE):
     """Build (blob, tile count, colours) for one picture, or None if it cannot fit.
 
     `budget` is the DECOMPRESSED size of the picture being replaced. The
@@ -150,7 +157,7 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None):
     while len(images) < frames:
         images.append(images[len(images) % len(images)] if images else images[0])
     images = images[:frames]
-    blob, ntiles = _encode_at(images, w, h, 15)
+    blob, ntiles = _encode_at(images, w, h, 15, 0, flags)
     if budget is None or len(blob) <= budget:
         return blob, ntiles, 15
 
@@ -159,18 +166,18 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None):
     # sharing a tile whose neighbour differs in two pixels is invisible at
     # this size. Tolerance rises until it fits.
     for tol in range(1, 33):
-        blob, ntiles = _encode_at(images, w, h, 15, tol)
+        blob, ntiles = _encode_at(images, w, h, 15, tol, flags)
         if len(blob) <= budget:
             return blob, ntiles, 15
     # Only if merging cannot do it does the palette narrow.
     for colours in (13, 11, 9, 7):
-        blob, ntiles = _encode_at(images, w, h, colours, 16)
+        blob, ntiles = _encode_at(images, w, h, colours, 16, flags)
         if len(blob) <= budget:
             return blob, ntiles, colours
     return None
 
 
-def _encode_at(images, w, h, colours, tolerance=0):
+def _encode_at(images, w, h, colours, tolerance=0, flags=FLAG_PALETTE):
     words, rgb = build_palette(images, colours)
 
     tiles, order, nm = {}, [], []
@@ -193,9 +200,9 @@ def _encode_at(images, w, h, colours, tolerance=0):
                         order.append(key)
                     else:
                         tiles[key] = hit
-                nm.append(tiles[key])
+                nm.append(tiles[key] | (PALETTE_LINE.get(flags, 3) << 13))
 
-    blob = struct.pack(">HHH", len(order), len(nm) * 2, FLAG_PALETTE)
+    blob = struct.pack(">HHH", len(order), len(nm) * 2, flags)
     blob += b"".join(struct.pack(">H", e) for e in nm)
     blob += b"".join(struct.pack(">H", x) for x in words)
     blob += b"".join(order)
