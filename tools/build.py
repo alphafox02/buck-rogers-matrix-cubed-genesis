@@ -71,8 +71,13 @@ def main():
         raise SystemExit(rc)
     # Both games' area 0x00 is a developer warp menu rather than a boot
     # block, so replace it with a stub that just enters the game.
+    rc = subprocess.call(
+        [sys.executable, str(REPO / "tools/bootstub.py"), str(out), str(out)] + list(START))
+    if rc:
+        raise SystemExit(rc)
+    # A resource Countdown does not carry must not be able to end the run.
     raise SystemExit(subprocess.call(
-        [sys.executable, str(REPO / "tools/bootstub.py"), str(out), str(out)] + list(START)))
+        [sys.executable, str(REPO / "tools/softfail.py"), str(out), str(out)]))
 
 
 if __name__ == "__main__":
