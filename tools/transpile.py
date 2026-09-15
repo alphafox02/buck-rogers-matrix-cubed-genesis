@@ -113,9 +113,15 @@ def _encode_arg(kind, value):
 
 # Engine-shared variables whose Genesis counterpart is established.
 VARIABLE_MAP = {
-    0x7F79: 0x9E6F, 0x7F7A: 0x9E70, 0x7F7B: 0x9E71,   # scratch bank
-    0x4BF2: 0x97E8,                                    # current area
-    0xC04B: 0x9AF6, 0xC04C: 0x9AF7, 0xC04D: 0x9AFA,    # position, direction
+    0x4BF2: 0x97E8,    # LAST_ECL, the current area
+    0xC04B: 0x9AF6,    # DUNGEON_X
+    0xC04C: 0x9AF7,    # DUNGEON_Y
+    0xC04D: 0x9AFA,    # DUNGEON_DIR
+    0xC04E: 0x97AD,    # MAP_WALL_TYPE     -- both top out at exactly 12
+    0xC04F: 0x9AF9,    # MAP_SQUARE_INFO   -- both dominated by 63 (0x3F mask)
+    0x7EC7: 0x9DBD,    # COMBAT_RESULT     -- tested against 128 in both
+    0x7EC9: 0x9DBF,    # MOVEMENT_BLOCK    -- 255 in 63/63 and 57/57 uses
+    0x7EB1: 0x9DA7,    # INDEX_OF_SEL_PC   -- the resolver indexes by it
 }
 
 # Contiguous banks that map as ranges: (dos_lo, dos_hi, genesis_lo).

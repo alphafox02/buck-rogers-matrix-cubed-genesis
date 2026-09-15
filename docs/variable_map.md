@@ -140,6 +140,43 @@ inferred from usage, so it is firmer evidence than a signature match.
 **Consequence for flag reallocation:** relocated script flags must avoid
 both windows, or they will be silently redirected into character data.
 
+## Finding the rest: what the engine writes and scripts read
+
+An engine-shared variable is by definition one the **engine writes and
+scripts read**. Disassembling every absolute-short write in the ROM's code
+and intersecting with script reads gives exactly 20 addresses — a
+candidate set two orders of magnitude smaller than the 259 variables scripts
+touch, and it contains all six mappings confirmed earlier, which is a useful
+check on the method.
+
+Each is then pinned by a value signature the engine forces.
+
+| role | DOS | Genesis | evidence |
+|---|---|---|---|
+| `MAP_SQUARE_INFO` | `0xC04F` | `0x9AF9` | the engine fills it at `0x04210` with `(X*16 + Y)` indexed into a map plane. Both sides are dominated by the value 63 — 32 uses against 31 — because scripts mask the info byte with `0x3F`. |
+| `MAP_WALL_TYPE` | `0xC04E` | `0x97AD` | both top out at exactly **12**, the highest wall type these maps use, across 19 and 80 uses. |
+| `COMBAT_RESULT` | `0x7EC7` | `0x9DBD` | tested against 128 in 11 of 11 Genesis uses and 107 of 111 DOS uses. |
+| `MOVEMENT_BLOCK` | `0x7EC9` | `0x9DBF` | holds 255 in **63 of 63** Genesis uses and **57 of 57** DOS uses. |
+| `INDEX_OF_SEL_PC` | `0x7EB1` | `0x9DA7` | read straight off the address resolver at `0x042E0`, which multiplies it by the character record size. |
+
+The map lookup at `0x04210` is worth reading in full, because it confirms
+three mappings at once:
+
+```
+04212  move.b  $9AF6.w,d0        ; X
+04216  asl.w   #4,d0             ; * 16
+04218  add.b   $9AF7.w,d0        ; + Y
+0421C  lea.l   $B7A4.w,a0        ; a map plane
+04220  move.b  (a0,d0.w),$9AF9.w ; the square's value
+```
+
+X, Y and the per-square value, in five instructions.
+
+## Coverage
+
+**94.7% of the 10,019 variable references now translate**, leaving 536
+across 33 addresses.
+
 ## Statistical candidates
 
 `tools/correlate_vars.py` builds a behavioural signature per variable —
