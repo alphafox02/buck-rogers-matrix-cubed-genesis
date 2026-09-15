@@ -1199,3 +1199,30 @@ it is the figure art the `ADDFIGURE` callers use rather than backdrops.
 an 88x88 region (`moveq #$57` twice at `0x04E20`), which would be 11x11
 tiles and 242 nametable bytes, and no resource has that size. The portraits
 reach the screen by some other arrangement.
+
+### The PICTURE directory — CONFIRMED
+
+Found by clustering: every ROM location holding a pointer to one of the 248
+decodable pictures, grouped by constant stride. Four directories fall out:
+
+| address | entries | stride | contents |
+|---|---|---|---|
+| `0x0998C` | 12 | 4 | 18x9 figure sheets |
+| `0x09A14` | 52 | 8 | combat figures, `{ptr, id, chunk, flags}` |
+| `0xF14F2` | **110** | 4 | **the `PICTURE` table** — 3x3 tiles, 24x24 |
+| `0xF170E` | 50 | 4 | wall and dungeon pieces |
+
+`0xF14F2` is indexed directly by the `PICTURE` operand and all 110 entries
+decode, so **ids 0–109 are valid**. Rendering the ones Countdown's scripts
+use gives a padlock, an eye, a wrench, a gender symbol, faces, a heart, a
+crosshair, crossed swords, a medical cross and a rocket — the icons that
+appear in the window beside the text.
+
+This corrects the guard in `tools/artmap.py`, which had allowed only the 33
+ids Countdown's scripts happen to reference and was therefore blanking 183
+uses of art that resolves perfectly well. Exactly one Matrix Cubed
+`PICTURE` id is genuinely out of range: `0x6F` (111).
+
+The Genesis port shows 24x24 icons where DOS shows 88x88 portraits, so
+injecting Matrix Cubed's art here means reducing its portraits to the
+icon slot the port designed for, not pasting them in at source size.

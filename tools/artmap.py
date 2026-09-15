@@ -22,15 +22,23 @@ artwork instead of killing the game. This is a stopgap: all 3430 Matrix
 Cubed images are already converted (679 KB against 848 KB free), and once
 they are injected this table should shrink to nothing.
 
-Known-good ids are those stock Countdown's own scripts use, which are
-demonstrably present. Regenerate with:
+Valid ids come from the directory itself, not from what Countdown's scripts
+happen to use. `PICTURE` resolves through a 110-entry table of 4-byte
+pointers at 0xF14F2 -- found by clustering every ROM location that points
+at a decodable picture -- and all 110 entries decode, so ids 0..109 are
+real. Only one Matrix Cubed id falls outside it.
 
-    python3 tools/artmap.py > tools/artmap.py.new
+An earlier version of this file allowed only the 33 ids Countdown's scripts
+reference, which blanked 183 uses of perfectly valid art.
 """
 
 NO_PICTURE = 0xFF
 
-# Picture ids stock Countdown references, and therefore certainly has.
+# The PICTURE directory: 110 pointers at 0xF14F2, so ids 0..109 resolve.
+PICTURE_DIR = 0xF14F2
+PICTURE_COUNT = 110
+
+# Kept for reference: the ids Countdown's own scripts use.
 PICTURES = (35, 37, 43, 50, 52, 58, 59, 60, 61, 62, 64, 65, 66, 67, 68, 70, 71, 72, 73, 74, 75, 76, 79, 81, 85, 86, 91, 92, 93, 94, 95, 97, 255)
 
 # VIEW's OPERAND PAIR, not just the id. The first operand is a mode, and the
@@ -44,7 +52,7 @@ VIEW_PAIRS = ((0, 65), (0, 255), (1, 112), (1, 115), (1, 116), (1, 117), (1, 119
 
 def picture(pid):
     """Return (id_to_emit, was_replaced) for a PICTURE operand."""
-    if pid >= 0x80 or pid in PICTURES:
+    if pid >= 0x80 or pid < PICTURE_COUNT:
         return pid, False
     return NO_PICTURE, True
 
