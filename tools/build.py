@@ -119,25 +119,41 @@ def main():
     art = "--no-art" not in sys.argv
     bigpics = "--no-bigpic" not in sys.argv
     portraits = "--no-portrait" not in sys.argv
+    music = "--no-music" not in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path(argv[0]) if argv else DEFAULT_OUT
-    cmd = [sys.executable, str(REPO / "tools/inject_area.py"), str(STOCK), str(out)] + specs()
-    rc = subprocess.call(cmd)
+
+    # Build into a scratch file and rename it into place at the very end.
+    #
+    # Every stage reads and writes the same ROM, so building straight into
+    # `out` means that for most of a build the file on disk is a half
+    # converted ROM -- after the areas go in but before the title art, it
+    # still carries Countdown's intro. Loading it at that moment shows the
+    # old intro, or worse a torn file, and looks exactly like a regression.
+    # `Path.replace` is atomic within a filesystem, so the emulator only
+    # ever sees a finished ROM or the previous one.
+    work = out.with_name(out.name + ".building")
+
+    def step(tool, *args):
+        rc = subprocess.call([sys.executable, str(REPO / "tools" / tool),
+                              str(work), str(work), *args])
+        if rc:
+            work.unlink(missing_ok=True)
+            raise SystemExit(rc)
+
+    rc = subprocess.call([sys.executable, str(REPO / "tools/inject_area.py"),
+                          str(STOCK), str(work)] + specs())
     if rc:
+        work.unlink(missing_ok=True)
         raise SystemExit(rc)
+
     # Both games' area 0x00 is a developer warp menu rather than a boot
     # block, so replace it with a stub that just enters the game.
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/bootstub.py"), str(out), str(out)] + list(START))
-    if rc:
-        raise SystemExit(rc)
+    step("bootstub.py", *START)
     # A resource Countdown does not carry must not be able to end the run.
-    rc = subprocess.call([sys.executable, str(REPO / "tools/softfail.py"), str(out), str(out)])
-    if rc:
-        raise SystemExit(rc)
-    rc = subprocess.call([sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)])
-    if rc or not art:
-        raise SystemExit(rc)
+    step("softfail.py")
+    step("retitle.py")
+
     # Matrix Cubed's own portraits, into the slots the directory ALREADY has.
     #
     # The directory is deliberately NOT expanded. Adding ids looked free and
@@ -151,32 +167,22 @@ def main():
     #
     # Replacing what is already there has no such effect: same id, same
     # budget, art that fits.
-    if portraits:
-        rc = subprocess.call(
-            [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out)]
-            + [f"0x{k:02X}:{v}" for k, v in sorted(PORTRAITS.items())])
-        if rc:
-            raise SystemExit(rc)
-    if not bigpics:
-        raise SystemExit(0)
-    # The intro screens are named by lea operands rather than a directory,
-    # so replacing them needs no table to grow.
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/inject_title.py"), str(out), str(out)])
-    if rc:
-        raise SystemExit(rc)
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/trim_intro.py"), str(out), str(out)])
-    if rc:
-        raise SystemExit(rc)
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out),
-         "--bigpic"] + [f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
-    if rc or "--no-music" in sys.argv:
-        raise SystemExit(rc)
-    raise SystemExit(subprocess.call(
-        [sys.executable, str(REPO / "tools/inject_music.py"), str(out), str(out)]
-        + [f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())]))
+    if art and portraits:
+        step("inject_portrait.py",
+             *[f"0x{k:02X}:{v}" for k, v in sorted(PORTRAITS.items())])
+    if art and bigpics:
+        # The intro screens are named by lea operands rather than a
+        # directory, so replacing them needs no table to grow.
+        step("inject_title.py")
+        step("trim_intro.py")
+        step("inject_portrait.py", "--bigpic",
+             *[f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
+    if music:
+        step("inject_music.py",
+             *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])
+
+    work.replace(out)
+    print(f"published {out}")
 
 
 if __name__ == "__main__":

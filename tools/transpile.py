@@ -35,6 +35,7 @@ from collections import OrderedDict
 
 import artmap
 import ecl
+import soundmap
 import monstermap
 import skillmap
 import flagmap
@@ -361,6 +362,7 @@ def transpile(block: bytes, flags=None):
         art_at = (0 if ins.name == "PICTURE" else
                   1 if ins.name == "PICTURE2" else None)
         mon_at = 0 if ins.name in ("LOAD_MON", "SPRITE_START") else None
+        snd_at = 0 if ins.name == "SOUND_EVENT" else None
         # WHMENU prints engine string 0x2D, "what do you do?", before its
         # labels, so they start 15 columns in. That is why stock Countdown's
         # widest WHMENU is 27 characters where its widest HMENU is 35. Matrix
@@ -389,6 +391,14 @@ def transpile(block: bytes, flags=None):
                                        f"{labels} -> {fitted}"))
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
+            if snd_at == k and arg.type == 0x00:
+                new, moved = soundmap.translate(arg.value)
+                if moved:
+                    report.append((off, "sound",
+                                   f"music 0x{arg.value:02X} -> 0x{new:02X} "
+                                   f"(slot {soundmap.SLOTS[new]})"))
+                args.append(("imm", new))
+                continue
             if mon_at == k and arg.type == 0x00 and arg.value == 0xFF \
                     and ins.name == "SPRITE_START":
                 # 255 is DOS's "no sprite" sentinel, used 58 times. The

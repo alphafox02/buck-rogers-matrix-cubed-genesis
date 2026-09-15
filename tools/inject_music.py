@@ -30,7 +30,14 @@ import xmi
 import xmi2seq
 
 MUSIC_TABLE = 0x1BAC0
-MUSIC_BASE = 0x190000        # below the artwork at 0x1C0000
+# In the FIRST megabyte, where every stock track lives. Music placed in
+# expanded ROM at 0x190000 crashed the game in play while the same build
+# without music was fine, and the difference worth suspecting is that the
+# 68000 primes the Z80's ring buffer from here (0x1B824) and refills it as
+# the Z80 drains -- a path that may assume music is where it has always been.
+# 0x0F1BD8 begins 57 KB of unused space ending just below the checksum
+# routine at 0x0FFFB0.
+MUSIC_BASE = 0x0F2000
 
 # A track is preceded by a longword giving where it ends. The 68000 reads it
 # on the way to the Z80 and nothing works without it:
@@ -42,6 +49,33 @@ MUSIC_BASE = 0x190000        # below the artwork at 0x1C0000
 # preceding longword is 0x0368D8 -- and injecting without it left the driver
 # reading a garbage end address and playing nothing at all.
 END_POINTER = 4
+
+# The region must be a whole number of 0x100-byte pages, and at least four of
+# them. The 68000 feeds the Z80's ring one page at a time and tests for the
+# end with an equality compare:
+#
+#     1B7E8: move.w  #$ff, d0
+#     1B7EC: bsr.w   $1b6ca            ; copy 0x100 bytes, a1 -> ring
+#     1B7F8: cmpa.l  $d8ee.w, a1       ; end reached?
+#     1B7FC: bne.b   $1b804
+#     1B7FE: move.l  $d8ea.w, $d8e2.w  ; loop back to the start
+#
+# so `a1` only ever lands on start + n*0x100. A region whose length is not a
+# multiple of that is stepped straight over, and the driver goes on streaming
+# whatever follows the track into the FM chip -- static, then a hang. The
+# four-page minimum is because 0x1B824 primes the ring with 0x400 bytes
+# before the first refill, overshooting any region shorter than that.
+# Every stock track obeys both rules: 0x400, 0x500, 0x600, 0x700 or 0x800.
+PAGE = 0x100
+MIN_PAGES = 4
+
+
+def pad(seq):
+    """Round a converted track up to a whole number of pages."""
+    want = max(MIN_PAGES * PAGE, (len(seq) + PAGE - 1) // PAGE * PAGE)
+    # Padding sits after the track's own 0xFC terminator, so it is never
+    # interpreted; zero is a no-op delta in any case.
+    return seq + bytes(want - len(seq))
 
 
 def main():
@@ -60,7 +94,7 @@ def main():
             sys.exit(f"{path} has {len(got)} songs, asked for {song}")
         b, e = got[song]
         events = xmi.events(data, b, e)
-        seq = xmi2seq.convert(events)
+        seq = pad(xmi2seq.convert(events))
         old = struct.unpack_from(">I", rom, MUSIC_TABLE + slot * 4)[0]
         at = cursor + END_POINTER
         struct.pack_into(">I", rom, cursor, at + len(seq))
@@ -68,7 +102,8 @@ def main():
         struct.pack_into(">I", rom, MUSIC_TABLE + slot * 4, at)
         notes = sum(1 for _, st, _ in events if st & 0xF0 == 0x90)
         print(f"  music[{slot}] <- {path} song {song}: {notes} notes, "
-              f"{len(seq)} bytes at 0x{at:06X}, ends 0x{at + len(seq):06X} "
+              f"{len(seq)} bytes ({len(seq)//PAGE} pages) at 0x{at:06X}, "
+              f"ends 0x{at + len(seq):06X} "
               f"(was 0x{old:06X})")
         cursor = at + len(seq) + 4
 
