@@ -76,8 +76,11 @@ def main():
     if rc:
         raise SystemExit(rc)
     # A resource Countdown does not carry must not be able to end the run.
+    rc = subprocess.call([sys.executable, str(REPO / "tools/softfail.py"), str(out), str(out)])
+    if rc:
+        raise SystemExit(rc)
     raise SystemExit(subprocess.call(
-        [sys.executable, str(REPO / "tools/softfail.py"), str(out), str(out)]))
+        [sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)]))
 
 
 if __name__ == "__main__":

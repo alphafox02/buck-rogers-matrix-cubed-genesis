@@ -1253,3 +1253,48 @@ The figure directory holds 52 ids. Matrix Cubed's `LOAD_MON` and
 **237 references**. `tools/artmap.py` substitutes the nearest lower id,
 which keeps the encounter with another creature's sprite rather than
 dropping the fight.
+
+### Palette lines — CONFIRMED
+
+Read straight off the art, from bits 13-14 of every nametable entry:
+
+| art class | palette line |
+|---|---|
+| `PICTURE` icons | **0** (921 cells), a little line 1 (69) |
+| wall and dungeon pieces | **2** (8089 cells), some line 0 (1371) |
+| figure sheets | 0 |
+| combat figures | 0 |
+
+Pictures and walls are on **different lines**, and **line 3 is unused** by
+any of the 248 picture-container resources.
+
+All four lines are uploaded together, from one RAM buffer:
+
+```
+0A490: move.l  #$c0000000, (a4)    ; CRAM from address 0
+0A496: moveq   #$3f, d7            ; 64 words = 4 lines
+0A498: lea.l   $ffff0240.l, a1
+0A49E: move.w  (a1)+, (a5)
+```
+
+so line 3 lives at `0xFFFF02A0`. Nothing in the ROM writes that address
+directly; the buffer is filled wholesale, and `0x0A160` reads CRAM back
+into it rather than writing it, which is a fade rather than a load.
+
+### The palette is what limits injected art, not the icon size
+
+Measured on six portraits, mean per-pixel error:
+
+| | error |
+|---|---|
+| engine palette, 24x24 | **65.1** |
+| the image's own 16 colours, 24x24 | **20.9** |
+| the image's own 16 colours, 88x88 | 16.2 |
+
+Dropping from 88x88 to 24x24 costs about 5. Losing control of the palette
+costs about 44. So the icon slot is not the problem — colour is.
+
+It also exposed a likely mistake in `tools/inject_pic.py`: it quantises
+against the palette at `0xF16AA`, which `LOADPIECES` selects with its id
+divided by three. That is the **wall** palette, and walls are on line 2
+while icons are on line 0.
