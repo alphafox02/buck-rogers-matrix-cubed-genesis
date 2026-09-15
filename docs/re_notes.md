@@ -1119,3 +1119,48 @@ while the game went straight to the space hub, because Matrix Cubed's area
 Correction to an earlier note: the ECL loader begins at `0x040D0`. `0x040CE`
 is the `rts` of the routine above it. Searching for callers of `0x040CE`
 found none and made the loader look unreachable.
+
+## The art resource directory — CONFIRMED, and relocatable
+
+Found by walking back from the `"loadpieces error 1"` site. The loader at
+`0x09BB6` has three callers, and one of them resolves a resource by id
+against a table:
+
+```
+099C6: lea.l    $9a14.l, a1      ; the directory
+099CC: move.b   $4(a1), d1       ; this record's id
+099D0: bmi.b    $99f6            ; a negative id ends the table
+099D2: cmp.b    d0, d1
+099D6: addq.l   #$8, a1          ; 8-byte records
+099DE: movea.l  (a1), a0         ; -> the resource
+099DA: move.b   $5(a1), d3       ; chunk size
+```
+
+Records are `{pointer:4, id:1, chunk:1, flags:2}`. The table at `0x09A14`
+holds **52 records, ids 0x00–0x40**, pointing into `0x075E10`–`0x08C886`,
+and ends at `0x09BB4` — immediately followed by the loader's own entry
+(`4E56 F7EC`, `link a6, #$f7ec`). **So it cannot grow in place.**
+
+It can be relocated, which is the same move already used for the ECL and
+GEO streams: the address is a single absolute operand at `0x099C8`, so
+pointing it at a longer table in expanded ROM makes the directory additive.
+
+A second table of 4-byte pointers sits at `0x0998C`, reached from the other
+caller at `0x09982`, indexing `0x066116` onward.
+
+### What still blocks injection
+
+The converted art is in `.gart`, a container written for this project. The
+engine wants its own layout, compressed with the SSI codec at `0x09ED8`
+and read in `chunk`-sized pieces. The codec is already solved — 
+`tools/lzw_encode.py` reproduces SSI's output byte-for-byte on 53 of 54
+ECL streams — but the uncompressed picture layout has not been reversed
+yet. That, not space or directory structure, is the remaining work.
+
+### Default pictures per area
+
+`0x082EC` picks a backdrop when no picture is set: a table of `area, picture`
+pairs at `0x08336` (17 entries, `0xFF` terminated), falling back to
+`0x08330` indexed by `0x979B`. Matrix Cubed's new areas are absent from it
+and take the fallback, which is harmless — every id in it is one Countdown
+has.

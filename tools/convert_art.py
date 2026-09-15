@@ -64,6 +64,11 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "extracted" / "images"
+# VGADependentImages -- the portraits the picture window shows. They decode
+# by a different path (tools/gbimage_vd.py) and land in their own tree, but
+# they convert exactly like everything else. PIC1 is the archive the ECL
+# PICTURE opcode indexes; its ids are the ones docs/art_todo.md is missing.
+SRC_VD = ROOT / "extracted" / "images_vd"
 DST = ROOT / "extracted" / "genesis_art"
 
 MULTI_ARCHIVES = {"BIGPIC1", "TITLE", "BACK1"}
@@ -354,11 +359,14 @@ def main():
     args = ap.parse_args()
 
     jobs = []
-    for d in sorted(SRC.iterdir()):
-        if not d.is_dir() or (args.only and d.name != args.only):
+    for root in (SRC, SRC_VD):
+        if not root.exists():
             continue
-        for f in sorted(d.glob("*.png")):
-            jobs.append((d.name, str(f)))
+        for d in sorted(root.iterdir()):
+            if not d.is_dir() or (args.only and d.name != args.only):
+                continue
+            for f in sorted(d.glob("*.png")):
+                jobs.append((d.name, str(f)))
     print(f"{len(jobs)} images")
 
     import time
@@ -413,6 +421,8 @@ def write_checks(results, extra=8):
         seen.add((archive, name))
         gart = DST / archive / f"{name}.gart"
         src = SRC / archive / f"{name}.png"
+        if not src.exists():
+            src = SRC_VD / archive / f"{name}.png"
         if not gart.exists():
             print("  missing", gart)
             continue
