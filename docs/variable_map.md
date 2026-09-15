@@ -80,7 +80,29 @@ These rest on constraints the game's design forces, not on statistics.
 | `TEMP_START` scratch | `0x7F79` | `0x9E6F` | dominant destination of `AND`/`OR` in both (1,467 vs 994 uses); the next two slots are consecutive in both engines |
 | `LAST_ECL` current area | `0x4BF2` | `0x97E8` | the address a block compares against **its own id** — 63 DOS blocks, 25 of 27 Genesis |
 | `DUNGEON_DIR` | `0xC04D` | `0x9AFA` | compared against 0-3 and nothing else, evenly spread: DOS 89/86/72/69, Genesis 61/62/56/57. Only a direction produces that shape. |
-| `DUNGEON_X`/`Y` | `0xC04B`/`C` | `0x9AF6`/`0x9AF7` | values top out at 15 on a 16x16 grid in both; the pair is set together with the direction at area entry (`SAVE 0x6,[0x9AF6]` / `SAVE 0x0,[0x9AF7]` / `SAVE 0x1,[0x9AFA]`). **Which of the pair is X is not yet established.** |
+| `DUNGEON_X` | `0xC04B` | `0x9AF6` | see below |
+| `DUNGEON_Y` | `0xC04C` | `0x9AF7` | see below |
+
+### Resolving which coordinate is which
+
+Both variables top out at 15 on a 16x16 grid and are set together with the
+direction at area entry, so usage alone cannot separate them. The maps can.
+
+Scripts place the party at a known square on entry. Read the pair one way
+and the party stands somewhere walkable; read it the other way and it stands
+inside a wall. Testing every area's entry position against that area's own
+extracted map:
+
+| reading | start squares walkable | total walls at start positions |
+|---|---|---|
+| `0x9AF6` = X, `0x9AF7` = Y | **15 of 16** | **23** |
+| reversed | 11 of 16 | 39 |
+
+A party starting sealed inside a four-walled box would be a bug, and the
+shipped game does not have five of them. The first reading is correct.
+
+This works because the map decoder is already confirmed — it is one verified
+piece of the project being used to verify another.
 
 ## Two windows are not plain addresses
 
