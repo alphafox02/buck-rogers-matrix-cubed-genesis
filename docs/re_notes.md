@@ -1418,3 +1418,49 @@ blocks for the narration's distinctive phrases finds nothing: the sequence
 is a Genesis-port addition, and DOS Matrix Cubed has no equivalent. Giving
 it a Matrix Cubed intro would mean writing one, which is authoring rather
 than porting, and is a decision worth making deliberately.
+
+## The sound driver — CONFIRMED custom, not SMPS or GEMS
+
+Music does not run on the 68000. The routine at `0x1B89A` hands a track
+pointer to the Z80:
+
+```
+1B8BC: movea.l #$a00000, a1     ; Z80 address space
+1B8D6: move.b  d1, $c(a1)       ; command byte
+1B8DC: movea.l #$a0003a, a2     ; track pointer
+1B8E6: bsr.w   $1b6c8
+```
+
+and `0x1B5CE` uploads the driver itself: **6112 bytes of Z80 code at ROM
+`0x19D86`**, copied to `0xA00000`.
+
+It is not one of the drivers the community has tools for. The blob carries
+its author's signature in plain text — **`SHayes1991`** — and its track
+headers match neither SMPS nor GEMS:
+
+```
+0x29E9E: 2a f8 0d 36 7c 00 88 88 ...
+0x2BEC4: 2a f8 0d c6 7b 00 88 88 ...
+0x2CC8E: 2a f8 0c b6 7a 00 88 88 ...
+```
+
+Every track opens `2A F8`, then a varying word, then a byte in `0x7A`-`0x7D`,
+then `00`, then event data dominated by values around `0x86`-`0x8C`. The
+dispatcher at `0x1B900` indexes a kind table at `0x1B9D4` (76 entries) and
+pointer tables at `0x1BA20` and `0x1BAF4`.
+
+### What this means for putting Matrix Cubed's music in
+
+DOS Matrix Cubed's music is XMI — MIDI events for AdLib and MT-32. The
+Genesis needs YM2612 register writes in *this* driver's format. Recording
+the DOS audio instead does not help: the Genesis has one 8-bit PCM channel
+and nothing like the bandwidth for a streamed song.
+
+So the work is: disassemble 6112 bytes of Z80, find the sequence
+interpreter, document the event encoding, then write an XMI-to-SSI
+converter. Bounded, but days rather than hours, and none of the existing
+MIDI-to-Genesis tools apply because they target SMPS or GEMS.
+
+The alternative is to replace the driver wholesale with one that has
+tooling, and retarget the 68000's calls. That trades reversing an unknown
+format for porting a known one, and would change every sound effect too.
