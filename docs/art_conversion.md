@@ -423,3 +423,51 @@ Genesis build necessarily shows an approximation.
 `tools/genesis_art.py` already separates palette construction from output
 encoding, so a 32X encoder is a small addition rather than a rewrite: the
 clustering step is simply skipped.
+
+---
+
+## Why the Genesis conversion looks better than the numbers suggest
+
+"256 colours reduced to 60" overstates the problem in three ways.
+
+**The art does not use 256 colours.** The VD header declares a 224-entry
+palette, but across the 102 portraits actual usage is:
+
+```
+min 13    median 67    max 145
+```
+
+42 of 102 already fit inside 60 colours, so for those the only loss is
+channel depth.
+
+**Four palettes is 60, not 15.** A tilemap entry carries two bits of palette
+index. Converting against one palette means 15 against a median of 67, which
+is where the blue eyes turned cream. Four gives 60 against 67.
+
+**Colour use is local.** In portrait `PIC1/001`, distinct colours per 8x8
+tile:
+
+```
+mean 9.5    worst tile 26    budget 15
+```
+
+The average tile needs nine colours and may have fifteen. A tile covering
+cheek holds skin tones; a tile covering background holds background tones;
+they rarely mix within eight pixels. So the hardware is not approximating a
+67-colour image with 15 — it is giving each small region a well-fitted 15,
+and pixel art is locally coherent enough that this mostly works.
+
+Sega built per-tile palette selection because that is how artists draw, and
+SSI's artists were working with restricted ramps on VGA. The hardware and
+the art suit each other.
+
+### Where it therefore fails
+
+Smooth gradients over large areas: one big region, many near-identical
+shades, no locality to exploit. That is exactly the observed failure mode —
+banding in a large flat red background, and flattening across a helmet's
+grey gradient. Busy textured art such as foliage survives almost untouched.
+
+Tiles at boundaries are the other weak spot: a tile spanning lit skin and
+dark background needs colours from two ramps and gets neither well. The
+purple artifact in dark backgrounds is this case.
