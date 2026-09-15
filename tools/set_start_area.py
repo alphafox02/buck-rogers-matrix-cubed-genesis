@@ -27,28 +27,40 @@ import genesis_ecl
 import integrity
 
 
-def retarget(code: bytes, area: int) -> bytes:
-    """Rewrite the boot block's first NEWECL and LOADFILES to `area`."""
+def retarget(code: bytes, old: int, area: int):
+    """
+    Point every route to `old` at `area` instead.
+
+    Patching only the first NEWECL is not enough. The boot script offers a
+    menu and reaches its NEWECL down one branch only:
+
+        0002F  HMENU    [0x9E6F], 0x2, ...     ; two options
+        0003B  COMPARE  0x1, [0x9E6F]
+        00041  IFEQ
+        00042  NEWECL   0x10                   ; only on choice 1
+
+    and other blocks carry their own route to the same area. Rewriting every
+    NEWECL and LOADFILES that names `old` covers whichever branch the player
+    actually takes.
+
+    Only immediate operands are touched, so instruction lengths are
+    unchanged and no jump target moves.
+    """
     table = G.load_opcodes()
     found = G.disassemble(code, table)
     out = bytearray(code)
     changed = []
     for off in sorted(found):
         ins = found[off]
-        if ins.name not in ("NEWECL", "LOADFILES"):
+        if ins.name not in ("NEWECL", "LOADFILES") or not ins.args:
             continue
         arg = ins.args[0]
-        if arg.kind != "imm":
+        # type 0x00 is a one-byte immediate; anything else is a variable or
+        # a wider literal and must be left alone.
+        if arg.kind != "imm" or out[off + 1] != 0x00 or out[off + 2] != old:
             continue
-        # Immediates are a type byte followed by the value; only type 0x00
-        # (one byte) is expected here, and rewriting it in place preserves
-        # the instruction's length.
-        if out[off + 1] != 0x00:
-            continue
-        changed.append((off, out[off + 2], ins.name))
+        changed.append((off, ins.name))
         out[off + 2] = area
-        if len(changed) == 2:
-            break
     return bytes(out), changed
 
 
@@ -63,13 +75,19 @@ if __name__ == "__main__":
     if area not in ids:
         sys.exit(f"area 0x{area:02X} not present")
 
-    slot = ids.index(0x00)
-    code, changed = retarget(blocks[slot][1], area)
-    if not changed:
-        sys.exit("no NEWECL/LOADFILES with an immediate found in the boot block")
-    for off, old, name in changed:
-        print(f"  {name} at 0x{off:04X}: 0x{old:02X} -> 0x{area:02X}")
-    blocks[slot] = (0x00, code, blocks[slot][2])
+    # Whichever area the boot script currently sends the player to.
+    START = 0x10
+    total = 0
+    for k, (bid, code, text) in enumerate(blocks):
+        new, changed = retarget(code, START, area)
+        if changed:
+            for off, name in changed:
+                print(f"  block 0x{bid:02X} {name} at 0x{off:04X}: "
+                      f"0x{START:02X} -> 0x{area:02X}")
+            blocks[k] = (bid, new, text)
+            total += len(changed)
+    if not total:
+        sys.exit(f"no NEWECL/LOADFILES targeting area 0x{START:02X} found")
 
     builder = expand.Builder(rom)
     builder.relocate_ecl(blocks)

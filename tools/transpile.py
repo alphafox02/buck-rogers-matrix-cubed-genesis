@@ -168,6 +168,27 @@ VARIABLE_MAP = {
 # behaviour anyway for a value the engine never consults.
 INERT = (0x4BE7, 0x4BE8, 0x4BE9, 0x4BFB, 0x4BAB)
 
+# Any engine-shared variable whose Genesis counterpart is not established
+# also gets inert storage, rather than a plausible-looking guess.
+#
+# This reverses an earlier judgement. The argument for guessing was that an
+# unmapped DOS address sign-extends into ROM, so the write vanishes silently
+# -- worse, it seemed, than a wrong address failing visibly. That reasoning
+# only holds if the wrong address is dead. It usually is not: a guess drawn
+# from the engine-written/script-read set is by construction a LIVE engine
+# variable, so a mistake corrupts real state instead of merely losing some.
+#
+# LAST_DUNGEON_X made the case concrete. It looked like 0x9BCB on adjacency
+# grounds, but DOS only ever copies into it -- 30 writes, no immediates --
+# while 0x9BCB is always written with constants {96, 0, 32}. Different
+# behaviour, so the mapping was wrong, and applying it would have written
+# garbage into whatever 0x9BCB actually controls.
+#
+# Inert storage degrades gracefully instead: scripts read back what they
+# wrote, so logic among themselves still works, and only the engine's view
+# is missing. That is a bounded, documented loss rather than corruption.
+INERT_UNKNOWN = True
+
 PROBABLE_MAP = {
     # The only non-scratch operand of LOAD_CHAR / LOADCHARACTER on each side,
     # 27 uses against 10. Scripts use it to walk the party.
@@ -178,14 +199,8 @@ PROBABLE_MAP = {
     # and carry the same shape of value: a high bit set, plus 16.
     # DOS {132,129,128,16} against Genesis {130,80,16,0}.
     0x4BE6: 0x97DC,    # DUNGEON_VALUE
-
-    # Saved position, restored on returning to an area. They sit either side
     # of the confirmed X/Y pair in DOS, and 0x9BCB is engine-written,
     # script-read, and write-only from scripts like its DOS counterparts.
-    0x4BF0: 0x9BCB,    # LAST_DUNGEON_X
-    0x4BF1: 0x9BCC,    # LAST_DUNGEON_Y -- consecutive with X in DOS, and
-                       # Countdown never reads it, which is consistent with
-                       # the slot being unused there rather than absent.
 }
 
 # Contiguous banks that map as ranges: (dos_lo, dos_hi, genesis_lo).

@@ -362,3 +362,55 @@ Remaining blockers, by how many blocks each holds back:
 | `0x4CE6` | `MONEY_NEO_ACCT` | 4 |
 | `0x4C1A` | `REPAIR_COST` | 3 |
 | `0x4BC9`/`0x4BC3`/`0x4BC4` | `TIME_HOUR`, `OVERLAND_X/Y` | 2 each |
+
+---
+
+## Policy reversal: unconfirmed variables get inert storage, not a guess
+
+An earlier section argued that applying a probable mapping beats leaving one
+out, because an unmapped DOS address sign-extends into ROM and the write
+vanishes silently, whereas a wrong address fails visibly.
+
+**That reasoning was wrong, and it is worth recording why.** It holds only if
+the guessed address is dead. It is not: candidates come from the
+engine-written/script-read intersection, so by construction they are *live*
+engine variables. A mistake therefore corrupts real state rather than merely
+losing some — strictly worse than the failure it was meant to avoid.
+
+`LAST_DUNGEON_X` made it concrete. It looked like `0x9BCB` on adjacency
+grounds, but the two behave differently:
+
+| | writes | immediates |
+|---|---|---|
+| DOS `LAST_DUNGEON_X` | 30 | **none** — only ever copied from another variable |
+| Genesis `0x9BCB` | 26 | **always** constants: {96, 0, 32} |
+
+A variable that is only ever copied into is not one that is only ever
+assigned literals. The mapping was wrong, and applying it would have written
+garbage into whatever `0x9BCB` actually controls.
+
+### Negative result: 0x4Bxx is not a relocated bank
+
+The `0x7E00`-`0x7FFF` bank moved wholesale at a constant offset, so the same
+was tested for `0x4Bxx` using `0x4BF0` → `0x9BCB` as the anchor. It fails:
+`LAST_ECL` `0x4BF2` is confirmed at `0x97E8` while the offset predicts
+`0x9BCD`, and nearly every other predicted target is unused by Genesis
+scripts. Those variables were relocated individually.
+
+### What inert storage means
+
+Unconfirmed engine variables are allocated safe RAM alongside the story
+flags. Scripts read back whatever they wrote, so logic *among scripts* still
+works; only the engine's view of that value is missing.
+
+The practical consequences are bounded and known: overland position, money,
+repair costs and time-of-day will not reach the engine until those mappings
+are established.
+
+### Reading the coverage number honestly
+
+All 10,019 references now resolve and all 33 blocks translate, but that is
+**100% handled, not 100% correct**. Nine individual engine variables and
+three banks are genuinely mapped. The remainder are inert. A transplanted
+area will run and its script logic will behave, but engine-mediated effects
+of the unmapped variables will not.

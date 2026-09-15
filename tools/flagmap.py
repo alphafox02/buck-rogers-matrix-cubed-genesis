@@ -123,7 +123,15 @@ def matrix_flags(path=None):
     # Engine-config addresses the Genesis has no counterpart for are given
     # inert storage alongside the story flags -- see transpile.INERT.
     import transpile
-    excluded = (named | DOS_ENGINE_EXTRA) - set(transpile.INERT)
+    # Engine variables with no established Genesis counterpart get inert
+    # storage alongside the story flags -- see the note on INERT_UNKNOWN in
+    # transpile.py for why that is safer than guessing an address.
+    import correlate_vars  # noqa: F401  (kept for tooling parity)
+    unmapped_engine = {a for a in named
+                       if a not in transpile.VARIABLE_MAP
+                       and a not in transpile.PROBABLE_MAP
+                       and not any(lo <= a < hi for lo, hi, _ in transpile.WINDOW_MAP)}
+    excluded = (named | DOS_ENGINE_EXTRA) - set(transpile.INERT) - unmapped_engine
     return [a for a, _ in counts.most_common() if a not in excluded], named
 
 
