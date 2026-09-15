@@ -380,3 +380,46 @@ each with its own palette, but a combat map draws dozens of them at once
 sharing four palettes on screen. Their per-image conversions are good in
 isolation and will need a set-wide pass before any of them can actually be
 drawn together. Same problem as 8X8D1, same fix.
+
+---
+
+## Keep the originals: art is a tiered problem, not a one-way conversion
+
+The Genesis conversion is lossy and permanently so. It should therefore
+never be treated as the archival form. The pipeline runs
+**original -> target**, always, and the original PNGs in `extracted/images/`
+and `extracted/images_vd/` are the master copies.
+
+That matters because the three plausible targets differ enormously in what
+they can show:
+
+| target | simultaneous colours | palette space | bits/channel |
+|---|---|---|---|
+| DOS VGA source | 256 | 262,144 | 6 |
+| **32X** | **256** | **32,768** | **5** |
+| Genesis | 61 (4 x 15 + 1) | 512 | 3 |
+
+**The 32X uses the same colour model as VGA**, one bit shallower per
+channel. Measured on portrait `PIC1/001`, simply reducing 6-bit channels to
+5-bit gives a mean perceptual error of **1.85** against the original — close
+enough that the two are hard to tell apart side by side.
+
+The same portrait converted for the Genesis loses its skin gradients to flat
+patches, loses hair detail, and picks up a visible artifact where one tile
+draws from an unsuitable palette.
+
+### Consequence for the project
+
+A 32X build does not need "restored" artwork — it needs the **original**
+artwork with a trivial channel reduction. There is nothing to restore
+because nothing was thrown away, provided the Genesis conversion is treated
+as an output rather than a replacement.
+
+This is the strongest practical argument for the 32X that the project has
+produced. The 32X buys little in CPU terms for a turn-based RPG, but it
+means SSI's 1992 artwork can be shown essentially as drawn, while the
+Genesis build necessarily shows an approximation.
+
+`tools/genesis_art.py` already separates palette construction from output
+encoding, so a 32X encoder is a small addition rather than a rewrite: the
+clustering step is simply skipped.
