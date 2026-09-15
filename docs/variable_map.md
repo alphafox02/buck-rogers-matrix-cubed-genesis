@@ -82,6 +82,42 @@ These rest on constraints the game's design forces, not on statistics.
 | `DUNGEON_DIR` | `0xC04D` | `0x9AFA` | compared against 0-3 and nothing else, evenly spread: DOS 89/86/72/69, Genesis 61/62/56/57. Only a direction produces that shape. |
 | `DUNGEON_X`/`Y` | `0xC04B`/`C` | `0x9AF6`/`0x9AF7` | values top out at 15 on a 16x16 grid in both; the pair is set together with the direction at area entry (`SAVE 0x6,[0x9AF6]` / `SAVE 0x0,[0x9AF7]` / `SAVE 0x1,[0x9AFA]`). **Which of the pair is X is not yet established.** |
 
+## Two windows are not plain addresses
+
+The ECL address resolver at `0x042E0` special-cases two ranges, redirecting
+them into per-character records indexed by the selected character at
+`$9DA7`:
+
+```
+042E0  cmpa.l #$FFFF9AFC,a0     ; window 1 lower bound
+042E8  cmpa.l #$FFFF9B50,a0     ; upper bound
+042F0  adda.w #$1F6C,a0
+042F6  move.b ($9DA7).w,d0      ; selected character
+042FA  mulu.w #$D6,d0           ; 214 bytes per character record
+042FE  adda.w d0,a0
+
+04302  cmpa.l #$FFFF9BF6,a0     ; window 2
+0430A  cmpa.l #$FFFF9C10,a0
+04312  adda.w #$287A,a0
+0431C  mulu.w #$1A,d0           ; 26 bytes per character
+```
+
+Every other address passes through unchanged as plain RAM.
+
+These windows are the Genesis counterparts of the DOS `SEL_PC_*` block:
+
+| DOS | span | Genesis | span |
+|---|---|---|---|
+| `SEL_PC_START` `0x7C00`-`0x7C4C` | 77 | `0x9AFC`-`0x9B4F` | 84 |
+| `SEL_PC_STATUS` `0x7D00`-`0x7D19` | **26** | `0x9BF6`-`0x9C0F` | **26** |
+
+The second is an exact size match, and both are contiguous windows indexed
+per character in each engine. This was read off the engine rather than
+inferred from usage, so it is firmer evidence than a signature match.
+
+**Consequence for flag reallocation:** relocated script flags must avoid
+both windows, or they will be silently redirected into character data.
+
 ## Statistical candidates
 
 `tools/correlate_vars.py` builds a behavioural signature per variable —
