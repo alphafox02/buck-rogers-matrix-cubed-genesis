@@ -54,15 +54,21 @@ SCREENS = (
 
 
 def compose_presents():
-    """SSI logo, the Buck Rogers logo and the copyright, stacked as one screen."""
+    """The Buck Rogers logo, centred and alone.
+
+    Stacking the SSI banner, the logo and the copyright lines was tried, and
+    they look bad together: three DOS images that each had their own palette
+    have to share one line of sixteen colours here, and small text is what
+    loses. Measured mean error 3.5 for the stack against 2.3 for the logo by
+    itself, and the difference by eye is larger than that -- the logo stays
+    crisp where the four-pixel-high copyright turns to mush.
+
+    So the screen carries the thing that identifies the game and drops the
+    fine print. The MATRIX CUBED card follows it.
+    """
     out = Image.new("RGB", (320, 224), (0, 0, 0))
-    src = REPO / "extracted" / "images" / "TITLE"
-    top = Image.open(src / "001.png").convert("RGB")      # 320x72
-    mid = Image.open(src / "002.png").convert("RGB")      # 288x144
-    bot = Image.open(src / "003.png").convert("RGB")      # 272x32
-    out.paste(top, (0, 0))
-    out.paste(mid, ((320 - mid.width) // 2, 74))
-    out.paste(bot, ((320 - bot.width) // 2, 224 - bot.height))
+    logo = Image.open(REPO / "extracted" / "images" / "TITLE" / "002.png").convert("RGB")
+    out.paste(logo, ((320 - logo.width) // 2, (224 - logo.height) // 2))
     return out
 
 

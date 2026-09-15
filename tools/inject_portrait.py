@@ -106,7 +106,10 @@ def build_palette(images, colours=15):
     for i, im in enumerate(images):
         merged.paste(im, (i * im.width, 0))
     quant = merged.quantize(colors=colours, method=Image.MEDIANCUT)
-    raw = quant.getpalette()[:colours * 3] + [0] * (45 - colours * 3)
+    # An image with fewer distinct colours than asked for returns a shorter
+    # palette, so it is padded rather than indexed off the end.
+    raw = quant.getpalette() or []
+    raw = (raw + [0] * 45)[:45]
     words, rgb = [0x0000], [(0, 0, 0)]      # index 0 is the backdrop
     for i in range(15):
         w, c = cram(tuple(raw[i * 3:i * 3 + 3]))
