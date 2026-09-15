@@ -34,6 +34,11 @@ sys.path.insert(0, str(REPO / "tools"))
 
 import dax
 
+# Where the player starts. Area 0x11 is the station the story opens on;
+# (8,1) is one of the 49 squares in its map with no wall on any side, and
+# wall set 5 is what the area's own script loads.
+START = ("0x11", "5", "8", "1")
+
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
 
@@ -61,7 +66,13 @@ def specs():
 def main():
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_OUT
     cmd = [sys.executable, str(REPO / "tools/inject_area.py"), str(STOCK), str(out)] + specs()
-    raise SystemExit(subprocess.call(cmd))
+    rc = subprocess.call(cmd)
+    if rc:
+        raise SystemExit(rc)
+    # Both games' area 0x00 is a developer warp menu rather than a boot
+    # block, so replace it with a stub that just enters the game.
+    raise SystemExit(subprocess.call(
+        [sys.executable, str(REPO / "tools/bootstub.py"), str(out), str(out)] + list(START)))
 
 
 if __name__ == "__main__":
