@@ -602,3 +602,85 @@ resolver `0x042E0`, checksum `0x0FFFB0` expecting `0x10D1310C`, code base
 
 **Don't trust screen capture for boot tests.** Use `blastem -l` and count
 distinct addresses in `address.log`; stock is 985.
+
+---
+
+## Matrix Cubed as a whole game, not a transplanted island
+
+The previous build replaced exactly one area, and the report back was the
+right one: *"it seems like i can't escape the area that's loaded."* That
+was not a bug. Area `0x11`'s only exit is `NEWECL 0x12`, and area `0x12`
+did not exist, so the engine had nowhere to go.
+
+The fix was not to replace more areas but to stop replacing at all.
+
+Reading the two loaders showed neither has a fixed area count — the ECL one
+walks to a `0xFF` terminator, the GEO one loops on a count word it reads
+from the stream. The id list could not grow only because the stream-1
+offset table sat immediately behind it — and that table is already dead,
+because `expand.py` relocates both streams above 1 MB and repoints
+`0x38CE2` at the new one. The space was free the whole time.
+
+So the directory is additive. `inject_area.py` now takes any number of
+`<area>:<block>[:<map>]` specs in one pass and appends ids that are not
+already present.
+
+### The area graph closes on itself
+
+Transpiling all 33 Matrix Cubed ECL blocks and collecting every `NEWECL`
+immediate gives targets `0x02 0x12 0x13 0x14 0x20 0x21 0x22 0x23 0x24 0x25
+0x26 0x30 0x31 0x32 0x40 0x41 0x50 0x51 0x52 0x54 0x5F 0x60 0x61 0x62 0x70
+0x71 0x72`. Every one of them is a block that exists, under the convention
+*area id = DOS block number in hex*. A graph that closes perfectly across
+33 independently-decoded scripts is not a coincidence; it confirms both the
+convention and the transpiler's operand handling at once.
+
+More usefully: **all 33 blocks now transpile with zero unmapped
+variables.** The devlog previously recorded 15 of 33 as fully translatable.
+Routing the unconfirmed engine variables to inert storage closed the rest.
+
+### What went in
+
+31 blocks, as areas `0x10`–`0x72`. Two were deliberately left out:
+
+- block 1, the DOS intro area, which would collide with Genesis area `0x01`
+- block 2, which is SSI's combat test room — `"FIGHT HERE?"`,
+  `"GIVE ALL NUMBERS IN DECIMAL."`, prompts for attack location and a
+  `"IGNORE 'EQUIPMENT HIDE' OPTION?"` toggle. A developer scratchpad that
+  shipped in the retail data.
+
+Genesis areas `0x00`, `0x01` and `0x03` stay native so the boot and
+character-creation path is untouched.
+
+**No start-area patch was needed.** Genesis block `0x00` already does
+`NEWECL 0x10` off its menu, and Matrix Cubed block 16 — area `0x10` — is a
+30-byte entry stub that does `SAVE 1, [0x9E08]` then `NEWECL 0x13` into the
+hub. The two games' entry points line up on their own.
+
+### Two map-only areas
+
+`LOADFILES` names a map id, and areas `0x31` and `0x32` load `0x34` and
+`0x33` as sub-levels of their own region. Neither has an ECL block, so
+nothing installed their geometry and the engine would have hit
+`"Could not find geo!"`. `inject_area.py` now accepts `<area>:-:<map>` for
+geometry with no script; DOS maps 51 and 52 fill them.
+
+### Where it stands
+
+```
+ECL areas                39   (27 shipped)
+GEO areas                30   of the engine's 32-entry ceiling
+LOADFILES with no map     0
+NEWECL with no script     0
+checksum                 verifies
+boot test          985 / 985 / 985 distinct addresses
+```
+
+The boot figure sits inside the stock 985–1069 band rather than the
+947-with-zero-variance flatline a hung ROM produces.
+
+Known and expected: walls draw from Countdown's art. `LOADPIECES` divides
+its id by three to index ten wall sets, and Matrix Cubed's ids all fold
+into that range — so the geometry is Matrix Cubed's and the texture on it
+is Countdown's. That is the art pipeline's job and it is the next piece of
+work, along with the 173 recovered portraits.

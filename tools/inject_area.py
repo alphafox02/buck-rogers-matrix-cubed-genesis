@@ -17,10 +17,22 @@ engines have different memory maps -- DOS party flags sit around
 executes with the right structure but reads the wrong addresses. Mapping
 those is the next piece of work and is tracked in docs/compatibility.md.
 
+Areas may be added as well as replaced. Both loaders scan their id list
+dynamically -- the ECL one at 0x040CE walks to a 0xFF terminator, the GEO
+one at 0x5766 walks `count` entries -- so a longer list is simply found.
+The ceiling is the GEO routine's 32-byte stack buffer for ids (`link a6,
+#$ffde`), i.e. 32 map areas. Matrix Cubed has 33 ECL blocks, not all of
+which carry maps.
+
 Usage:
-    inject_area.py <in.gen> <out.gen> <genesis_area> <matrix_block> [matrix_map]
+    inject_area.py <in.gen> <out.gen> <area>:<block>[:<map>] ...
+
+A block of `-` installs a map with no script, for areas that exist only as
+geometry -- `LOADFILES` names a map id, and a few of those have no ECL
+block of their own.
 """
 
+import struct
 import sys
 from pathlib import Path
 
@@ -34,60 +46,93 @@ import integrity
 import transpile
 
 
-def main():
-    if len(sys.argv) < 5:
-        sys.exit(__doc__)
-    src, dst = Path(sys.argv[1]), Path(sys.argv[2])
-    area = int(sys.argv[3], 0)
-    block_id = int(sys.argv[4], 0)
-    map_id = int(sys.argv[5], 0) if len(sys.argv) > 5 else None
+GEO_ID_CAPACITY = 32   # the stack buffer at -0x22(a6) in the GEO loader
 
-    rom = src.read_bytes()
-    blocks = [(bid, genesis_ecl.decompress(c), genesis_ecl.decompress(t))
-              for bid, c, t in genesis_ecl.directory(rom)]
+
+def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
+    """Put one Matrix Cubed area into the decoded directory + geo stream."""
     ids = [b[0] for b in blocks]
-    if area not in ids:
-        sys.exit(f"area 0x{area:02X} not present; have {[hex(i) for i in ids]}")
+    if block_id is None:
+        print(f"area 0x{area:02X} <- Matrix Cubed map {map_id} only (no script)")
+        return install_map(geo, area, map_id, maps)
 
-    mc = dax.load(REPO / "dos_game/matrix/ECL1.DAX")
-    if block_id not in mc:
-        sys.exit(f"no Matrix Cubed ECL block {block_id}; have {sorted(mc)}")
+    added = area not in ids
+    if added:
+        blocks.append((area, b"", b""))
+        ids.append(area)
 
-    print(f"transpiling Matrix Cubed ECL block {block_id}")
-    flags = flagmap.build(rom)
+    print(f"area 0x{area:02X} <- Matrix Cubed ECL block {block_id}"
+          f"{f', map {map_id}' if map_id is not None else ''}"
+          f"{'  (new)' if added else '  (replacing)'}")
+
     code, text, report = transpile.transpile(mc[block_id], flags)
     stubs = sum(1 for _, _, why in report if "counterpart" in why)
     unmapped = sum(1 for _, _, why in report if why.startswith("no Genesis mapping"))
     jumps = sum(1 for _, _, why in report if "not in layout" in why)
-    print(f"  {len(code)} bytes of bytecode, {len(text)} bytes of text")
-    print(f"  {stubs} opcodes stubbed, {unmapped} variables unmapped, "
+    old = blocks[ids.index(area)]
+    print(f"  code {len(old[1])}->{len(code)}, text {len(old[2])}->{len(text)}; "
+          f"{stubs} opcodes stubbed, {unmapped} variables unmapped, "
           f"{jumps} jump targets outside the decoded region")
+    blocks[ids.index(area)] = (area, code, text)
 
-    slot = ids.index(area)
-    old = blocks[slot]
-    print(f"  replacing area 0x{area:02X}: "
-          f"code {len(old[1])}->{len(code)}, text {len(old[2])}->{len(text)}")
-    blocks[slot] = (area, code, text)
+    if map_id is None:
+        return geo
+    return install_map(geo, area, map_id, maps)
 
+
+def install_map(geo, area, map_id, maps):
+    if map_id is None or map_id not in maps:
+        sys.exit(f"no Matrix Cubed map {map_id}")
+
+    count = struct.unpack_from(">H", geo, 0)[0]
+    geo_ids = list(geo[2:2 + count])
+    body = bytearray(geo[2 + count:])
+    if area not in geo_ids:
+        if count + 1 > GEO_ID_CAPACITY:
+            sys.exit(f"geo id list would exceed the engine's {GEO_ID_CAPACITY}-entry buffer")
+        geo_ids.append(area)
+        body += bytearray(1024)
+        count += 1
+    gslot = geo_ids.index(area)
+    body[gslot * 1024:(gslot + 1) * 1024] = maps[map_id][2:]
+    return struct.pack(">H", count) + bytes(geo_ids) + bytes(body)
+
+
+def main():
+    if len(sys.argv) < 4:
+        sys.exit(__doc__)
+    src, dst = Path(sys.argv[1]), Path(sys.argv[2])
+
+    specs = []
+    for arg in sys.argv[3:]:
+        parts = arg.split(":")
+        if not 2 <= len(parts) <= 3:
+            sys.exit(f"bad transplant spec {arg!r}; want <area>:<block>[:<map>]")
+        specs.append((int(parts[0], 0),
+                      None if parts[1] == "-" else int(parts[1], 0),
+                      int(parts[2], 0) if len(parts) > 2 and parts[2] else None))
+
+    rom = src.read_bytes()
+    blocks = [(bid, genesis_ecl.decompress(c), genesis_ecl.decompress(t))
+              for bid, c, t in genesis_ecl.directory(rom)]
     geo = expand.read_geo_stream(rom)
-    if map_id is not None:
-        maps = dax.load(REPO / "dos_game/matrix/GEO1.DAX")
-        if map_id not in maps:
-            sys.exit(f"no Matrix Cubed map {map_id}")
-        import struct
-        count = struct.unpack_from(">H", geo, 0)[0]
-        geo_ids = list(geo[2:2 + count])
-        body = bytearray(geo[2 + count:])
-        gslot = geo_ids.index(area)
-        body[gslot * 1024:(gslot + 1) * 1024] = maps[map_id][2:]
-        geo = geo[:2 + count] + bytes(body)
-        print(f"  map {map_id} -> area 0x{area:02X}")
+    shipped = len(blocks)
+
+    mc = dax.load(REPO / "dos_game/matrix/ECL1.DAX")
+    maps = dax.load(REPO / "dos_game/matrix/GEO1.DAX")
+    flags = flagmap.build(rom)
+
+    for area, block_id, map_id in specs:
+        if block_id is not None and block_id not in mc:
+            sys.exit(f"no Matrix Cubed ECL block {block_id}; have {sorted(mc)}")
+        geo = transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags)
 
     builder = expand.Builder(rom)
     builder.relocate_ecl(blocks)
     builder.relocate_geo(geo)
     out = builder.finish()
     dst.write_bytes(out)
+    print(f"{shipped} areas shipped, {len(blocks)} now present")
     print(f"checksum {'verifies' if integrity.verify(out) else 'FAILS'}; wrote {dst}")
 
 

@@ -1034,3 +1034,56 @@ emulator, and nothing at all on a flash cart.
 
 The relocation technique is the same one already used for the GEO stream:
 write the resource into new space and retarget the loader's pointer.
+
+---
+
+## The resource directory is additive, not fixed-size — CONFIRMED
+
+Both loaders walk their id list dynamically, so a **longer list is simply
+found**. Nothing in the engine is sized for the 27 areas Countdown shipped.
+
+**ECL**, at `0x040CE`: `move.b (a0)+,d1 / bpl.s` walks to the `0xFF`
+terminator, adding 4 to the offset-table index on each miss. No count.
+
+**GEO**, at `0x5766`:
+
+```
+0576A: link.w  a6, #$ffde        ; 34 bytes of locals
+0577E: bsr.w   $9ed8             ; decompress the 2-byte count to -2(a6)
+0578A: bsr.w   $9ed8             ; decompress `count` ids to -0x22(a6)
+0579E: bsr.w   $9ed8             ; then 1024 bytes per area until the id matches
+057AC: cmp.w   -$2(a6), d3       ; loop bound is the count, not a constant
+```
+
+The id list is read into a stack buffer spanning `-0x22(a6)` to `-2(a6)`,
+so **the engine caps at 32 map areas.** That is the only hard ceiling
+found. Matrix Cubed needs 23 of them.
+
+### Where the longer id list goes
+
+The id list at `0x38CE6` is immediately followed by the stream-1 offset
+table at `0x38D02` — but that table is dead once `tools/expand.py`
+relocates both streams above 1 MB and repoints `0x38CE2`. The freed 108
+bytes are enough for far more ids than the engine's geo buffer allows.
+Nothing else in the ROM references that region.
+
+## `LOADFILES` names a map, `LOADPIECES` names a wall set — CONFIRMED
+
+In stock Countdown the set of `LOADFILES` immediates is *exactly* the set
+of geo area ids, which identifies the argument.
+
+`LOADPIECES` divides its argument by three to index a table of word
+offsets at `0x51836`:
+
+```
+158C4: divu.w  #$3, d0
+158CC: asl.w   #$1, d0
+158CE: lea.l   $51836.l, a0
+158D4: adda.w  (a0, d0.w), a0
+```
+
+which is why the debug prompt reads `Enter wallset as decimal (1,4,7..)`.
+Countdown's ids 1..28 step by three across ten sets. Matrix Cubed's ids
+(3, 5, 9, 11, 15, 17, ...) all fold into that range, so transplanted areas
+draw **correct geometry with Countdown's wall art** rather than failing.
+Porting `WALLDEF1.DAX` into this table is an art task, not an engine one.

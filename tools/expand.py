@@ -26,6 +26,10 @@ import genesis_geo
 import integrity
 import lzw_encode
 
+# The id list may extend past its original terminator into the space the
+# stream-1 offset table used to occupy. Bounded conservatively.
+ID_LIST_ROOM = 0x80
+
 EXPANDED = 0x200000
 NEW_BASE = 0x100000
 HEADER_ROM_END = 0x1A4
@@ -67,7 +71,16 @@ class Builder:
             addr = self.place(bytes(blob))
             struct.pack_into(">I", self.rom, pointer, addr)
             print(f"  ECL stream {index}: {len(blob)} bytes -> 0x{addr:06X}")
-        # The id list is fixed-size and stays where it is.
+        # The id list stays at its hardcoded address but may GROW. The loader
+        # at 0x040CE scans it until 0xFF, so extra ids are found simply by
+        # being there -- and the space after the terminator holds the
+        # ORIGINAL stream-1 offset table, which is dead once 0x38CE2 points
+        # at the relocated one. That gives room for far more than the 27
+        # areas Countdown shipped with, which matters because Matrix Cubed
+        # has 33.
+        limit = genesis_ecl.ID_LIST + ID_LIST_ROOM
+        if genesis_ecl.ID_LIST + len(ids) + 1 > limit:
+            raise SystemExit(f"id list needs {len(ids) + 1} bytes, room is {ID_LIST_ROOM}")
         for k, area in enumerate(ids):
             self.rom[genesis_ecl.ID_LIST + k] = area
         self.rom[genesis_ecl.ID_LIST + len(ids)] = 0xFF
