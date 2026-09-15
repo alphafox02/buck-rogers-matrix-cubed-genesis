@@ -41,6 +41,22 @@ import genesis_ecl
 REPO = Path(__file__).resolve().parent.parent
 
 WINDOWS = set(range(0x9AFC, 0x9B50)) | set(range(0x9BF6, 0x9C10))
+
+# RAM the engine wipes on every area change, found by disassembling its clear
+# loops. A story flag placed here would reset whenever the player walked
+# between areas, so quest state would never persist -- and the failure would
+# look like bad script logic rather than bad allocation.
+#
+#   0385A  lea.l $97F6.w,a0 / moveq #7,d0 / move.l d1,(a0)+ / dbra
+#   03868  lea.l $9E6F.w,a0 / moveq #9,d0 / move.b d1,(a0)+ / dbra
+#
+# Countdown uses addresses in the first range itself, which is precisely why
+# reusing its script variables wholesale was unsafe: some of them are
+# deliberately volatile per-area scratch, not campaign flags.
+#
+# The much larger clear at 0x0115A covers 0x96F6-0x9EF5 but runs once at
+# start-up, so it is harmless -- flags should begin at zero anyway.
+VOLATILE = set(range(0x97F6, 0x9816)) | set(range(0x9E6F, 0x9E79))
 REGION = range(0x9000, 0xA000)
 
 # Engine-shared Genesis addresses established so far; never reassign these.
@@ -71,7 +87,8 @@ def countdown_flags(rom: bytes):
             for a in ins.args:
                 if a.kind == "mem" and a.value in REGION:
                     seen[a.value] += 1
-    return sorted(a for a in seen if a not in CONFIRMED and a not in WINDOWS)
+    return sorted(a for a in seen
+                  if a not in CONFIRMED and a not in WINDOWS and a not in VOLATILE)
 
 
 def region_gaps(rom: bytes, engine_used):
@@ -83,7 +100,7 @@ def region_gaps(rom: bytes, engine_used):
             for a in ins.args:
                 if a.kind == "mem":
                     script.add(a.value)
-    taken = script | set(engine_used) | WINDOWS | CONFIRMED
+    taken = script | set(engine_used) | WINDOWS | CONFIRMED | VOLATILE
     return [a for a in REGION if a not in taken]
 
 
