@@ -814,3 +814,52 @@ Art. All 3,430 images are converted and the whole set is 679 KB against
 848 KB free, so it fits. The loaders need the same additive treatment the
 ECL and GEO directories got: wall sets first, since they are on screen
 constantly, then the title sequence, then portraits.
+
+## Playing the story
+
+A session reached the Salvation prologue and played it: Dr. Romney pushing
+the papers over, the Sun King's coronation, the Martian assassins, and then
+the Terran leader dragging Romney toward a groundcar with a three-way
+choice — help Romney, call security, or aid the Terrans.
+
+Choosing to aid them started a fight, which looked like a misrouted menu and
+was not. The branch is a race check over the whole party:
+
+```
+0AD5: FOR           0x0, 0x7
+0ADA: LOADCHARACTER [0x98EC]
+0ADE: COMPARE       [0x9B23], 0x1
+0AE4: IFNE
+0AE5: GOTO          [0x75EC]     ; "'I WANT NO HELP FROM ANY SUBHUMAN
+0AE9: ENDFOR                     ;   WRETCH.'" and into combat
+```
+
+DOS reads `[0x7C27]` at the same point, and the character record maps
+`0x7C00 -> 0x9AFC`, so offset `0x27` lands on exactly `0x9B23`. The party
+was not all Terran, so the offer was refused. Authentic 1992 behaviour, and
+a good proof that the relocated character record reads correctly inside a
+loop over party members.
+
+Also confirmed working in play: the skill checks now name real skills
+("team failed at perception" — DOS `Notice`, id 83, mapped to the Genesis
+`perception`), three-way `WHMENU` choices route to the right branches, and
+combat starts and resolves.
+
+### What made the difference
+
+Four fixes, in the order they mattered:
+
+1. **Entry point.** "Load default team" boots area `0x10`, not `0x00`. Every
+   boot change before that was dead code.
+2. **`ON_GOTO` selectors.** 295 menus were reading their choice from
+   `CODE_BASE` instead of the variable the menu had just written.
+3. **Skill ids.** DOS's 84-skill tabletop list mapped onto the Genesis 19.
+4. **Soft-fail on missing art.** The decompressor treated a missing resource
+   as fatal. Four separate resource spaces each contained ids Countdown does
+   not carry, and guarding them one at a time chased the same crash through
+   several rebuilds. Pointing one branch at the routine's own clean exit
+   ended it.
+
+The third and fourth were only found because play reports kept contradicting
+what the code appeared to say. Reading the error's callers first, rather
+than last, would have saved most of an evening.
