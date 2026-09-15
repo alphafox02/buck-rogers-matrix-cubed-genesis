@@ -58,7 +58,40 @@ END = bytes((0xFC, 0x80))
 # consumed only when it is positive. A value with bit 7 set is left in place
 # and then parsed as a status byte, which desynchronises the whole track.
 MAX_LEAD_IN = 0x7F
-DEFAULT_PATCH = 0
+# A program change indexes the FM voice pointer table at 68k 0x1BAF4, which
+# holds 44 entries -- and of those, SSI's fourteen tracks only ever name six:
+# 1, 4, 6, 9, 10 and 11. General MIDI program numbers run to 127, and eight
+# of the thirteen Matrix Cubed asks for (48, 58, 75, 84, 93, 112, 117, 122)
+# are past the end of the table, so each one loaded a garbage pointer as a
+# patch and turned that channel to noise until the next program change --
+# music that comes and goes with static between.
+#
+# Fold the GM families onto the six voices that are known to sound.
+VOICES = (1, 4, 6, 9, 10, 11)
+GM_FAMILY = {
+    0: 6,    # piano            -> the workhorse voice, 692 uses in stock
+    1: 10,   # chromatic perc
+    2: 9,    # organ
+    3: 11,   # guitar
+    4: 4,    # bass             -> the voice stock uses for its bass line
+    5: 9,    # strings
+    6: 9,    # ensemble
+    7: 1,    # brass
+    8: 1,    # reed
+    9: 10,   # pipe
+    10: 6,   # synth lead
+    11: 9,   # synth pad
+    12: 11,  # synth effects
+    13: 10,  # ethnic
+    14: 11,  # percussive
+    15: 11,  # sound effects
+}
+DEFAULT_PATCH = 6
+
+
+def _voice(program):
+    """Map a General MIDI program onto a voice the driver actually has."""
+    return GM_FAMILY.get(program // 8, DEFAULT_PATCH)
 
 # Limits read off SSI's own tracks rather than guessed. Decoding the title
 # theme at 0x0360D8 gives channels 1, 2, 3 and 9, notes 31 to 76, and never
@@ -118,10 +151,11 @@ def convert(events, scale=1.0):
         kind = st & 0xF0
         chan = _remap(st & 0x0F)
         if kind == 0xC0:
-            if patch.get(chan) == data[0]:
+            voice = _voice(data[0])
+            if patch.get(chan) == voice:
                 continue                   # the fold makes these repeat
-            patch[chan] = data[0]
-            pending.append((int(t * scale), 0xC0 | chan, data[0]))
+            patch[chan] = voice
+            pending.append((int(t * scale), 0xC0 | chan, voice))
             continue
         if kind not in (0x80, 0x90):
             continue                       # the driver would hang on it
