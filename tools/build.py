@@ -169,9 +169,14 @@ def main():
         [sys.executable, str(REPO / "tools/trim_intro.py"), str(out), str(out)])
     if rc:
         raise SystemExit(rc)
-    raise SystemExit(subprocess.call(
+    rc = subprocess.call(
         [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out),
-         "--bigpic"] + [f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS]))
+         "--bigpic"] + [f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
+    if rc or "--no-music" in sys.argv:
+        raise SystemExit(rc)
+    raise SystemExit(subprocess.call(
+        [sys.executable, str(REPO / "tools/inject_music.py"), str(out), str(out)]
+        + [f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())]))
 
 
 if __name__ == "__main__":

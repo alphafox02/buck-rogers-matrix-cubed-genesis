@@ -55,6 +55,12 @@ CLR_ATTRACT = bytes.fromhex("4238ba5a")      # clr.b $ba5a.w
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
 
+    # NOT CUT. Branching out of the intro here was tried and freezes the
+    # machine just as the second screen appears: the exit path at 0x015FC
+    # frees the buffer at -4(a6), and the setup this skips is what leaves it
+    # in a state that can be freed. The duplicate picture is dealt with by
+    # giving the second screen different art instead.
+
     if bytes(rom[OVERLAYS_AT:OVERLAYS_AT + 4]) != EXPECT_OVERLAY:
         raise SystemExit(f"0x{OVERLAYS_AT:05X} is not the overlay sequence")
     disp = INTRO_EXIT - (OVERLAYS_AT + 2)

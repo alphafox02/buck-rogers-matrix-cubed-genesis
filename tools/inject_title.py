@@ -88,10 +88,23 @@ def compose_menu():
 
 
 def compose_matrix():
-    """MATRIX CUBED over Jupiter, letterboxed into the scene slot."""
+    """The copyright card, centred.
+
+    This slot used to carry MATRIX CUBED over Jupiter, which the menu card
+    right after it also shows -- so the sequence ran the same picture twice,
+    the large one first, and the large one is the worse of the two: a
+    photographic gradient at 320x200 scores mean error 24 against sixteen
+    colours where the smaller one has less to lose.
+
+    Cutting the screen instead was tried and freezes the machine, because the
+    intro's exit frees a buffer that the skipped setup is what prepares. So
+    the screen stays and gets the one piece of Matrix Cubed's title art not
+    used anywhere else: the copyright lines, which are a handful of colours
+    on black and survive the palette intact.
+    """
     out = Image.new("RGB", (320, 200), (0, 0, 0))
-    src = Image.open(REPO / "extracted" / "images" / "TITLE" / "004.png").convert("RGB")
-    out.paste(src, (0, (200 - src.height) // 2))
+    src = Image.open(REPO / "extracted" / "images" / "TITLE" / "003.png").convert("RGB")
+    out.paste(src, ((320 - src.width) // 2, (200 - src.height) // 2))
     return out
 
 

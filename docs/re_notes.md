@@ -1608,3 +1608,21 @@ So every music cue in the transplanted scripts is silently dropped, and the
 only music that plays is what Countdown's boot code starts. Fixing it means
 mapping those six ids onto the Genesis music ids -- `0x2C`, `0x2E`-`0x36` --
 in the transpiler, not in the injector.
+
+### A track is preceded by its end pointer
+
+This is what made injected music silent. On the way to the Z80 the 68000
+reads the longword **before** the track:
+
+```
+1B656: movea.l d0, a0
+1B658: move.l  -$4(a0), $d8ee.w
+```
+
+Every stock track has one. `0x0360D8` runs 0x800 bytes and the longword at
+`0x0360D4` is `0x0368D8` — exactly where it ends. Writing a track without
+it leaves the driver with a garbage end address and nothing plays, which
+looked like a conversion failure and was not: the sequences decoded
+correctly the whole time.
+
+`tools/inject_music.py` now writes the end pointer ahead of each track.

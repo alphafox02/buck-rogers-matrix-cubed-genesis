@@ -32,6 +32,17 @@ import xmi2seq
 MUSIC_TABLE = 0x1BAC0
 MUSIC_BASE = 0x190000        # below the artwork at 0x1C0000
 
+# A track is preceded by a longword giving where it ends. The 68000 reads it
+# on the way to the Z80 and nothing works without it:
+#
+#     1B656: movea.l d0, a0
+#     1B658: move.l  -$4(a0), $d8ee.w
+#
+# Every stock track has one -- 0x0360D8 is followed by 0x800 bytes and its
+# preceding longword is 0x0368D8 -- and injecting without it left the driver
+# reading a garbage end address and playing nothing at all.
+END_POINTER = 4
+
 
 def main():
     if len(sys.argv) < 4:
@@ -51,12 +62,15 @@ def main():
         events = xmi.events(data, b, e)
         seq = xmi2seq.convert(events)
         old = struct.unpack_from(">I", rom, MUSIC_TABLE + slot * 4)[0]
-        rom[cursor:cursor + len(seq)] = seq
-        struct.pack_into(">I", rom, MUSIC_TABLE + slot * 4, cursor)
+        at = cursor + END_POINTER
+        struct.pack_into(">I", rom, cursor, at + len(seq))
+        rom[at:at + len(seq)] = seq
+        struct.pack_into(">I", rom, MUSIC_TABLE + slot * 4, at)
         notes = sum(1 for _, st, _ in events if st & 0xF0 == 0x90)
         print(f"  music[{slot}] <- {path} song {song}: {notes} notes, "
-              f"{len(seq)} bytes at 0x{cursor:06X} (was 0x{old:06X})")
-        cursor += len(seq) + 2
+              f"{len(seq)} bytes at 0x{at:06X}, ends 0x{at + len(seq):06X} "
+              f"(was 0x{old:06X})")
+        cursor = at + len(seq) + 4
 
     out = integrity.repair(bytes(rom))
     dst.write_bytes(out)
