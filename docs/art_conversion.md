@@ -471,3 +471,49 @@ grey gradient. Busy textured art such as foliage survives almost untouched.
 Tiles at boundaries are the other weak spot: a tile spanning lit skin and
 dark background needs colours from two ramps and gets neither well. The
 purple artifact in dark backgrounds is this case.
+
+---
+
+## Injecting into the Genesis picture directory
+
+`tools/inject_pic.py` writes Matrix Cubed artwork into the engine's own
+picture table. It works end to end: 28 pictures covering 134 in-game uses,
+compressed with `lzw_encode` (which reproduces an existing icon at exactly
+its original 62 bytes), written above the relocated streams, with the
+directory pointers at `0xF14F2` rewritten in place and the cartridge sum
+repaired.
+
+**The quality is much worse than the bulk conversion, and the reason is
+structural rather than a defect.**
+
+| | palette | mean error |
+|---|---|---|
+| `convert_art.py` to `.gart` | up to four, chosen per image | 10–14 |
+| `inject_pic.py` into the ROM | the area's, fixed | **55** |
+
+The container holds a tile count, a nametable and tile data — and no
+colours. Colour comes from a separate table of 16-word palettes at
+`0xF16AA`, selected by `0x9AFB`, which `LOADPIECES` sets to its id divided
+by three. So injected art is quantised against a palette SSI tuned for
+Countdown's own icons, and Matrix Cubed's blues, greens and purples have
+nowhere to go. Earth renders as a dark blob.
+
+Two other constraints compound it:
+
+* Icons are **3x3 tiles, 24x24 pixels**, where the DOS portraits are 88x88.
+  The Genesis port shows icons where DOS shows portraits; that is SSI's
+  decision, not a conversion loss.
+* Floyd-Steinberg **makes it worse here**, not better. Mean error rose from
+  54.9 to 60.2 and the contact sheet looks visibly dirtier: at 576 pixels
+  the dither noise reads as noise. Diffusion pays off over a 300x200
+  background, not over a three-tile icon.
+
+### What would actually raise it
+
+Controlling the palette. The table at `0xF16AA` is an array of pointers,
+so new palettes can be added the way areas were, and `PALETTE` (opcode
+`0x51`) already exists to select one. The open question is whether the
+picture draws on its own CRAM line or shares one with the walls — if it
+shares, a palette tuned for a portrait would recolour the room around it.
+That is the next thing to establish, and it is worth establishing before
+injecting the remaining art.
