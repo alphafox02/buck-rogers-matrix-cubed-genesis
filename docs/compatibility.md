@@ -240,3 +240,41 @@ distinguishes the choice, where truncating from the right would give
 `CALL SECUR`. Only when no word can be dropped is a label cut by character.
 
 11 menus are shortened. The widest in the ROM is now exactly 35.
+
+## Character creation is not one-for-one
+
+Matrix Cubed offers more than the Genesis engine knows how to build.
+
+| | Genesis Countdown | DOS Matrix Cubed |
+|---|---|---|
+| careers | 4 — rocket jock, medic, warrior, rogue | **6** — adds **Engineer**, **Scout** |
+| races | 3 — human, desert runner, tinker | **8** — adds **Martian, Venusian, Mercurian, Lunarian, Lowlander** |
+| skills | 19 | 84 (see the skill map above) |
+
+The Genesis names live in the engine string table at `0x11DC4`, ids `0x43`–
+`0x46` for careers and `0x47`–`0x49` for races. The DOS names are in a
+length-prefixed table at `0x0F10F` of `START.EXE`, where `Terran` is the
+same thing Countdown calls `human`.
+
+### What adding them would take
+
+Not a data transplant. Four separate pieces:
+
+1. **Strings.** Easy, and the same relocation pattern the ECL and picture
+   directories used.
+2. **The creation menus.** They are hardcoded to four careers and three
+   races. Where is not yet established: searching for a table of the string
+   ids finds only a false positive inside the sound driver's track list at
+   `0x1BA0F`, so the menu builds its options some other way.
+3. **Per-race and per-career data** — stat modifiers, starting skills,
+   allowed careers per race, level tables. The engine has entries for three
+   races and four careers, and none for the five and two Matrix Cubed adds.
+   This is new engine data, not data that exists somewhere waiting to be
+   copied.
+4. **Skill grants.** Each career grants skills, and the Genesis has 19 of
+   the 84 to grant from.
+
+Items 3 and 4 are the real work, and they are the same class of job as the
+full skill system: authoring engine content rather than moving SSI's across.
+Worth doing deliberately, and worth not half-doing — a Venusian that exists
+in the menu but has no stat modifiers is worse than no Venusian.
