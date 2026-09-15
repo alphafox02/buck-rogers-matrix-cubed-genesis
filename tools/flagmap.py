@@ -103,7 +103,10 @@ def matrix_flags(path=None):
             for a in ins.args:
                 if a.is_memory:
                     counts[a.value] += 1
-    excluded = named | DOS_ENGINE_EXTRA
+    # Engine-config addresses the Genesis has no counterpart for are given
+    # inert storage alongside the story flags -- see transpile.INERT.
+    import transpile
+    excluded = (named | DOS_ENGINE_EXTRA) - set(transpile.INERT)
     return [a for a, _ in counts.most_common() if a not in excluded], named
 
 

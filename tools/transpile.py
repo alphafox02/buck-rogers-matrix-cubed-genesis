@@ -151,10 +151,38 @@ VARIABLE_MAP = {
 # mapping at least fails visibly and in one place.
 #
 # Kept separate so a later contradiction is cheap to act on.
+# DOS variables that configure engine behaviour the Genesis arranges
+# differently, and which therefore have no counterpart to map to.
+#
+# The DOS engine's own decompiler annotates 0x4BE7 and 0x4BE8 as configuring
+# LOAD_AREA_DECO -- the opcode the Genesis calls LOADPIECES. The Genesis
+# handler derives the same information from its argument instead:
+#
+#     03ADE  divu.w  #$3,d2        ; wallset index
+#     03AE2  move.b  d2,$9AFB.w
+#
+# Writes to these are given inert storage rather than being dropped. Dropping
+# them would change instruction counts and disturb the layout for no gain,
+# and a write that lands somewhere harmless is easier to reason about than a
+# missing one. Reads return whatever the script last wrote, which is the DOS
+# behaviour anyway for a value the engine never consults.
+INERT = (0x4BE7, 0x4BE8, 0x4BE9, 0x4BFB, 0x4BAB)
+
 PROBABLE_MAP = {
     # The only non-scratch operand of LOAD_CHAR / LOADCHARACTER on each side,
     # 27 uses against 10. Scripts use it to walk the party.
     0x4CF6: 0x98EC,    # FOR_LOOP_COUNT
+
+    # DUNGEON_VALUE distinguishes overland from dungeon. Both sides are
+    # write-only from scripts -- 45 of 46 DOS uses and 31 of 31 Genesis --
+    # and carry the same shape of value: a high bit set, plus 16.
+    # DOS {132,129,128,16} against Genesis {130,80,16,0}.
+    0x4BE6: 0x97DC,    # DUNGEON_VALUE
+
+    # Saved position, restored on returning to an area. They sit either side
+    # of the confirmed X/Y pair in DOS, and 0x9BCB is engine-written,
+    # script-read, and write-only from scripts like its DOS counterparts.
+    0x4BF0: 0x9BCB,    # LAST_DUNGEON_X
 }
 
 # Contiguous banks that map as ranges: (dos_lo, dos_hi, genesis_lo).
