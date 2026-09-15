@@ -28,6 +28,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 import dax
 import expand
+import flagmap
 import genesis_ecl
 import integrity
 import transpile
@@ -53,10 +54,14 @@ def main():
         sys.exit(f"no Matrix Cubed ECL block {block_id}; have {sorted(mc)}")
 
     print(f"transpiling Matrix Cubed ECL block {block_id}")
-    code, text, report = transpile.transpile(mc[block_id])
+    flags = flagmap.build(rom)
+    code, text, report = transpile.transpile(mc[block_id], flags)
     stubs = sum(1 for _, _, why in report if "counterpart" in why)
+    unmapped = sum(1 for _, _, why in report if why.startswith("no Genesis mapping"))
+    jumps = sum(1 for _, _, why in report if "not in layout" in why)
     print(f"  {len(code)} bytes of bytecode, {len(text)} bytes of text")
-    print(f"  {stubs} instructions stubbed, {len(report) - stubs} other issues")
+    print(f"  {stubs} opcodes stubbed, {unmapped} variables unmapped, "
+          f"{jumps} jump targets outside the decoded region")
 
     slot = ids.index(area)
     old = blocks[slot]

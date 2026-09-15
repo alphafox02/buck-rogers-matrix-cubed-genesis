@@ -493,8 +493,19 @@ read them as RAM and moved on. They are ROM.
 
 **Screen-capture testing was unreliable and I trusted it too long.** It gave
 contradictory answers for the same ROM. Replaced with BlastEm's `-l` address
-logging, which is deterministic: identical counts across runs, stable from
-25s to 60s. Every boot claim since rests on that.
+logging.
+
+*Correction:* that was described here as deterministic. It is not. Stock
+measured 985, 986, 1065 and 1069 across four runs — roughly 8% variance,
+presumably from interrupt timing against emulator start-up.
+
+The conclusions survive, but for a different reason than stated. A **hung**
+ROM is invariant: the failing builds returned exactly 947 on every run at
+both 25s and 60s, because a ROM stuck in a loop does the same thing every
+time. 947 also sits below the entire observed stock range. So the signal is
+the *absence* of variance plus a count below the floor — not a precise
+instrument. Treat it as a liveness check, and do not read small differences
+as meaningful.
 
 Repaired rather than defeated — one spare longword absorbs the difference,
 so the cartridge still verifies itself and still passes.
