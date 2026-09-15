@@ -225,3 +225,48 @@ already index it directly.
 
 This is the only content type so far where the two engines are structurally
 incompatible, and it is the cheapest one to redo.
+
+---
+
+## Art conversion: VGA to Genesis
+
+The gap the conversion has to close:
+
+| | DOS | Genesis |
+|---|---|---|
+| simultaneous colours | 256 | 16 per palette, 4 palettes |
+| colour space | 262,144 (6 bits/channel) | 512 (3 bits/channel) |
+| storage | 1 byte per pixel | 4 bits per pixel, 8x8 tiles |
+
+`tools/genesis_art.py` does it in three steps, and the order matters:
+
+1. **Cluster in a perceptual space.** Plain RGB distance overweights green
+   and turns skies muddy. Median cut weighted by pixel frequency, so entries
+   go where the picture spends its area rather than on a few specular
+   highlights.
+2. **Snap to hardware colours after clustering, not before.** Quantising
+   first collapses distinct shades together and the clusterer can no longer
+   tell them apart.
+3. **Assign pixels**, then pack to 4bpp tiles and deduplicate.
+
+### Use all four palettes
+
+A tilemap entry carries two bits of palette index, so a background can draw
+from **four** 15-colour palettes — 60 colours, not 15. Converting against a
+single palette wastes three quarters of the hardware.
+
+The difference is not subtle. On `BIGPIC1` 113 (the RAM warship), a single
+palette spends every entry on orange hull and the character's **blue eyes
+come out cream**. With four palettes — tiles clustered by colour content,
+each picking the palette that represents it best — the eyes are blue, the
+exhaust flames keep their yellow core, and the starfield stays clean.
+
+`convert_multi()` seeds the clustering by mean tile luma, which separates
+sky from subject far better than an arbitrary start, then iterates
+assignment and palette construction to a fixed point.
+
+### Dithering is off by default
+
+Floyd-Steinberg buys smoother gradients at the cost of a speckle that reads
+as noise at Genesis resolution, and it is clearly worse on the test image —
+the starfield turns grainy. SSI's own Genesis art does not dither.
