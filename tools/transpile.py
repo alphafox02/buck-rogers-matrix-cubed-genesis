@@ -389,6 +389,21 @@ def transpile(block: bytes, flags=None):
                                        f"{labels} -> {fitted}"))
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
+            if mon_at == k and arg.type == 0x00 and arg.value == 0xFF \
+                    and ins.name == "SPRITE_START":
+                # 255 is DOS's "no sprite" sentinel, used 58 times. The
+                # Genesis engine loads this operand as a WORD at 0x035A0 and
+                # skips on a negative, so a byte 0xFF arrives as 0x00FF --
+                # positive -- and the directory search at 0x035A6 has no
+                # terminator check. It runs past the table and draws whatever
+                # it lands on, which a play session photographed as coloured
+                # junk on the floor where a figure belonged.
+                #
+                # Emitting it as a 16-bit 0xFFFF makes the word negative, so
+                # the engine takes the branch it was always meant to.
+                report.append((off, "sprite", "SPRITE_START 255 -> 0xFFFF (no sprite)"))
+                args.append(("imm", 0xFFFF))
+                continue
             if mon_at == k and arg.type == 0x00 and arg.value < 0x80:
                 # The two games number monsters independently: Matrix Cubed's
                 # 5 and 6 are PURGE COMMANDO and PURGE WARRIOR, Countdown's
