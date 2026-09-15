@@ -32,19 +32,45 @@ import genesis_ecl
 FIGURE_DIR = 0x09A14     # 8-byte records, ids 0x00-0x40
 POINTER_DIR = 0x0998C    # 4-byte pointers
 
+# The real ECL picture directories, found by following the PICTURE opcode
+# through 0x03662 -> 0x04DFA -> 0x08516 -> 0x0B766 / 0x0B7B4. Each is an
+# id list terminated by a negative byte, paired with an array of 32-bit
+# pointers.
+PICTURE_IDS, PICTURE_PTRS = 0x51326, 0x51360     # ids 0x20-0x6F, 57 entries
+BIGPIC_IDS, BIGPIC_PTRS = 0x51302, 0x5130A       # ids 0x70-0x78, VIEW
+
+PORTRAIT_CELLS = 121     # 11x11 tiles, 88x88 pixels, usually six frames
+BIGPIC_WIDTH = 36        # 36x15 tiles, 288x120 pixels
+
 
 def decode(blob):
-    """Return (tiles, nametable, flags) or None if this is not a picture."""
+    """Return (tiles, nametable, flags, palette) or None.
+
+    Flags bit 3 means a 16-word CRAM palette sits between the nametable and
+    the tile data -- the ECL pictures and big pictures carry their own
+    colours, where the small icons do not. That is what makes injecting
+    artwork here worthwhile: the palette comes with the image instead of
+    being whatever the area happens to have loaded.
+    """
     if len(blob) < 6:
         return None
     n, map_bytes, flags = struct.unpack_from(">HHH", blob, 0)
-    if n == 0 or map_bytes == 0 or map_bytes % 2 or map_bytes > 4096 or n > 2000:
+    if n == 0 or map_bytes == 0 or map_bytes % 2 or map_bytes > 8192 or n > 4000:
         return None
-    if len(blob) != 6 + map_bytes + 32 * n:
+    pal_bytes = 32 if flags & 8 else 0
+    if len(blob) != 6 + map_bytes + pal_bytes + 32 * n:
         return None
     entries = map_bytes // 2
     nm = [struct.unpack_from(">H", blob, 6 + 2 * i)[0] for i in range(entries)]
-    return blob[6 + map_bytes:], nm, flags
+    at = 6 + map_bytes
+    palette = None
+    if pal_bytes:
+        palette = []
+        for i in range(16):
+            w = struct.unpack_from(">H", blob, at + i * 2)[0]
+            r, g, b = (w >> 0) & 0xE, (w >> 4) & 0xE, (w >> 8) & 0xE
+            palette.append(((r >> 1) * 36, (g >> 1) * 36, (b >> 1) * 36))
+    return blob[at + pal_bytes:], nm, flags, palette
 
 
 def at(rom, ptr, limit=0x8000):
@@ -68,11 +94,13 @@ def scan(rom):
     return out
 
 
-def render(tiles, nm, width):
+def render(tiles, nm, width, palette=None):
     from PIL import Image
     height = (len(nm) + width - 1) // width
     img = Image.new("P", (width * 8, height * 8))
-    img.putpalette([(i * 17) % 256 for i in range(16) for _ in range(3)] + [0] * (768 - 48))
+    flat = ([c for rgb in palette for c in rgb] if palette
+            else [(i * 17) % 256 for i in range(16) for _ in range(3)])
+    img.putpalette(flat + [0] * (768 - len(flat)))
     px = img.load()
     for i, e in enumerate(nm):
         ti = e & 0x7FF
@@ -96,9 +124,15 @@ def main():
              112: 8, 64: 8, 27: 3, 18: 3}
     found = scan(rom)
     print(f"{len(found)} picture resources")
-    for ptr, (tiles, nm, flags) in found:
-        w = WIDTH.get(len(nm)) or max(1, int(len(nm) ** 0.5))
-        render(tiles, nm, w).save(out / f"{ptr:06X}.png")
+    for ptr, got in found:
+        tiles, nm, flags, palette = got
+        if palette and len(nm) % PORTRAIT_CELLS == 0:
+            w = 11                       # a portrait, one frame under the next
+        elif palette:
+            w = BIGPIC_WIDTH
+        else:
+            w = WIDTH.get(len(nm)) or max(1, int(len(nm) ** 0.5))
+        render(tiles, nm, w, palette).save(out / f"{ptr:06X}.png")
     print(f"wrote {len(found)} PNGs to {out}")
 
 

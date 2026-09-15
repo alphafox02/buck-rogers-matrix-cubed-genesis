@@ -1311,3 +1311,52 @@ It also exposed a likely mistake in `tools/inject_pic.py`: it quantises
 against the palette at `0xF16AA`, which `LOADPIECES` selects with its id
 divided by three. That is the **wall** palette, and walls are on line 2
 while icons are on line 0.
+
+## The real ECL picture path — CONFIRMED
+
+Followed from the opcode rather than guessed: `PICTURE` (`0x03662`) stores
+its id at `0xB525`, `0x04DFA` sets up an 88x88 region, `0x08516` dispatches,
+and two loaders resolve the id:
+
+```
+0B766: lea $51302, a0      ; id list, negative-terminated
+0B76C: lea $5130a, a1      ; 32-bit pointers
+0B778: cmp.b d3, d0        ; match the id
+0B780: movea.l (a1), a0    ; -> the picture
+```
+
+and `0x0B7B4` the same shape against `0x51326` / `0x51360`. The string
+`"LoadBigPic failed"` at `0x0B7A2` sits inside the first.
+
+| directory | ids | contents |
+|---|---|---|
+| `0x51302` / `0x5130A` | `0x70`–`0x78` | `VIEW` big pictures, 288x120 |
+| `0x51326` / `0x51360` | `0x20`–`0x6F`, 57 entries | `PICTURE` portraits, 88x88 |
+
+**`0xF14F2` is not this.** It is the item and UI icon table, and writing
+artwork into it replaces inventory icons — see the correction above.
+
+### The container carries its own palette
+
+```
+ 0  2  unique tile count
+ 2  2  nametable size in bytes
+ 4  2  flags -- bit 3 means a palette follows the nametable
+ 6  .. nametable, tile index in bits 0-10, palette line in bits 13-14
+ .. 32 sixteen CRAM words, when flags bit 3 is set
+ .. .. tile data, 32 bytes each
+```
+
+Self-validating as before: length is exactly
+`6 + nametable + (32 if flags & 8) + 32 * tiles`.
+
+Portraits are **six frames of 11x11 tiles** — 726 cells is 6 x 121 — and
+render as an animation: a RAM warrior raising and firing a rifle. Big
+pictures are 36x15 tiles at 288x120.
+
+**This is the right target for Matrix Cubed's art, and the dimensions
+already match.** The DOS portraits recovered by `gbimage_vd.py` are 88x88
+with multiple frames, and `BIGPIC1` is 304x120 against the Genesis 288x120.
+Because the palette travels with the image, injected art is not stuck with
+whatever the area has loaded — the measured gap between an image's own
+sixteen colours and a borrowed palette was 21 against 63.
