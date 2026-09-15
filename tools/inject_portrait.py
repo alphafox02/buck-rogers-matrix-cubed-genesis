@@ -206,6 +206,8 @@ def sources(path):
     """Every frame of a picture, in order."""
     d, name = path.split("/")
     base = REPO / "extracted" / ("images" if d == "BIGPIC1" else "images_vd")
+    if not (base / d).exists():
+        base = REPO / "extracted" / "images"
     exact = base / d / f"{name}.png"
     if exact.exists():
         return [Image.open(exact).convert("RGB")]

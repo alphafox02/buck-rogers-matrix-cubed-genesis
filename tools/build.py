@@ -48,9 +48,17 @@ MAP_ONLY = ["0x01:-:1", "0x33:-:51", "0x34:-:52"]
 # PICTURE ids Matrix Cubed's scripts name that have recovered artwork. They
 # go into the real ECL picture directory at 0x51326/0x51360, at the full
 # 88x88 the DOS originals use, with the palette embedded in each image.
-PORTRAIT_IDS = [
-    32, 60, 80, 81, 82, 84, 85, 86, 91, 93, 94, 95, 97
-]
+# Portraits, as picture id -> source. Most come from PIC1, whose 46 blocks
+# all decoded; three live in other archives the same decoder recovered, and
+# every one of them is 88x88, the size this container wants.
+PORTRAITS = {
+    0x20: "PIC1/032",   0x25: "SPRIT1/037", 0x3C: "PIC1/060",
+    0x40: "SPRIT1/064", 0x50: "PIC1/080",   0x51: "PIC1/081",
+    0x52: "PIC1/082",   0x54: "PIC1/084",   0x55: "PIC1/085",
+    0x56: "PIC1/086",   0x5B: "PIC1/091",   0x5C: "PIC8/092",
+    0x5D: "PIC1/093",   0x5E: "PIC1/094",   0x5F: "PIC1/095",
+    0x61: "PIC1/097",
+}
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
@@ -134,7 +142,7 @@ def main():
     if portraits:
         rc = subprocess.call(
             [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out)]
-            + [f"0x{p:02X}:PIC1/{p:03d}" for p in PORTRAIT_IDS])
+            + [f"0x{k:02X}:{v}" for k, v in sorted(PORTRAITS.items())])
         if rc:
             raise SystemExit(rc)
     if not bigpics:
