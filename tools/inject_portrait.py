@@ -48,7 +48,7 @@ except ImportError:
 
 # The directory address is read from the loader's own operands, so this
 # works both before and after tools/expand_pictures.py relocates the tables.
-IDS_OPERAND, PTRS_OPERAND = 0x0B7C2, 0x0B7C8
+IDS_OPERAND, PTRS_OPERAND, META_OPERAND = 0x0B7C2, 0x0B7C8, 0x0B7CE
 BIG_IDS_OPERAND, BIG_PTRS_OPERAND = 0x0B768, 0x0B76E
 
 # Big pictures are a single 36x15-tile frame, 288x120. The DOS originals are
@@ -71,19 +71,20 @@ FLAG_PALETTE = 0x0008
 def directory(rom, big=False):
     ids_at = struct.unpack_from(">I", rom, BIG_IDS_OPERAND if big else IDS_OPERAND)[0]
     ptrs_at = struct.unpack_from(">I", rom, BIG_PTRS_OPERAND if big else PTRS_OPERAND)[0]
+    meta_at = None if big else struct.unpack_from(">I", rom, META_OPERAND)[0]
     ids, a = [], ids_at
     while rom[a] < 0x80:
         ids.append(rom[a])
         a += 1
-    return ids, ptrs_at
+    return ids, ptrs_at, meta_at
 
 
-def frames_of(rom, ptrs_at, slot):
-    """How many 88x88 frames the picture in this slot has."""
+def shape_of(rom, ptrs_at, slot):
+    """(frame count, decompressed size) of the picture currently in this slot."""
     ptr = struct.unpack_from(">I", rom, ptrs_at + slot * 4)[0]
     blob = genesis_ecl.decompress(rom[ptr:ptr + 0x20000], limit=0x20000)
     _, map_bytes, _ = struct.unpack_from(">HHH", blob, 0)
-    return (map_bytes // 2) // CELLS
+    return (map_bytes // 2) // CELLS, len(blob)
 
 
 def cram(rgb):
@@ -92,19 +93,36 @@ def cram(rgb):
     return (b << 9) | (g << 5) | (r << 1), (r * 36, g * 36, b * 36)
 
 
-def build_palette(images):
-    """One sixteen-colour palette for every frame of a picture."""
+def build_palette(images, colours=15):
+    """One palette for every frame of a picture, at most `colours` used."""
     merged = Image.new("RGB", (images[0].width * len(images), images[0].height))
     for i, im in enumerate(images):
         merged.paste(im, (i * im.width, 0))
-    quant = merged.quantize(colors=15, method=Image.MEDIANCUT)
-    raw = quant.getpalette()[:45]
+    quant = merged.quantize(colors=colours, method=Image.MEDIANCUT)
+    raw = quant.getpalette()[:colours * 3] + [0] * (45 - colours * 3)
     words, rgb = [0x0000], [(0, 0, 0)]      # index 0 is the backdrop
     for i in range(15):
         w, c = cram(tuple(raw[i * 3:i * 3 + 3]))
         words.append(w)
         rgb.append(c)
     return words, rgb
+
+
+def _similar(key, order, tolerance):
+    """Index of an existing tile differing in at most `tolerance` pixels."""
+    best, bd = None, tolerance + 1
+    for i, other in enumerate(order):
+        d = 0
+        for a, b in zip(key, other):
+            if a != b:
+                d += (1 if (a >> 4) != (b >> 4) else 0) + (1 if (a & 15) != (b & 15) else 0)
+                if d >= bd:
+                    break
+        if d < bd:
+            best, bd = i, d
+            if d == 0:
+                break
+    return best
 
 
 def nearest(px, rgb):
@@ -116,12 +134,44 @@ def nearest(px, rgb):
     return best
 
 
-def encode(images, frames, w=SIDE, h=SIDE):
-    """Build (blob, tile count) for one picture."""
+def encode(images, frames, w=SIDE, h=SIDE, budget=None):
+    """Build (blob, tile count, colours) for one picture, or None if it cannot fit.
+
+    `budget` is the DECOMPRESSED size of the picture being replaced. The
+    compressed stream carries no length of its own, so the engine expands it
+    into whatever memory happens to be free; a blob bigger than the original
+    overruns that, and BlastEm halts with a write above 0xDFFFFE.
+
+    Fewer colours make more tiles come out identical and share, which shrinks
+    the blob without cropping or scaling the picture. If even three colours
+    will not fit, nothing is injected and the original stays -- a picture
+    that is merely Countdown's beats one that crashes the game.
+    """
     while len(images) < frames:
         images.append(images[len(images) % len(images)] if images else images[0])
     images = images[:frames]
-    words, rgb = build_palette(images)
+    blob, ntiles = _encode_at(images, w, h, 15)
+    if budget is None or len(blob) <= budget:
+        return blob, ntiles, 15
+
+    # Over budget. Merging near-identical tiles costs far less than dropping
+    # colours: a picture reduced to three colours is unrecognisable, where
+    # sharing a tile whose neighbour differs in two pixels is invisible at
+    # this size. Tolerance rises until it fits.
+    for tol in range(1, 33):
+        blob, ntiles = _encode_at(images, w, h, 15, tol)
+        if len(blob) <= budget:
+            return blob, ntiles, 15
+    # Only if merging cannot do it does the palette narrow.
+    for colours in (13, 11, 9, 7):
+        blob, ntiles = _encode_at(images, w, h, colours, 16)
+        if len(blob) <= budget:
+            return blob, ntiles, colours
+    return None
+
+
+def _encode_at(images, w, h, colours, tolerance=0):
+    words, rgb = build_palette(images, colours)
 
     tiles, order, nm = {}, [], []
     for im in images:
@@ -137,13 +187,17 @@ def encode(images, frames, w=SIDE, h=SIDE):
                         raw.append((hi << 4) | lo)
                 key = bytes(raw)
                 if key not in tiles:
-                    tiles[key] = len(order)
-                    order.append(key)
+                    hit = _similar(key, order, tolerance) if tolerance else None
+                    if hit is None:
+                        tiles[key] = len(order)
+                        order.append(key)
+                    else:
+                        tiles[key] = hit
                 nm.append(tiles[key])
 
     blob = struct.pack(">HHH", len(order), len(nm) * 2, FLAG_PALETTE)
     blob += b"".join(struct.pack(">H", e) for e in nm)
-    blob += b"".join(struct.pack(">H", w) for w in words)
+    blob += b"".join(struct.pack(">H", x) for x in words)
     blob += b"".join(order)
     return blob, len(order)
 
@@ -166,7 +220,21 @@ def main():
         sys.exit(__doc__)
     src, dst, specs = Path(argv[0]), Path(argv[1]), argv[2:]
     rom = bytearray(src.read_bytes())
-    ids, ptrs_at = directory(bytes(rom), big)
+    ids, ptrs_at, meta_at = directory(bytes(rom), big)
+    # Each picture has an animation script alongside it, and it is written
+    # against the picture that was there: a count byte, then entries the
+    # loader indexes with at 0x0B800. A replacement with a different tile
+    # layout makes those entries address frames that no longer exist, which
+    # is what froze the team screen. Replaced pictures are pointed at a
+    # zero-count script -- the portrait still shows, it simply does not
+    # animate -- rather than inventing a format that has not been reversed.
+    still = None
+    if meta_at is not None:
+        for k in range(len(ids)):
+            m = struct.unpack_from(">I", rom, meta_at + k * 4)[0]
+            if rom[m] == 0:
+                still = m
+                break
     # Slots expand_pictures.py added all share one placeholder pointer; those
     # take their frame count from the artwork instead of from what was there.
     seen = {}
@@ -187,24 +255,35 @@ def main():
             print(f"  picture 0x{pid:02X}: no image for {path}, skipped")
             continue
         slot = ids.index(pid)
+        was_frames, budget = shape_of(bytes(rom), ptrs_at, slot)
+        if slot in placeholder:
+            # A slot expand_pictures.py added: the placeholder it points at
+            # is a real picture, and its size is the budget to stay under.
+            was_frames = 1 if big else len(imgs)
         if big:
             crop = []
             for im in imgs[:1]:
                 x0 = max(0, (im.width - BIG_W * 8) // 2)
                 crop.append(im.crop((x0, 0, x0 + BIG_W * 8, BIG_H * 8)))
-            blob, ntiles = encode(crop, 1, BIG_W, BIG_H)
             frames = 1
+            got = encode(crop, 1, BIG_W, BIG_H, budget)
         else:
-            frames = len(imgs) if slot in placeholder else frames_of(bytes(rom), ptrs_at, slot)
-            blob, ntiles = encode(imgs, frames)
+            frames = was_frames
+            got = encode(imgs, frames, budget=budget)
+        if got is None:
+            print(f"  picture 0x{pid:02X}: {path} will not fit in {budget} bytes, left alone")
+            continue
+        blob, ntiles, colours = got
         packed = lzw_encode.compress(blob)
         if genesis_ecl.decompress(packed, limit=0x40000) != blob:
             sys.exit(f"compressed {path} does not round-trip")
-        old = struct.unpack_from(">I", rom, ptrs_at + slot * 4)[0]
         rom[cursor:cursor + len(packed)] = packed
         struct.pack_into(">I", rom, ptrs_at + slot * 4, cursor)
-        print(f"  picture 0x{pid:02X}: {path} x{frames} frames, {ntiles} tiles, "
-              f"{len(packed)} packed at 0x{cursor:06X} (was 0x{old:06X})")
+        if still is not None:
+            struct.pack_into(">I", rom, meta_at + slot * 4, still)
+        print(f"  picture 0x{pid:02X}: {path} x{frames}, {ntiles} tiles, {colours} colours, "
+              f"{len(blob)}/{budget} bytes -> {len(packed)} packed at 0x{cursor:06X}"
+              + ("" if still is None else ", animation cleared"))
         cursor += len(packed) + 2
 
     out = integrity.repair(bytes(rom))

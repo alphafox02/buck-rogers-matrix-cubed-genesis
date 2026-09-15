@@ -50,8 +50,11 @@ def picture(pid):
 def view(mode, vid):
     """Return (id_to_emit, was_replaced) for VIEW's resource operand.
 
-    `mode` is accepted and ignored: it selects how the picture is drawn, not
-    where it comes from.
+    `mode` is accepted and ignored: it picks a case in the jump table at
+    0x083D8, which decides how the picture is drawn, not where it comes
+    from. Restricting it to modes stock Countdown uses was tried and was
+    wrong -- Countdown exercises all five, and an earlier scan missed mode 3
+    only because it appears there with a variable operand.
     """
     if vid >= 0x80 or vid in AVAILABLE:
         return vid, False

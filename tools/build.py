@@ -95,7 +95,12 @@ def specs():
 
 
 def main():
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_OUT
+    # --no-art stops before the picture work, to tell a transplant problem
+    # apart from an art one.
+    art = "--no-art" not in sys.argv
+    bigpics = "--no-bigpic" not in sys.argv
+    argv = [a for a in sys.argv[1:] if not a.startswith("--")]
+    out = Path(argv[0]) if argv else DEFAULT_OUT
     cmd = [sys.executable, str(REPO / "tools/inject_area.py"), str(STOCK), str(out)] + specs()
     rc = subprocess.call(cmd)
     if rc:
@@ -111,7 +116,7 @@ def main():
     if rc:
         raise SystemExit(rc)
     rc = subprocess.call([sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)])
-    if rc:
+    if rc or not art:
         raise SystemExit(rc)
     # Matrix Cubed's own portraits, in the directory the PICTURE opcode uses.
     # The directory is relocated first so ids Countdown never had can be added.
@@ -125,6 +130,8 @@ def main():
         + [f"0x{p:02X}:PIC1/{p:03d}" for p in PORTRAIT_IDS])
     if rc:
         raise SystemExit(rc)
+    if not bigpics:
+        raise SystemExit(0)
     # The VIEW big-picture directory gets the same treatment.
     rc = subprocess.call(
         [sys.executable, str(REPO / "tools/expand_pictures.py"), str(out), str(out),
