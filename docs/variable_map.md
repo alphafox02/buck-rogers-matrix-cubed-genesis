@@ -71,9 +71,49 @@ Correlate on behaviour the engine dictates, not on frequency alone:
 Frequency rank alone is not sufficient: it agrees for the top two addresses
 and diverges immediately after.
 
+## Confirmed by targeted semantic tests
+
+These rest on constraints the game's design forces, not on statistics.
+
+| role | DOS | Genesis | evidence |
+|---|---|---|---|
+| `TEMP_START` scratch | `0x7F79` | `0x9E6F` | dominant destination of `AND`/`OR` in both (1,467 vs 994 uses); the next two slots are consecutive in both engines |
+| `LAST_ECL` current area | `0x4BF2` | `0x97E8` | the address a block compares against **its own id** — 63 DOS blocks, 25 of 27 Genesis |
+| `DUNGEON_DIR` | `0xC04D` | `0x9AFA` | compared against 0-3 and nothing else, evenly spread: DOS 89/86/72/69, Genesis 61/62/56/57. Only a direction produces that shape. |
+| `DUNGEON_X`/`Y` | `0xC04B`/`C` | `0x9AF6`/`0x9AF7` | values top out at 15 on a 16x16 grid in both; the pair is set together with the direction at area entry (`SAVE 0x6,[0x9AF6]` / `SAVE 0x0,[0x9AF7]` / `SAVE 0x1,[0x9AFA]`). **Which of the pair is X is not yet established.** |
+
+## Statistical candidates
+
+`tools/correlate_vars.py` builds a behavioural signature per variable —
+which opcodes touch it and in which operand position, the distribution of
+immediates it meets, and the largest value it ever holds — then matches
+signatures across engines and assigns greedily so no address is used twice.
+
+It independently reproduces `TEMP_START` and `LAST_ECL` as top matches,
+which is a useful check on the method. Its strongest unverified suggestions:
+
+| score | DOS | name | Genesis |
+|---|---|---|---|
+| 1.000 | `0x7EC9` | `MOVEMENT_BLOCK` | `0x9DBF` |
+| 0.978 | `0x7EC7` | `COMBAT_RESULT` | `0x9DBD` |
+| 0.947 | `0x4C00` | `SAVED_TEMP_START` | `0x9852` |
+| 0.867 | `0x4BC4` | `OVERLAND_Y` | `0x9801` |
+| 0.862 | `0x7EC6` | `COMBAT_MORALE_BASE` | `0x9DBC` |
+| 0.812 | `0x7D19` | `SEL_PC_HP_CURR` | `0x97FE` |
+| 0.761 | `0xC04E` | `MAP_WALL_TYPE` | `0x97AD` |
+
+**Treat these as leads.** The correlator disagrees with the targeted test on
+`DUNGEON_DIR`, and wanted the same Genesis address for both `DUNGEON_X` and
+`DUNGEON_Y` before unique assignment forced them apart. A high score means
+two variables are used similarly, which is necessary but not sufficient.
+
+Each candidate still needs confirming the way the four above were: find a
+constraint only the correct variable can satisfy, or locate engine code that
+reads the Genesis address and read off its role.
+
 ## Status
 
-Two of fifty confirmed. Script-only reallocation is not yet implemented in
-`tools/transpile.py`, which currently passes all addresses through unchanged
-— which is why transplanted scripts execute with correct structure and
-incorrect addressing.
+Four of fifty confirmed, seven more with strong candidates. Script-only
+reallocation is not yet implemented in `tools/transpile.py`, which passes all
+addresses through unchanged — which is why transplanted scripts execute with
+correct structure and incorrect addressing.
