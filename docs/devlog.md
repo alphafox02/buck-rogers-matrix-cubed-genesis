@@ -472,3 +472,122 @@ The initial inconclusive test used this same ROM. The failure was not the
 data but the vantage point — the player was standing in the empty quarter.
 A test that depends on where someone happens to be standing is not a test,
 which is what the synthetic checkerboard fixed by filling all 256 squares.
+
+---
+
+## 2026-09-14 (later): checksum, expansion, transplants, art, variables
+
+Everything below happened after the map proof of concept.
+
+### The anti-tamper checksum, and the mistake that hid it
+
+A 32-bit longword sum of the whole cartridge lives in the **last 80 bytes**
+at `0x0FFFB0`, compared against `0x10D1310C`. On mismatch it blanks the VDP
+and `bra.b $FFFFE` — hangs forever. Rebuilt ROMs were hitting it.
+
+Two things about finding it are worth keeping:
+
+**The answer sat in my own trace for hours.** Addresses `0xFFFB0`-`0xFFFC4`
+appear right at the divergence point in the very first comparison run. I
+read them as RAM and moved on. They are ROM.
+
+**Screen-capture testing was unreliable and I trusted it too long.** It gave
+contradictory answers for the same ROM. Replaced with BlastEm's `-l` address
+logging, which is deterministic: identical counts across runs, stable from
+25s to 60s. Every boot claim since rests on that.
+
+Repaired rather than defeated — one spare longword absorbs the difference,
+so the cartridge still verifies itself and still passes.
+
+### Expansion
+
+The sum covers `0x3FFEC` longwords, which is the first megabyte only, and
+BlastEm maps ROM through `0x1FFFFF`. So the cartridge grows to 2 MB with
+~1 MB of unchecked free space. Matrix Cubed's content needs 1.61x
+Countdown's; expansion yields sixteen times the shortfall.
+
+`tools/expand.py` relocates whole resource streams and retargets the three
+loader pointers (`0x38CE2` ECL code, `0x42B0A` ECL text, `0x0576E` maps).
+
+### Transplants, and a test-design failure
+
+`countdown_mcmap.gen` put Matrix Cubed map 18 into area `0x10`. First
+play-test looked different, then Aaron second-guessed it — rightly, since
+neither of us had the stock layout memorised. Recorded as inconclusive and
+an earlier over-claimed commit was amended.
+
+The fix was a map that cannot be misread: a synthetic checkerboard, every
+other square walled. Stock area `0x10` is open tarmac, so *"i'm out on the
+tarmac and i'm running into walls"* was unambiguous.
+
+Then the real map, with the wall distribution computed in advance —
+northwest dense, southeast empty. *"seems to be exactly as you described."*
+That is the stronger result: it shows the decoder is right, not merely that
+writes reach the screen.
+
+### Art
+
+3,430 images converted (agent-assisted), then 173 more recovered after the
+agent noticed `PIC1`/`SPRIT1`/`PIC7`/`PIC8` were being silently rejected —
+about a third of the game's art, including every portrait. They use the
+`VGADependentImages` format: different header, an EGA mapping table, XOR
+frame deltas, and an RLE whose repeat branch also stores count-1.
+
+Three real defects found and fixed in the converter, two of them mine:
+
+- **Perceptual weights applied before squaring**, which squares the weights:
+  blue was penalised by 0.012 instead of 0.11, so grey matched to purple.
+- **Stale palettes** — k-means off-by-one, palettes built for the previous
+  assignment.
+- **Hue-destroying colour snap** (agent-found): per-channel snapping is the
+  exact nearest neighbour under any per-channel metric, which is precisely
+  why it can move two channels to the same level and turn brown into olive.
+
+Measured the quality tiers: the **32X uses VGA's colour model** one bit
+shallower, so it shows the original art essentially as drawn (error 1.85).
+The Genesis version is good because the art only uses ~67 colours and per-8x8
+locality is ~9.5 colours against a budget of 15.
+
+### Variables
+
+**94.7% of 10,019 variable references now translate.**
+
+- 360 script-only flags reallocated. Required, not tidy: 255 sit below
+  `0x8000` in DOS and Genesis ECL addresses sign-extend, so untranslated
+  they resolve into ROM and writes vanish.
+- 12 of 50 engine variables confirmed, each by a constraint only the right
+  answer satisfies.
+
+The productive method: an engine-shared variable is one the **engine writes
+and scripts read**. Intersecting those two sets gives 20 candidates instead
+of 259, and it reproduces every mapping found independently beforehand.
+
+---
+
+## RESUME HERE
+
+State: 47 commits. No unknown formats remain in either game.
+
+**Working and verified:** extraction, disassembly (DOS 98.4%, Genesis 94.4%),
+compression both ways, ROM expansion to 2 MB, checksum repair, map
+transplant confirmed on screen, art conversion.
+
+**Next, in order:**
+
+1. **The last 33 engine variables** (536 references, 5.3%). Led by
+   `SAVED_TEMP_START` 0x4C00, `MONEY_NEO_ACCT` 0x4CE6, `DUNGEON_VALUE`
+   0x4BE6. Method above; `tools/correlate_vars.py` generates leads but is
+   not authoritative — confirm each against a forced constraint.
+2. **The four orphan opcodes**: `CALL` (161 sites, needs per-site work),
+   `PICTURE2`, `COPY_MEM`, `SELECT_ACTION`.
+3. **Convert the 173 recovered portraits** through `convert_art.py`.
+4. **Transplant a full area and play it** — that is the next milestone worth
+   having, and it needs 1 and 2 first.
+
+**Key facts worth not re-deriving:** ECL VM at `0x03344`, dispatch table
+`0x0336E`, opcode names `0x0446E`, argument fetcher `0x0404A`, address
+resolver `0x042E0`, checksum `0x0FFFB0` expecting `0x10D1310C`, code base
+`0x6AF6`, GEO stream `0x8FA8D`, wall sets `0x51836`.
+
+**Don't trust screen capture for boot tests.** Use `blastem -l` and count
+distinct addresses in `address.log`; stock is 985.
