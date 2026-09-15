@@ -311,3 +311,54 @@ side has no variable with that signature. The two variables used with large
 constants there both belong to the scratch bank. Either Countdown's scripts
 handle money without large literals, or it lives somewhere the
 engine-writes/scripts-read intersection does not reach.
+
+---
+
+## The combat/party bank: one constant offset
+
+The breakthrough. `COMBAT_MORALE_BASE` was found by value signature — DOS
+writes `{80, 90, 100}` and Genesis `0x9DBC` writes `{80, 90, 100}` — and it
+landed next to two mappings already confirmed:
+
+```
+DOS 0x7EC6 -> 0x9DBC   morale
+DOS 0x7EC7 -> 0x9DBD   combat result
+DOS 0x7EC9 -> 0x9DBF   movement block
+```
+
+A constant offset of `0x1EF6`. Testing it against everything else already
+known:
+
+| DOS | Genesis | how it was originally established |
+|---|---|---|
+| `INDEX_OF_SEL_PC` `0x7EB1` | `0x9DA7` | read off the address resolver at `0x042E0` |
+| `COMBAT_RESULT` `0x7EC7` | `0x9DBD` | tested against 128 on both sides |
+| `MOVEMENT_BLOCK` `0x7EC9` | `0x9DBF` | 255 in 63/63 and 57/57 uses |
+| `TEMP_START` `0x7F79` | `0x9E6F` | dominant `AND`/`OR` destination |
+
+**All four land on the offset.** Two came from engine disassembly and two
+from script usage, so the agreement is not an artefact of one method. The
+region `0x7E00`-`0x7FFF` is a single bank the port relocated wholesale.
+
+It does **not** extend lower: `0x7C00 + 0x1EF6` would be `0x9AF6`, which is
+`DUNGEON_X`, whereas the resolver places `SEL_PC_START` at `0x9AFC`. The
+character records were moved separately.
+
+## Coverage
+
+**97.81%** of 10,019 variable references, and — the number that actually
+matters — **15 of 33 blocks are now fully translatable**, meaning every
+reference in them resolves. Those blocks are not small: 846, 871, 946 and
+1,036 instructions among them.
+
+A block needs *every* reference mapped to behave correctly, so overall
+percentage flatters the position. Blocks-at-100% is the honest metric.
+
+Remaining blockers, by how many blocks each holds back:
+
+| DOS | name | blocks |
+|---|---|---|
+| `0x4D7C` | `ENEMY_WAS_ENTERED` | 6 |
+| `0x4CE6` | `MONEY_NEO_ACCT` | 4 |
+| `0x4C1A` | `REPAIR_COST` | 3 |
+| `0x4BC9`/`0x4BC3`/`0x4BC4` | `TIME_HOUR`, `OVERLAND_X/Y` | 2 each |

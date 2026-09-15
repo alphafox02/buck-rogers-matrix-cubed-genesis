@@ -183,6 +183,9 @@ PROBABLE_MAP = {
     # of the confirmed X/Y pair in DOS, and 0x9BCB is engine-written,
     # script-read, and write-only from scripts like its DOS counterparts.
     0x4BF0: 0x9BCB,    # LAST_DUNGEON_X
+    0x4BF1: 0x9BCC,    # LAST_DUNGEON_Y -- consecutive with X in DOS, and
+                       # Countdown never reads it, which is consistent with
+                       # the slot being unused there rather than absent.
 }
 
 # Contiguous banks that map as ranges: (dos_lo, dos_hi, genesis_lo).
@@ -195,8 +198,24 @@ PROBABLE_MAP = {
 # The two per-character windows are ranges by definition: the address
 # resolver at 0x042E0 redirects each as a block.
 WINDOW_MAP = (
-    (0x7F79, 0x7F80, 0x9E6F),      # scratch bank
-    (0x7C00, 0x7C4D, 0x9AFC),      # selected-character record
+    # The whole 0x7E00-0x7FFF region is one bank relocated by a constant
+    # 0x1EF6. This is not inferred from a similarity score: four mappings
+    # established independently and by different means all land on it.
+    #
+    #   INDEX_OF_SEL_PC     0x7EB1 -> 0x9DA7   read off the address resolver
+    #   COMBAT_RESULT       0x7EC7 -> 0x9DBD   tested against 128 on both sides
+    #   MOVEMENT_BLOCK      0x7EC9 -> 0x9DBF   255 in 63/63 and 57/57 uses
+    #   TEMP_START          0x7F79 -> 0x9E6F   dominant AND/OR destination
+    #
+    # Two of those came from engine disassembly and two from script usage, so
+    # the agreement is not an artefact of one method. COMBAT_MORALE_BASE
+    # then falls out for free at 0x9DBC, writing {80, 90, 100} on both sides.
+    #
+    # The offset does NOT extend below 0x7E00: 0x7C00 + 0x1EF6 would be
+    # 0x9AF6, which is DUNGEON_X, while the resolver places SEL_PC_START at
+    # 0x9AFC. The character records were relocated separately.
+    (0x7E00, 0x8000, 0x9CF6),      # combat, party and scratch bank
+    (0x7C00, 0x7C4D, 0x9AFC),      # selected-character record (relocated separately)
     (0x7D00, 0x7D1A, 0x9BF6),      # selected-character status
 )
 
