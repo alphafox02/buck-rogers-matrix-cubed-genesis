@@ -96,9 +96,41 @@ def genesis_opcodes():
 
 STUB_OPCODE = 0xFF          # outside the valid 0x00-0x5D range
 
-# The widest label set stock Countdown ever gives WHMENU. Past this the
-# labels run off the line and wrap over themselves.
+# The widest label sets stock Countdown ever gives each menu opcode. Past
+# these the labels run off the line and wrap back over themselves.
 WHMENU_BUDGET = 27
+HMENU_BUDGET = 35
+
+# Leading words that carry no meaning once the choice is on screen. Dropping
+# one keeps the informative half: "CALL SECURITY" reads fine as "SECURITY",
+# where truncating from the right would give "CALL SECUR".
+FILLER = ("CALL", "HELP", "AID", "GO", "GO TO", "USE", "TRY", "TAKE", "ASK",
+          "LOOK", "TALK", "TALK TO", "MAKE", "GIVE", "SHOW", "OPEN", "READ")
+
+
+def _width(labels):
+    return sum(len(x) for x in labels) + len(labels) - 1
+
+
+def fit_labels(labels, budget):
+    """Shorten a label set until it fits, longest first.
+
+    Drops a leading filler word where there is one, since that keeps the
+    part that distinguishes the choice, and truncates only as a last resort.
+    """
+    out = list(labels)
+    while _width(out) > budget:
+        k = max(range(len(out)), key=lambda i: len(out[i]))
+        words = out[k].split()
+        if len(words) > 1 and words[0] in FILLER:
+            out[k] = " ".join(words[1:])
+        elif len(words) > 1:
+            out[k] = " ".join(words[:-1])
+        elif len(out[k]) > 3:
+            out[k] = out[k][:-1]
+        else:
+            break
+    return out
 
 
 class Unsupported(Exception):
@@ -337,14 +369,24 @@ def transpile(block: bytes, flags=None):
         # line, which a play session photographed as "TERRANSMNEY CALL
         # SECURITY AID". Both opcodes end at the same menu routine, so the
         # wide ones become HMENU and lose only the printed prompt.
-        if ins.name == "SELECT_ACTION":
+        shortened = None
+        if ins.name in ("SELECT_ACTION", "MENU_HORIZONTAL"):
             labels = [str(a.value) for a in ins.dyn_args if a.type == 0x80]
-            if labels and sum(len(x) for x in labels) + len(labels) - 1 > WHMENU_BUDGET:
-                name = "HMENU"
-                opcode, _ = gen[name]
-                report.append((off, "menu",
-                               f"{sum(len(x) for x in labels) + len(labels) - 1} chars "
-                               f"> {WHMENU_BUDGET}, WHMENU -> HMENU"))
+            if labels:
+                budget = WHMENU_BUDGET
+                if ins.name == "SELECT_ACTION" and _width(labels) > WHMENU_BUDGET:
+                    # Losing the printed prompt buys eight columns.
+                    name, budget = "HMENU", HMENU_BUDGET
+                    opcode, _ = gen[name]
+                elif ins.name == "MENU_HORIZONTAL":
+                    budget = HMENU_BUDGET
+                if _width(labels) > budget:
+                    fitted = fit_labels(labels, budget)
+                    if fitted != labels:
+                        shortened = dict(zip(labels, fitted))
+                        report.append((off, "menu",
+                                       f"{_width(labels)} > {budget}: "
+                                       f"{labels} -> {fitted}"))
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
             if mon_at == k and arg.type == 0x00 and arg.value < 0x80:
@@ -379,7 +421,10 @@ def transpile(block: bytes, flags=None):
                 args.append(("imm", gid))
                 continue
             if arg.type == 0x80:
-                args.append(("str", pool.intern(str(arg.value))))
+                text = str(arg.value)
+                if shortened:
+                    text = shortened.get(text, text)
+                args.append(("str", pool.intern(text)))
             elif arg.type == 0x81:
                 # Still an address, so it goes through the variable map --
                 # but it must keep its type. ecl.Argument.is_memory reports

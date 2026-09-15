@@ -230,4 +230,13 @@ expected: HELP ROMNEY  CALL SECURITY  AID TERRANS
 
 21 of Matrix Cubed's 97 `WHMENU` calls exceed the 27-character budget and
 are emitted as `HMENU` instead, which has the full line. The cost is the
-printed prompt; the labels fit and read correctly.
+printed prompt.
+
+That alone was not enough: the groundcar menu is 37 characters and `HMENU`
+only holds 35, so it still wrapped. Labels that do not fit are now
+shortened, longest first, by dropping a leading filler word where there is
+one — `CALL SECURITY` becomes `SECURITY`, which keeps the half that
+distinguishes the choice, where truncating from the right would give
+`CALL SECUR`. Only when no word can be dropped is a label cut by character.
+
+11 menus are shortened. The widest in the ROM is now exactly 35.
