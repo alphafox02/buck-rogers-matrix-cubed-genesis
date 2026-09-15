@@ -53,8 +53,8 @@ that, so its numbers for those are meaningless — trust the static column.
 | `0x1F` | `SPACECOMBAT` | 4 | 0 | 3/7 | LOW -- methods disagree (static 4) |
 | `0x20` | `NEWECL` | 1 | 1 | 10/11 | HIGH -- both methods agree, votes unanimous |
 | `0x21` | `LOADFILES` | 3 | 3 | 21/23 | HIGH -- both methods agree, votes unanimous |
-| `0x22` | `SKILL` | 0 | 3 | 8/12 | LOW -- methods disagree (static 0) |
-| `0x23` | `PRINTSKILL` | 0 | 2 | 4/7 | LOW -- methods disagree (static 0) |
+| `0x22` | `SKILL` | 3 | 3 | 8/12 | **CONFIRMED** -- handler 0x038A2 jumps to the shared body at 0x04E52, which makes 3 calls to the argument fetcher |
+| `0x23` | `PRINTSKILL` | 3 | 3 | 4/7 | **CONFIRMED** -- handler 0x038A8 sets d4=1 and jumps to the same body at 0x04E52; identical arity to SKILL |
 | `0x24` | `COMBAT` | 0 | 0 | 8/11 | HIGH -- both methods agree |
 | `0x25` | `ONGOTO` | 3 | 6 | 5/11 | dynamic arg list -- inference not valid |
 | `0x26` | `ONGOSUB` | 0 | 0 | 6/6 | dynamic arg list -- inference not valid |
