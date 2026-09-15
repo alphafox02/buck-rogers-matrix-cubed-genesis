@@ -28,8 +28,23 @@ game:
 and points all four event hooks at a bare EXIT, so nothing the player does
 can re-enter it.
 
+The engine picks its entry area at 0x04146, and there is more than one:
+
+    04146: tst.b   $ba5a.w
+    0414A: beq.b   $4154
+    0414C:   move.b #$3, $b9f0.w     ; -> area 0x03
+    04154: tst.b   $ca21.w
+    04158: bne.b   $4160
+    0415A:   clr.b  $b9f0.w          ; -> area 0x00
+    04160:   move.b #$10, $b9f0.w    ; -> area 0x10   "default team"
+    04168: move.b  $97e8.w, $b9f0.w  ; -> the saved area, on a restore
+    04174: bsr.w   $40d0
+
+Choosing "load default team" boots area 0x10, so a stub in 0x00 alone is
+never reached. The stub goes into every new-game entry.
+
 Usage:
-    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y>
+    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [--marker]
 """
 
 import struct
@@ -45,6 +60,9 @@ import integrity
 
 DUNGEON_X, DUNGEON_Y, DUNGEON_DIR = 0x9AF6, 0x9AF7, 0x9AFA
 
+# Areas the engine will boot into for a new game, from the dispatch above.
+ENTRIES = (0x00, 0x10)
+
 
 def _imm(v):
     if v <= 0xFF:
@@ -56,7 +74,10 @@ def _mem(v):
     return bytes([0x01]) + struct.pack("<H", v & 0xFFFF)
 
 
-def build(area, wallset, x, y):
+MARKER = b"*** MATRIX CUBED BOOT STUB ***"
+
+
+def build(area, wallset, x, y, marker=False):
     table = G.load_opcodes()
     op = {n: o for o, (n, _) in table.items()}
 
@@ -73,6 +94,11 @@ def build(area, wallset, x, y):
     out += bytes([op["EXIT"]])
     assert len(out) == init_at
 
+    if marker:
+        # A one-look answer to "is this ROM actually booting through area
+        # 0x00?". Printed before anything else the stub does.
+        out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
+        out += bytes([op["CONTINUE"]])
     out += bytes([op["NEWECL"]]) + _imm(area)
     out += bytes([op["LOADFILES"]]) + _imm(area) + _imm(0x7F) + _imm(0xFF)
     out += bytes([op["LOADPIECES"]]) + _imm(wallset)
@@ -98,21 +124,28 @@ def main():
     if area not in ids:
         sys.exit(f"area 0x{area:02X} not present")
 
-    code = build(area, wallset, x, y)
-    slot = ids.index(0x00)
-    print(f"area 0x00 boot stub: {len(blocks[slot][1])} -> {len(code)} bytes, "
-          f"entering area 0x{area:02X} at ({x},{y}) with wall set {wallset}")
+    marker = "--marker" in sys.argv
+    code = build(area, wallset, x, y, marker)
+    print(f"boot stub: {len(code)} bytes, entering area 0x{area:02X} "
+          f"at ({x},{y}) with wall set {wallset}")
 
     # Verify the stub reads back as the instructions it was meant to be.
     table = G.load_opcodes()
     found = G.disassemble(code, table)
+
     claimed = sum(i.size for i in found.values())
     if claimed != len(code):
         sys.exit(f"stub does not disassemble cleanly: {claimed} of {len(code)} bytes")
     for off in sorted(found):
         print(f"    {off:04X}: {found[off].render()}")
 
-    blocks[slot] = (0x00, code, b"\0")
+    text = b"\0" + MARKER + b"\0" if marker else b"\0"
+    for entry in ENTRIES:
+        if entry not in ids or entry == area:
+            continue
+        slot = ids.index(entry)
+        print(f"  area 0x{entry:02X}: {len(blocks[slot][1])} -> {len(code)} bytes")
+        blocks[slot] = (entry, code, text)
     builder = expand.Builder(rom)
     builder.relocate_ecl(blocks)
     builder.relocate_geo(expand.read_geo_stream(rom))

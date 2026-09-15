@@ -1087,3 +1087,35 @@ Countdown's ids 1..28 step by three across ten sets. Matrix Cubed's ids
 (3, 5, 9, 11, 15, 17, ...) all fold into that range, so transplanted areas
 draw **correct geometry with Countdown's wall art** rather than failing.
 Porting `WALLDEF1.DAX` into this table is an art task, not an engine one.
+
+## The engine has four entry areas, not one — CONFIRMED
+
+At `0x04146`, before the ECL loader is called:
+
+```
+04146: tst.b   $ba5a.w
+0414A: beq.b   $4154
+0414C:   move.b #$3, $b9f0.w      ; -> area 0x03
+04152:   bra.b  $416e
+04154: tst.b   $ca21.w
+04158: bne.b   $4160
+0415A:   clr.b  $b9f0.w           ; -> area 0x00
+0415E:   bra.b  $416e
+04160:   move.b #$10, $b9f0.w     ; -> area 0x10   "load default team"
+04166:   bra.b  $416e
+04168: move.b  $97e8.w, $b9f0.w   ; -> the saved area, on a restore
+0416E: moveq   #$0, d0
+04170: move.b  $b9f0.w, d0
+04174: bsr.w   $40d0
+```
+
+Which one runs depends on `0xBA5A` and `0xCA21`, set by the start-up menu.
+**Choosing "load default team" enters at area `0x10`,** so a boot change
+made only in area `0x00` is never executed — which is exactly what a play
+session showed: a marker string printed by a stub in `0x00` never appeared,
+while the game went straight to the space hub, because Matrix Cubed's area
+`0x10` is a 30-byte entry stub whose whole body is `NEWECL 0x13`.
+
+Correction to an earlier note: the ECL loader begins at `0x040D0`. `0x040CE`
+is the `rts` of the routine above it. Searching for callers of `0x040CE`
+found none and made the loader look unreachable.
