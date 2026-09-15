@@ -350,36 +350,62 @@ reimplementation. Path A proves, Path B expands.
 
 ---
 
-## Attempted proof of concept: Matrix Cubed geometry in the Genesis engine
+## PROOF OF CONCEPT: transplanted geometry renders in the Genesis engine
 
-`roms/countdown_mcmap.gen` is stock Countdown to Doomsday with exactly one
-change: area `0x10`'s 1024 bytes of map data replaced by Matrix Cubed map 18.
-Same title, same intro, same script — only that area's architecture differs.
-A clean single-variable test.
+Confirmed on screen, on the second attempt.
 
-**Result: inconclusive.** On play-testing, the area looked different at first
-glance, but on reflection Aaron could not be sure it differed from the
-original. Countdown's own areas are varied enough that "looks unfamiliar" is
-not evidence, and neither of us had the stock layout memorised.
+### The first attempt failed as a test
 
-That is a test design failure, not a result. Comparing two arbitrary dungeon
-maps from memory was never going to give a clean answer.
+`roms/countdown_mcmap.gen` put Matrix Cubed map 18 into area `0x10`. Played,
+it looked unfamiliar — but neither of us had the stock layout memorised, and
+Countdown's own areas are varied enough that "looks different" proves
+nothing. Recorded as inconclusive. Comparing two plausible dungeons from
+memory was never going to give a clean answer; that was a test-design
+failure, not a result.
 
-**The fix** is a map that cannot be mistaken: a synthetic layout so obviously
-artificial that any observer can call it instantly, rather than a second
-plausible-looking dungeon.
+### The second attempt was built to be unmistakable
 
-### What the ROM does establish
+`roms/countdown_checker.gen` replaces the same area's map with a **synthetic
+checkerboard** — every other square fully walled, in a strict alternating
+grid. No level designer draws that, so there is nothing to confuse it with.
 
-Independently of the visual question, the patched ROM boots and runs — 985
-distinct executed addresses, matching stock exactly, and it reaches the title
-screen on real display. That already exercises the DAX container and RLE, the
-map format, the reimplemented LZW decompressor, our compressor, relocation
-into expanded ROM space, the retargeted loader pointer, and the checksum
-repair. A mistake in any of those gives a hang, not a running game.
+Stock area `0x10` is the spaceport tarmac: **open ground** with two small
+one-square structures.
 
-What is *not* established is that the transplanted geometry reaches the
-screen.
+Aaron's report: *"i'm out on the tarmac and i'm running into walls getting
+explosions"*.
+
+The script is untouched, so the game still places him on the tarmac and still
+runs the scripted air attack (`SOUND 0x2C`, `EXPLOSION 0x5`, `DELAY`, then
+*"FIGHTERS SCREAM IN LOW FROM THE NORTH"*). Only the geometry changed — and
+open ground now has walls in it.
+
+The only difference between that ROM and stock is 1024 bytes of map data.
+
+### What this validates, simultaneously
+
+- the DAX container and its RLE
+- the Gold Box four-plane map format on both engines
+- the Genesis LZW **decompressor**, reimplemented from 68000 disassembly
+- our LZW **compressor**, producing a stream the shipped engine accepts
+- resource relocation into expanded ROM space above 1 MB
+- retargeting a loader pointer (`lea.l $8FA8D,a0`)
+- the anti-tamper checksum repair at `0x0FFFB0`
+
+Every one had to be right at once. Any single mistake gives a hang or
+unchanged geometry, not a different map.
+
+A supporting signal noticed before play: the checkerboard ROM executes 1024
+distinct addresses against stock's 985. Different geometry drives the
+renderer down more paths.
+
+### What it does not yet show
+
+Scripts and art. Maps were the easy content type — they convert by dropping
+a 2-byte header. Scripts need the variable mapping (50 engine-shared
+addresses, see `docs/variable_map.md`); art needs downconversion from
+256-colour VGA.
+
 ### Still to do
 
 Maps were the easy content type — they need no conversion beyond dropping a
