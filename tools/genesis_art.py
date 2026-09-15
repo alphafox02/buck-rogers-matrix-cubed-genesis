@@ -30,9 +30,50 @@ from collections import Counter
 LEVELS = [0, 36, 73, 109, 146, 182, 219, 255]
 
 
+def _snap_candidates():
+    return [(r, g, b) for r in LEVELS for g in LEVELS for b in LEVELS]
+
+
+_CANDIDATES = _snap_candidates()
+_SNAP_CACHE = {}
+
+
 def snap(rgb):
-    """Nearest colour the VDP can display."""
-    return tuple(min(LEVELS, key=lambda l: abs(l - c)) for c in rgb)
+    """
+    Nearest colour the VDP can display, preserving hue.
+
+    Snapping each channel independently is the exact nearest neighbour under
+    any per-channel metric -- the grid is a product space, so the distance
+    decomposes. That is also its weakness: it can move two channels to the
+    same level and destroy the relation between them.
+
+        (80, 56, 48)  brown, R-G = 24
+        -> (73, 73, 36)  olive, R-G = 0
+
+    G=56 lies almost exactly between levels 36 and 73 (20 against 17). Taking
+    73 is correct per-channel and wrong perceptually, because what made the
+    colour brown was R being clearly above G. Choosing 36 costs three units
+    of green and keeps the hue.
+
+    So the search runs over all 512 displayable colours with a term for the
+    differences between channels, which does not decompose and therefore
+    cannot be done one channel at a time.
+    """
+    hit = _SNAP_CACHE.get(rgb)
+    if hit is not None:
+        return hit
+    r, g, b = rgb
+    dr, dg, db = r - g, g - b, r - b
+    best, best_err = None, None
+    for cand in _CANDIDATES:
+        cr, cg, cb = cand
+        flat = (0.30 * (cr - r) ** 2 + 0.59 * (cg - g) ** 2 + 0.11 * (cb - b) ** 2)
+        hue = ((cr - cg) - dr) ** 2 + ((cg - cb) - dg) ** 2 + ((cr - cb) - db) ** 2
+        err = flat + 0.5 * hue
+        if best_err is None or err < best_err:
+            best, best_err = cand, err
+    _SNAP_CACHE[rgb] = best
+    return best
 
 
 def to_cram(rgb) -> int:
