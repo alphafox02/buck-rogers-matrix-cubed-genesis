@@ -51,6 +51,13 @@ try:
 except ImportError:
     sys.exit("Pillow is required:  pip install Pillow")
 
+# Icons draw on CRAM line 0, and line 0 holds a FIXED palette in ROM at
+# 0x0970C -- not one of the twelve at 0xF16AA, which LOADPIECES selects for
+# the walls on line 2. Confirmed from a play session: a test card of solid
+# palette indices rendered yellow, teal and magenta together, and 0x0970C is
+# the only palette in the ROM carrying all three (indices 3, 5 and 7).
+LINE0_PALETTE = 0x0970C
+
 PICTURE_DIR = 0xF14F2
 PICTURE_COUNT = 110
 PALETTE_DIR = 0xF16AA
@@ -59,16 +66,25 @@ TILE = 8
 ICON_TILES = 3               # 3x3 tiles, 24x24 pixels
 
 
-def read_palette(rom, index):
-    """The 16 CRAM words of one palette, as RGB triples."""
-    ptr = struct.unpack_from(">I", rom, PALETTE_DIR + index * 4)[0]
-    raw = genesis_ecl.decompress(rom[ptr:ptr + 0x400], limit=0x400)
+def _cram(raw, at=0):
     out = []
     for i in range(16):
-        w = struct.unpack_from(">H", raw, i * 2)[0]
+        w = struct.unpack_from(">H", raw, at + i * 2)[0]
         r, g, b = (w >> 0) & 0xE, (w >> 4) & 0xE, (w >> 8) & 0xE
         out.append(((r >> 1) * 36, (g >> 1) * 36, (b >> 1) * 36))
     return out
+
+
+def line0_palette(rom):
+    """The palette icons are actually drawn with."""
+    return _cram(rom, LINE0_PALETTE)
+
+
+def read_palette(rom, index):
+    """One of the twelve wall palettes at 0xF16AA. Kept for reference; it is
+    NOT what an icon is drawn with."""
+    ptr = struct.unpack_from(">I", rom, PALETTE_DIR + index * 4)[0]
+    return _cram(genesis_ecl.decompress(rom[ptr:ptr + 0x400], limit=0x400))
 
 
 def _nearest(r, g, b, palette):
@@ -142,9 +158,11 @@ def main():
     for spec in specs:
         parts = spec.split(":")
         pid, path = int(parts[0], 0), parts[1]
-        pal_index = int(parts[2], 0) if len(parts) > 2 else 1
+        # The third field used to select a wall palette. Icons do not use
+        # those, so it is ignored and line 0 is used for every picture.
+        pal_index = 0
         if pal_index not in cache:
-            cache[pal_index] = read_palette(bytes(rom), pal_index)
+            cache[pal_index] = line0_palette(bytes(rom))
         palette = cache[pal_index]
         if not 0 <= pid < PICTURE_COUNT:
             sys.exit(f"picture id {pid} is outside the {PICTURE_COUNT}-entry directory")
@@ -166,7 +184,7 @@ def main():
         old = struct.unpack_from(">I", rom, PICTURE_DIR + pid * 4)[0]
         rom[cursor:cursor + len(packed)] = packed
         struct.pack_into(">I", rom, PICTURE_DIR + pid * 4, cursor)
-        print(f"  picture 0x{pid:02X}: {path} pal {pal_index} -> "
+        print(f"  picture 0x{pid:02X}: {path} line0 -> "
               f"{len(tiles)//32} tiles, {len(packed)} packed at 0x{cursor:06X} "
               f"(was 0x{old:06X})")
         cursor += len(packed) + 2

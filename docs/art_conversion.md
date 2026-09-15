@@ -508,12 +508,45 @@ Two other constraints compound it:
   the dither noise reads as noise. Diffusion pays off over a 300x200
   background, not over a three-tile icon.
 
-### What would actually raise it
+### The palette was the wrong one
 
-Controlling the palette. The table at `0xF16AA` is an array of pointers,
-so new palettes can be added the way areas were, and `PALETTE` (opcode
-`0x51`) already exists to select one. The open question is whether the
-picture draws on its own CRAM line or shares one with the walls — if it
-shares, a palette tuned for a portrait would recolour the room around it.
-That is the next thing to establish, and it is worth establishing before
-injecting the remaining art.
+Icons draw on CRAM **line 0**; the twelve palettes at `0xF16AA` that
+`LOADPIECES` selects are the **wall** palettes, on line 2. Quantising
+against those was matching the art to colours it would never be drawn with.
+
+Line 0 holds a fixed palette in ROM at `0x0970C`. It was identified by
+injecting a test card — nine tiles of solid palette indices — into a
+picture the game shows often, and reading the result off a play session's
+screenshot. The card rendered yellow, teal and magenta together, and
+`0x0970C` is the only palette in the ROM carrying all three, at indices 3,
+5 and 7:
+
+```
+240000 240000 000000 FCFC00 000000 009090 900000 900090
+904800 909090 484848 4848FC 48FC48 48FCFC FC4848 009000
+```
+
+Injection now quantises against it. The result is not numerically better —
+every available palette scores about the same — but it is *correct*, and it
+looks it: greens, yellows, cyans and greys instead of everything collapsing
+into red-brown.
+
+### The remaining ceiling
+
+| approach | mean error |
+|---|---|
+| any engine palette | ~63 |
+| the image's own 16 colours | ~21 |
+
+Nothing inside the engine's palettes closes that gap. Measured and rejected:
+choosing a different one of the twelve (63.0–65.3, all equivalent),
+Floyd-Steinberg (54.9 → 60.2 and visibly dirtier), and contrast or
+saturation preprocessing (63.0 → 65.0–70.4, all worse).
+
+The one thing that would work is a palette of our own. **CRAM line 3 is
+unused** by all 248 picture resources, and injected nametables could select
+it in bits 13-14. What that needs is for the engine to load 16 words into
+`0xFFFF02A0`, and the only upload site found so far — `0x0A490` — sits
+behind a conditional inside a fade routine, so hooking it is a gamble
+rather than a patch. That is the next piece of work, and it is worth doing
+carefully rather than quickly.

@@ -45,6 +45,18 @@ DEFAULT_OUT = REPO / "roms/matrix_play.gen"
 # Transplanted as <area>:<block>[:<map>]; a block of `-` is map-only.
 MAP_ONLY = ["0x01:-:1", "0x33:-:51", "0x34:-:52"]
 
+# Matrix Cubed portraits for the PICTURE ids its scripts actually use, from
+# the VGADependentImages archive PIC1. Every one is quantised against CRAM
+# line 0, which is what icons draw with.
+PICTURES = """
+0x02:PIC1/002 0x1D:PIC1/029 0x1E:PIC1/030 0x1F:PIC1/031 0x20:PIC1/032
+0x37:PIC1/055 0x38:PIC1/056 0x39:PIC1/057 0x3C:PIC1/060 0x50:PIC1/080
+0x51:PIC1/081 0x54:PIC1/084 0x55:PIC1/085 0x56:PIC1/086 0x59:PIC1/089
+0x5B:PIC1/091 0x5D:PIC1/093 0x5E:PIC1/094 0x5F:PIC1/095 0x60:PIC1/096
+0x61:PIC1/097 0x62:PIC1/098 0x65:PIC1/101 0x66:PIC1/102 0x67:PIC1/103
+0x68:PIC1/104 0x6A:PIC1/106 0x6B:PIC1/107_5
+""".split()
+
 
 def specs():
     blocks = dax.load(REPO / "dos_game/matrix/ECL1.DAX")
@@ -79,8 +91,12 @@ def main():
     rc = subprocess.call([sys.executable, str(REPO / "tools/softfail.py"), str(out), str(out)])
     if rc:
         raise SystemExit(rc)
+    rc = subprocess.call([sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)])
+    if rc:
+        raise SystemExit(rc)
+    # Matrix Cubed's own portraits, in the picture slots its scripts name.
     raise SystemExit(subprocess.call(
-        [sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)]))
+        [sys.executable, str(REPO / "tools/inject_pic.py"), str(out), str(out)] + PICTURES))
 
 
 if __name__ == "__main__":
