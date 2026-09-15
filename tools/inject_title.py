@@ -50,6 +50,7 @@ TITLE_BASE = 0x1F8000        # clear of the portraits at 0x1E0000
 SCREENS = (
     (0x0133A, 40, 28, "presents"),
     (0x013AA, 40, 25, "matrix"),
+    (0x088FA, 36, 16, "menu"),
 )
 
 
@@ -72,6 +73,20 @@ def compose_presents():
     return out
 
 
+def compose_menu():
+    """The card behind the main menu, drawn by 0x088C4 after the intro.
+
+    This is the screen the stock game keeps on display with its copyright
+    lines over it, and it was still Countdown's -- which is the "1991 Buck
+    Rogers thing" that appeared after the new title cards.
+    """
+    out = Image.new("RGB", (288, 128), (0, 0, 0))
+    src = Image.open(REPO / "extracted" / "images" / "TITLE" / "004.png").convert("RGB")
+    src = src.resize((288, int(src.height * 288 / src.width)), Image.LANCZOS)
+    out.paste(src, (0, (128 - src.height) // 2))
+    return out
+
+
 def compose_matrix():
     """MATRIX CUBED over Jupiter, letterboxed into the scene slot."""
     out = Image.new("RGB", (320, 200), (0, 0, 0))
@@ -80,7 +95,8 @@ def compose_matrix():
     return out
 
 
-BUILD = {"presents": compose_presents, "matrix": compose_matrix}
+BUILD = {"presents": compose_presents, "matrix": compose_matrix,
+         "menu": compose_menu}
 
 
 def main():
@@ -88,6 +104,13 @@ def main():
         sys.exit(__doc__)
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
     rom = bytearray(src.read_bytes())
+
+    # One palette for the two intro screens. They are drawn by different
+    # paths -- 0x08594 then 0x095BE for the first, 0x095BE alone for the
+    # second -- and the second's own palette does not reliably reach CRAM,
+    # so it was being drawn with the first screen's colours. Sharing a
+    # palette makes that harmless instead of wrong.
+    shared = ip.build_palette([BUILD["presents"](), BUILD["matrix"]()], 15)
 
     cursor = TITLE_BASE
     for operand, w, h, kind in SCREENS:
@@ -97,10 +120,13 @@ def main():
         # whatever the screen before it set. Ours always brings one, so the
         # flag has to say so; keeping the original's 0x0000 made the length
         # disagree with the contents and the picture failed to decode.
-        flags = 0x0004
+        flags = struct.unpack_from(">HHH", was, 0)[2] or 0x0004
+        if kind in ("presents", "matrix"):
+            flags = 0x0004
 
         img = BUILD[kind]()
-        got = ip.encode([img], 1, w, h, budget=len(was), flags=flags)
+        pal = shared if kind in ("presents", "matrix") else None
+        got = ip.encode([img], 1, w, h, budget=len(was), flags=flags, palette=pal)
         if got is None:
             print(f"  {kind}: will not fit in {len(was)} bytes, left alone")
             continue

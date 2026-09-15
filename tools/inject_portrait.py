@@ -144,7 +144,8 @@ def nearest(px, rgb):
     return best
 
 
-def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE):
+def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
+           palette=None):
     """Build (blob, tile count, colours) for one picture, or None if it cannot fit.
 
     `budget` is the DECOMPRESSED size of the picture being replaced. The
@@ -160,7 +161,7 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE):
     while len(images) < frames:
         images.append(images[len(images) % len(images)] if images else images[0])
     images = images[:frames]
-    blob, ntiles = _encode_at(images, w, h, 15, 0, flags)
+    blob, ntiles = _encode_at(images, w, h, 15, 0, flags, palette)
     if budget is None or len(blob) <= budget:
         return blob, ntiles, 15
 
@@ -169,19 +170,19 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE):
     # sharing a tile whose neighbour differs in two pixels is invisible at
     # this size. Tolerance rises until it fits.
     for tol in range(1, 33):
-        blob, ntiles = _encode_at(images, w, h, 15, tol, flags)
+        blob, ntiles = _encode_at(images, w, h, 15, tol, flags, palette)
         if len(blob) <= budget:
             return blob, ntiles, 15
     # Only if merging cannot do it does the palette narrow.
     for colours in (13, 11, 9, 7):
-        blob, ntiles = _encode_at(images, w, h, colours, 16, flags)
+        blob, ntiles = _encode_at(images, w, h, colours, 16, flags, palette)
         if len(blob) <= budget:
             return blob, ntiles, colours
     return None
 
 
-def _encode_at(images, w, h, colours, tolerance=0, flags=FLAG_PALETTE):
-    words, rgb = build_palette(images, colours)
+def _encode_at(images, w, h, colours, tolerance=0, flags=FLAG_PALETTE, palette=None):
+    words, rgb = palette if palette else build_palette(images, colours)
 
     tiles, order, nm = {}, [], []
     for im in images:
