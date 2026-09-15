@@ -1200,7 +1200,7 @@ an 88x88 region (`moveq #$57` twice at `0x04E20`), which would be 11x11
 tiles and 242 nametable bytes, and no resource has that size. The portraits
 reach the screen by some other arrangement.
 
-### The PICTURE directory — CONFIRMED
+### The table at 0xF14F2 is the ITEM AND UI ICON table — CORRECTED
 
 Found by clustering: every ROM location holding a pointer to one of the 248
 decodable pictures, grouped by constant stride. Four directories fall out:
@@ -1212,8 +1212,21 @@ decodable pictures, grouped by constant stride. Four directories fall out:
 | `0xF14F2` | **110** | 4 | **the `PICTURE` table** — 3x3 tiles, 24x24 |
 | `0xF170E` | 50 | 4 | wall and dungeon pieces |
 
-`0xF14F2` is indexed directly by the `PICTURE` operand and all 110 entries
-decode, so **ids 0–109 are valid**. Rendering the ones Countdown's scripts
+**This was wrong.** `0xF14F2` is not indexed by the `PICTURE` operand at
+all. Its only two consumers are engine code:
+
+```
+0A794: move.b (a3)+, d0 / cmp.b #$ff / lea $f14f2   ; batch list, 0xFF-terminated
+10AC4: add.b  d1, d0     / lea $f14f2               ; item/equipment lookup
+```
+
+It is the **item and UI icon table**. It was mistaken for the picture
+directory because its 110 entries happen to match the `PICTURE` id range —
+a coincidence that was never checked. Writing artwork into it replaces the
+inventory and equipment icons, which is exactly what a play session saw.
+
+All 110 entries do decode as pictures, so **icon ids 0–109 are valid**, and
+the `artmap.py` bound derived from that still holds. Rendering the ones Countdown's scripts
 use gives a padlock, an eye, a wrench, a gender symbol, faces, a heart, a
 crosshair, crossed swords, a medical cross and a rocket — the icons that
 appear in the window beside the text.
