@@ -33,6 +33,7 @@ What this does NOT do is invent semantics:
 import struct
 from collections import OrderedDict
 
+import artmap
 import ecl
 import skillmap
 import flagmap
@@ -310,8 +311,20 @@ def transpile(block: bytes, flags=None):
         # to GEN_BASE -- so every menu in the game read its choice from the
         # code base instead of from the variable the menu had just written.
         is_on = ins.name in ("ON_GOTO", "ON_GOSUB")
+        # Matrix Cubed names art the Genesis cartridge does not carry, and an
+        # unknown id crashes the picture loader rather than being ignored.
+        art_at = (0 if ins.name == "PICTURE" else
+                  1 if ins.name == "VIEW" else None)
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
+            if art_at == k and arg.type == 0x00:
+                fn = artmap.picture if ins.name == "PICTURE" else artmap.view
+                new, replaced = fn(arg.value)
+                if replaced:
+                    report.append((off, "art",
+                                   f"{ins.name} 0x{arg.value:02X} not in this ROM"))
+                args.append(("imm", new))
+                continue
             if is_skill and k == 0 and arg.type == 0x00:
                 gid, exact = skillmap.translate(arg.value)
                 if not exact:
