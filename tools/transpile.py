@@ -124,6 +124,19 @@ VARIABLE_MAP = {
     0x7EB1: 0x9DA7,    # INDEX_OF_SEL_PC   -- the resolver indexes by it
 }
 
+# Mappings supported by good evidence but not by a constraint that admits
+# only one answer. Applied, because the alternative is worse rather than
+# safer: an unmapped DOS address below 0x8000 sign-extends into ROM, so the
+# write is silently discarded and a party loop never advances. A probable
+# mapping at least fails visibly and in one place.
+#
+# Kept separate so a later contradiction is cheap to act on.
+PROBABLE_MAP = {
+    # The only non-scratch operand of LOAD_CHAR / LOADCHARACTER on each side,
+    # 27 uses against 10. Scripts use it to walk the party.
+    0x4CF6: 0x98EC,    # FOR_LOOP_COUNT
+}
+
 # Contiguous banks that map as ranges: (dos_lo, dos_hi, genesis_lo).
 #
 # The scratch bank is consecutive in both engines -- 0x7F79/0x7F7A/0x7F7B
@@ -144,6 +157,8 @@ def map_variable(addr, flags, report, offset):
     """Translate one DOS variable address, or report it untranslated."""
     if addr in VARIABLE_MAP:
         return VARIABLE_MAP[addr]
+    if addr in PROBABLE_MAP:
+        return PROBABLE_MAP[addr]
     for lo, hi, base in WINDOW_MAP:
         if lo <= addr < hi:
             return base + (addr - lo)

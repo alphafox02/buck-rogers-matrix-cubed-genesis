@@ -266,3 +266,48 @@ flags. Banks are now excluded as ranges.
 **selector variable**, a count, and only then a tail of targets. Treating
 every operand of a branching instruction as an address rewrote the selector
 as though it were code. Operand roles are now per-position.
+
+---
+
+## Confidence tiers, and why a probable mapping is still applied
+
+Mappings are kept in two tables.
+
+**`VARIABLE_MAP`** holds those pinned by a constraint that admits only one
+answer — a value distribution only a direction produces, a maximum only a
+wall nibble reaches, an address the engine itself indexes by.
+
+**`PROBABLE_MAP`** holds those supported by good evidence that nonetheless
+does not exclude every alternative. Currently one: `FOR_LOOP_COUNT`
+`0x4CF6` → `0x98EC`, the only non-scratch operand of `LOAD_CHAR` /
+`LOADCHARACTER` on either side, 27 uses against 10.
+
+These are **applied**, which deserves justification, because leaving a
+mapping out is not the conservative choice here. An unmapped DOS address
+below `0x8000` sign-extends into ROM: the write is silently discarded, and a
+party loop reading it never advances. A wrong RAM address at least fails
+visibly, in one place, and is cheap to revisit. Silence is the worse failure
+mode.
+
+Keeping the two tables separate means a later contradiction costs one line.
+
+## Coverage
+
+**95.0%** of 10,019 variable references translate. 505 remain across 32
+addresses, led by:
+
+| DOS | name | uses |
+|---|---|---|
+| `0x4C00` | `SAVED_TEMP_START` | 61 |
+| `0x4CE6` | `MONEY_NEO_ACCT` | 53 |
+| `0x4BE6` | `DUNGEON_VALUE` | 46 |
+| `0x4BC3` | `OVERLAND_X` | 36 |
+| `0x4BF1`/`0x4BF0` | `LAST_DUNGEON_Y`/`X` | 59 |
+| `0x4BE7`-`0x4BE9` | `ENGINE_CONF_*` | 84 |
+
+`MONEY_NEO_ACCT` resisted the usual approach. It is distinctive on the DOS
+side — compared and subtracted against 10000, 20000, 2000 — but the Genesis
+side has no variable with that signature. The two variables used with large
+constants there both belong to the scratch bank. Either Countdown's scripts
+handle money without large literals, or it lives somewhere the
+engine-writes/scripts-read intersection does not reach.
