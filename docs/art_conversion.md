@@ -618,3 +618,41 @@ the item icon table and against which `(mode, id)` pairs stock Countdown
 happened to use. Both were wrong: the icon table is a different resource,
 and `VIEW`'s mode chooses a drawing style rather than a resource space. It
 now simply asks whether an id is in one of the two directories.
+
+### Why the directory is NOT expanded
+
+`tools/expand_pictures.py` works and its tables verify byte for byte, but
+using it broke the game, and the reason is worth keeping.
+
+The loader handles an unknown id gracefully:
+
+```
+0B7D2: move.b (a0)+, d0
+0B7D4: bpl.b  $b7e2        ; still inside the id list
+0B7D6: bsr.w  $82ec        ; ran off the end: pick a default picture
+0B7E0: bra.b  $b7bc        ; and retry
+```
+
+Every id Matrix Cubed names that Countdown lacks was taking that path, and
+taking it safely. Adding those ids turned each miss into a hit on the
+placeholder the new slots pointed at — the largest picture in the ROM, six
+frames and 12 KB — and whether that overrun mattered depended on the state
+of the heap. It surfaced as a crash on "restore game" perhaps one run in
+three, which is what made it hard to pin: a build could be declared working
+and then fail on the next reset.
+
+Measured with BlastEm's address log, counting runs that reach address `0`
+(the reset vector, i.e. a crash):
+
+| build | crashes |
+|---|---|
+| directory expanded | 1 of 3 |
+| directory left alone | 0 of 6 |
+
+So injection now only replaces slots the directory already has: 13 portraits
+and 4 big pictures. That is fewer images than expanding allowed, but they
+are the same id, the same budget, and artwork that fits.
+
+Adding ids is still possible — it needs each new slot to point at artwork of
+its own, sized for that slot, rather than at a shared placeholder. The
+tooling is kept for that.

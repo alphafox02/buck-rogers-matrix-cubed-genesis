@@ -48,14 +48,13 @@ MAP_ONLY = ["0x01:-:1", "0x33:-:51", "0x34:-:52"]
 # PICTURE ids Matrix Cubed's scripts name that have recovered artwork. They
 # go into the real ECL picture directory at 0x51326/0x51360, at the full
 # 88x88 the DOS originals use, with the palette embedded in each image.
-PORTRAIT_IDS = [0x02, 0x04, 0x17, 0x1D, 0x1E, 0x1F, 0x20, 0x37, 0x38, 0x39,
-                0x3C, 0x50, 0x51, 0x52, 0x54, 0x55, 0x56, 0x5B, 0x5D, 0x5E,
-                0x5F, 0x60, 0x61, 0x62, 0x63, 0x65, 0x66, 0x67, 0x68, 0x6A,
-                0x6B]
+PORTRAIT_IDS = [
+    32, 60, 80, 81, 82, 84, 85, 86, 91, 93, 94, 95, 97
+]
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
-BIGPIC_IDS = [0x70, 0x71, 0x72, 0x73, 0x74, 0x75]
+BIGPIC_IDS = [112, 115, 116, 117]
 
 # NOT INJECTED. The table at 0xF14F2 these ids index turned out to be the
 # engine's ITEM AND UI icon table, not the ECL PICTURE directory -- its two
@@ -99,6 +98,7 @@ def main():
     # apart from an art one.
     art = "--no-art" not in sys.argv
     bigpics = "--no-bigpic" not in sys.argv
+    portraits = "--no-portrait" not in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path(argv[0]) if argv else DEFAULT_OUT
     cmd = [sys.executable, str(REPO / "tools/inject_area.py"), str(STOCK), str(out)] + specs()
@@ -118,26 +118,27 @@ def main():
     rc = subprocess.call([sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)])
     if rc or not art:
         raise SystemExit(rc)
-    # Matrix Cubed's own portraits, in the directory the PICTURE opcode uses.
-    # The directory is relocated first so ids Countdown never had can be added.
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/expand_pictures.py"), str(out), str(out)]
-        + [f"0x{p:02X}" for p in PORTRAIT_IDS])
-    if rc:
-        raise SystemExit(rc)
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out)]
-        + [f"0x{p:02X}:PIC1/{p:03d}" for p in PORTRAIT_IDS])
-    if rc:
-        raise SystemExit(rc)
+    # Matrix Cubed's own portraits, into the slots the directory ALREADY has.
+    #
+    # The directory is deliberately NOT expanded. Adding ids looked free and
+    # is not: the loader at 0x0B7D2 walks the id list, and on running off the
+    # end it calls 0x082EC to pick a sensible default and retries. Every id
+    # Matrix Cubed names that Countdown lacks was taking that path safely.
+    # Adding those ids turned each miss into a hit on a placeholder -- and
+    # the placeholder is the largest picture in the ROM, six frames and 12 KB
+    # -- which overflowed depending on heap state. It showed up as a crash on
+    # "restore game" that happened perhaps one run in three.
+    #
+    # Replacing what is already there has no such effect: same id, same
+    # budget, art that fits.
+    if portraits:
+        rc = subprocess.call(
+            [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out)]
+            + [f"0x{p:02X}:PIC1/{p:03d}" for p in PORTRAIT_IDS])
+        if rc:
+            raise SystemExit(rc)
     if not bigpics:
         raise SystemExit(0)
-    # The VIEW big-picture directory gets the same treatment.
-    rc = subprocess.call(
-        [sys.executable, str(REPO / "tools/expand_pictures.py"), str(out), str(out),
-         "--bigpic"] + [f"0x{p:02X}" for p in BIGPIC_IDS])
-    if rc:
-        raise SystemExit(rc)
     raise SystemExit(subprocess.call(
         [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out),
          "--bigpic"] + [f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS]))

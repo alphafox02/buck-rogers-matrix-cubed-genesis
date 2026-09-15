@@ -33,11 +33,11 @@ PICTURES = (32, 35, 58, 59, 64, 65, 66, 67, 68, 70, 71, 75, 76, 77, 79, 80, 81, 
 
 BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 
-# Ids tools/expand_pictures.py adds; kept in step with build.PORTRAIT_IDS.
-ADDED = (0x02, 0x04, 0x17, 0x1D, 0x1E, 0x1F, 0x37, 0x38, 0x39, 0x60, 0x62,
-         0x63, 0x65, 0x66, 0x67, 0x68, 0x6A, 0x6B, 0x71, 0x72)
-
-AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS) | frozenset(ADDED)
+# Nothing is added. The directory is left at its stock size: see the note in
+# build.py about what adding ids did. An id the directory lacks is better
+# left to the engine's own fallback at 0x082EC, which picks a default and
+# retries, than turned into a hit on something the wrong size.
+AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS)
 
 
 def picture(pid):
