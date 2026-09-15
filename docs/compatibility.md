@@ -46,3 +46,56 @@ site needs individual attention rather than a table substitution.
 
 The remaining `UNKNOWN_*` opcodes are unidentified in the DOS engine as
 well and together account for under 0.25% of instructions.
+
+
+---
+
+## Resolved: all four significant orphans
+
+The four opcodes flagged as the real gap all have Genesis counterparts. The
+opcode table alone did not show it, because the Genesis renamed them.
+
+### CALL — 161 sites, resolved
+
+`CALL` dispatches to a **native routine by address**, so no name-based
+remap could ever have worked. Reading the DOS implementation shows Buck
+Rogers uses exactly two routines, and the Genesis has a dedicated opcode for
+each — unsurprising, since a console port would naturally promote a
+frequently-called native routine into the instruction set:
+
+| CALL target | sites | does | Genesis |
+|---|---|---|---|
+| `0x2DCB` | 150 | redraw the view, clear the current sprite | `REMOVEFIGURE` + `UPDATEFRAME` |
+| `0xC01E` | 11 | step one square forward in the facing direction | `STEPFORWARD` |
+
+This also explains a puzzle from the variable work: `0x2DCB` appeared among
+the "script-only flags" with 150 uses. It is not a variable at all — it is
+a native routine address.
+
+### The other three — same slot, same arity
+
+| DOS | Genesis | why |
+|---|---|---|
+| `SELECT_ACTION` `0x31` | `WHMENU` `0x31` | the DOS implementation prints "WHAT DO YOU DO?" then a horizontal menu and stores the choice. The Genesis name parses once you know that. |
+| `PICTURE2` `0x4C` | `VIEW` `0x4C` | same slot, both take two arguments |
+| `COPY_MEM` `0x2A` | `GETABLE` `0x2A` | same slot, both take three |
+
+## What genuinely remains
+
+**62 instructions of 25,063 — 0.25%.**
+
+```
+UNKNOWN_4B           19        NPC_REMOVE            5
+UNKNOWN_44           19        RANDOM0               3
+UNKNOWN_48            8        WRITE_MEM_BASE_OFF    2
+UNKNOWN_4A            5        UNKNOWN_49            1
+```
+
+Six of the eight are unidentified in the DOS engine as well, so there is
+nothing to translate them *to* until someone works out what they do. At 52
+instructions between them they can be stubbed and investigated from the
+sites that hit them.
+
+The project's original estimate for this gap was 2.25% of instructions. The
+real figure is **0.25%**, and the difference is entirely down to reading an
+implementation instead of comparing name tables.

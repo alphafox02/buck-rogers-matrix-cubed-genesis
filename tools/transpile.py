@@ -62,6 +62,26 @@ NAME_MAP = {
     "CLOCK1": "CLOCK",
     # Same slot, same role: both halt until the player acknowledges.
     "INPUT_RETURN": "CONTINUE",
+
+    # Same opcode slot, same arity, and the Genesis name describes what the
+    # DOS implementation does:
+    #   SELECT_ACTION prints "WHAT DO YOU DO?" then a horizontal menu and
+    #   stores the choice -- which is what WHMENU is for.
+    "SELECT_ACTION": "WHMENU",
+    "PICTURE2": "VIEW",
+    "COPY_MEM": "GETABLE",
+}
+
+# CALL dispatches to a native routine by address, so it cannot be remapped by
+# name. Buck Rogers uses exactly two, and the Genesis has dedicated opcodes
+# for both -- which is unsurprising, since a console port would naturally
+# promote a frequently-called native routine to its own opcode.
+#
+#   0x2DCB (150 sites) -- redraw the view and clear the current sprite
+#   0xC01E  (11 sites) -- step one square forward in the facing direction
+CALL_EXPANSION = {
+    0x2DCB: ("REMOVEFIGURE", "UPDATEFRAME"),
+    0xC01E: ("STEPFORWARD",),
 }
 
 
@@ -192,6 +212,16 @@ def transpile(block: bytes, flags=None):
     pieces = []
     for off in order:
         ins = found[off]
+        # CALL becomes one or more Genesis opcodes depending on which native
+        # routine it targets, so it is handled before the ordinary name map.
+        if ins.name == "CALL" and ins.args and ins.args[0].value in CALL_EXPANSION:
+            for sub in CALL_EXPANSION[ins.args[0].value]:
+                opcode, _argc = gen[sub]
+                layout.setdefault(off, pos)
+                pieces.append((off, opcode, []))
+                pos += 1
+            continue
+
         name = NAME_MAP.get(ins.name, ins.name)
         if name in gen:
             opcode, _ = gen[name]
