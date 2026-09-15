@@ -24,3 +24,4 @@ __pycache__/
 # ---- Local tooling (fetched, never vendored) ----
 emu/
 third_party/
+audio/
