@@ -86,14 +86,25 @@ def _luma(c):
     return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
 
 
+# Perceptual channel weights. These belong on the SQUARED differences, not
+# on the channel values before squaring -- scaling first squares the weights
+# too, so blue would be penalised by 0.11^2 = 0.012 rather than 0.11, and a
+# large blue error becomes almost free.
+#
+# That was a real defect, not a theoretical one: grey (56,56,56) was matching
+# to (73,73,109) in preference to (36,36,36), because the 53-unit blue error
+# cost less than the 20-unit error across all three channels. It drew a
+# purple smear over dark backgrounds in every portrait.
+_WEIGHTS = (0.30, 0.59, 0.11)
+
+
 def _perceptual(c):
-    """Weight channels roughly by how much the eye notices them."""
-    return (c[0] * 0.30, c[1] * 0.59, c[2] * 0.11)
+    """Channel values scaled for clustering, where relative spread is what matters."""
+    return (c[0] * _WEIGHTS[0], c[1] * _WEIGHTS[1], c[2] * _WEIGHTS[2])
 
 
 def _distance(a, b):
-    pa, pb = _perceptual(a), _perceptual(b)
-    return sum((x - y) ** 2 for x, y in zip(pa, pb))
+    return sum(w * (x - y) ** 2 for w, x, y in zip(_WEIGHTS, a, b))
 
 
 def build_palette(pixels, size=15):
@@ -274,6 +285,17 @@ def convert_multi(image, palettes=4, dither=False, passes=3):
                 moved += 1
         if not moved:
             break
+
+    # Rebuild once more against the final assignment. Without this the last
+    # iteration leaves palettes built for the PREVIOUS assignment while tiles
+    # have already moved -- so a tile can be drawn with a palette chosen for
+    # different tiles entirely. It showed up as a purple smear across dark
+    # background tiles, which had been assigned a palette holding no dark
+    # tone while a sibling palette held two.
+    pals = []
+    for p in range(palettes):
+        pool = [c for i, cell in enumerate(cells) if assign[i] == p for c in cell]
+        pals.append(build_palette(pool) if pool else [(0, 0, 0)] * 15)
 
     # Quantise each tile against its chosen palette.
     raw, words = [], []
