@@ -347,3 +347,41 @@ With the checksum solved, the original cartridge becomes a test harness:
 content conversions can be proven inside SSI's own engine before a
 reimplementation exists. Everything validated there is trustworthy in a
 reimplementation. Path A proves, Path B expands.
+
+---
+
+## Attempted proof of concept: Matrix Cubed geometry in the Genesis engine
+
+`roms/countdown_mcmap.gen` is stock Countdown to Doomsday with exactly one
+change: area `0x10`'s 1024 bytes of map data replaced by Matrix Cubed map 18.
+Same title, same intro, same script — only that area's architecture differs.
+A clean single-variable test.
+
+**Result: inconclusive.** On play-testing, the area looked different at first
+glance, but on reflection Aaron could not be sure it differed from the
+original. Countdown's own areas are varied enough that "looks unfamiliar" is
+not evidence, and neither of us had the stock layout memorised.
+
+That is a test design failure, not a result. Comparing two arbitrary dungeon
+maps from memory was never going to give a clean answer.
+
+**The fix** is a map that cannot be mistaken: a synthetic layout so obviously
+artificial that any observer can call it instantly, rather than a second
+plausible-looking dungeon.
+
+### What the ROM does establish
+
+Independently of the visual question, the patched ROM boots and runs — 985
+distinct executed addresses, matching stock exactly, and it reaches the title
+screen on real display. That already exercises the DAX container and RLE, the
+map format, the reimplemented LZW decompressor, our compressor, relocation
+into expanded ROM space, the retargeted loader pointer, and the checksum
+repair. A mistake in any of those gives a hang, not a running game.
+
+What is *not* established is that the transplanted geometry reaches the
+screen.
+### Still to do
+
+Maps were the easy content type — they need no conversion beyond dropping a
+2-byte header. Scripts need the variable mapping, and art needs
+downconversion from 256-colour VGA. Neither is blocked, both are work.
