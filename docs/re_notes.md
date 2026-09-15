@@ -1164,3 +1164,38 @@ pairs at `0x08336` (17 entries, `0xFF` terminated), falling back to
 `0x08330` indexed by `0x979B`. Matrix Cubed's new areas are absent from it
 and take the fallback, which is harmless — every id in it is one Countdown
 has.
+
+### The picture container — CONFIRMED
+
+Resources the directories point at decompress with the ECL/GEO codec and
+then have this shape:
+
+```
+ 0  2  unique tile count
+ 2  2  nametable size in BYTES
+ 4  2  flags (0 in all 248 found)
+ 6  .. nametable, one big-endian word per cell, tile index in bits 0-10
+ .. .. tile data, 32 bytes each, VDP 4bpp, high nibble = left pixel
+```
+
+Self-validating: length is exactly `6 + nametable_bytes + 32 * tiles` for
+every resource, which makes a blind scan of the ROM safe. `tools/genesis_pic.py`
+does that scan and finds **248 pictures**, dumping each as a PNG.
+
+Width comes from the directory record's `chunk` byte, in tiles. Shapes by
+nametable size:
+
+| entries | count | shape |
+|---|---|---|
+| 9 | 110 | 3x3 tiles, 24x24 — icons |
+| 162 | 57 | 18x9 tiles, 144x72 — combat figure sheets |
+| 264 | 10 | 11 tiles tall, 88 px — the picture-window height |
+| 232, 270, 437, … | 10 each | various |
+
+The 162-entry family renders as rows of small character frames, confirming
+it is the figure art the `ADDFIGURE` callers use rather than backdrops.
+
+**Not yet found: the 88x88 portrait directory.** The picture loader sets up
+an 88x88 region (`moveq #$57` twice at `0x04E20`), which would be 11x11
+tiles and 242 nametable bytes, and no resource has that size. The portraits
+reach the screen by some other arrangement.
