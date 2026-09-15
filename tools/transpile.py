@@ -96,6 +96,10 @@ def genesis_opcodes():
 
 STUB_OPCODE = 0xFF          # outside the valid 0x00-0x5D range
 
+# The widest label set stock Countdown ever gives WHMENU. Past this the
+# labels run off the line and wrap over themselves.
+WHMENU_BUDGET = 27
+
 
 class Unsupported(Exception):
     pass
@@ -325,6 +329,22 @@ def transpile(block: bytes, flags=None):
         art_at = (0 if ins.name == "PICTURE" else
                   1 if ins.name == "PICTURE2" else None)
         mon_at = 0 if ins.name in ("LOAD_MON", "SPRITE_START") else None
+        # WHMENU prints engine string 0x2D, "what do you do?", before its
+        # labels, so they start 15 columns in. That is why stock Countdown's
+        # widest WHMENU is 27 characters where its widest HMENU is 35. Matrix
+        # Cubed writes longer labels -- "HELP ROMNEY / CALL SECURITY / AID
+        # TERRANS" is 37 -- and the overflow wraps onto the start of the same
+        # line, which a play session photographed as "TERRANSMNEY CALL
+        # SECURITY AID". Both opcodes end at the same menu routine, so the
+        # wide ones become HMENU and lose only the printed prompt.
+        if ins.name == "SELECT_ACTION":
+            labels = [str(a.value) for a in ins.dyn_args if a.type == 0x80]
+            if labels and sum(len(x) for x in labels) + len(labels) - 1 > WHMENU_BUDGET:
+                name = "HMENU"
+                opcode, _ = gen[name]
+                report.append((off, "menu",
+                               f"{sum(len(x) for x in labels) + len(labels) - 1} chars "
+                               f"> {WHMENU_BUDGET}, WHMENU -> HMENU"))
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
             if mon_at == k and arg.type == 0x00 and arg.value < 0x80:

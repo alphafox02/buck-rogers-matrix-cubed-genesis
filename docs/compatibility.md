@@ -201,3 +201,33 @@ session saw beside a failed perception check.
 `PRINT_CLEAR` (84), `PRINT` (46), `COMPARE` (20), `INPUT_STRING` (6) and
 `LOGBOOK_ENTRY` (1). The value is still an address and still goes through
 the variable map; only its type is preserved now.
+
+## Menu width
+
+`WHMENU` prints engine string `0x2D` — `"what do you do?"` — before its
+labels, so they begin fifteen columns in. Both menu opcodes end at the same
+routine (`HMENU` at `0x039CC` and `WHMENU` at `0x03A34` both `bra.w $4324`);
+the prompt is the only difference, and it is what costs the room.
+
+That shows in the two games' own data:
+
+| opcode | widest label set in stock Countdown |
+|---|---|
+| `HMENU` | 35 chars — `JUMP / ARENA / GO UP / TREASURE / PREV / NEXT` |
+| `WHMENU` | 27 chars — `SPEAK / TURN IT OFF / REPROGRAM` |
+
+Matrix Cubed writes longer labels. The groundcar choice —
+`HELP ROMNEY / CALL SECURITY / AID TERRANS` — is 37 characters, and the
+overflow wraps back onto the start of the same line. A play session
+photographed the result:
+
+```
+shown:    TERRANSMNEY  CALL SECURITY  AID
+expected: HELP ROMNEY  CALL SECURITY  AID TERRANS
+```
+
+`TERRANS` had been drawn at column 0, over `HELP RO`.
+
+21 of Matrix Cubed's 97 `WHMENU` calls exceed the 27-character budget and
+are emitted as `HMENU` instead, which has the full line. The cost is the
+printed prompt; the labels fit and read correctly.

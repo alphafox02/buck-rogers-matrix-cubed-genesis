@@ -82,7 +82,7 @@ that, so its numbers for those are meaningless — trust the static column.
 | `0x3C` | `PROTECT` | 0 | 0 | 4/7 | HIGH -- both methods agree |
 | `0x3D` | `CLEARBOX` | 0 | 1 | 4/6 | LOW -- methods disagree (static 0) |
 | `0x3E` | `DUMP` | 0 | 0 | 3/6 | HIGH -- both methods agree |
-| `0x3F` | `JOURNAL` | 2 | 1 | 14/14 | PROBABLE -- votes unanimous, static says 2 |
+| `0x3F` | `JOURNAL` | 2 | 2 | 14/14 | **CONFIRMED** -- handler 0x03B90 calls the argument fetcher twice: the first operand goes to the string printer 0x11CA4, the second to the number formatter 0x13328 |
 | `0x40` | `DESTROY` | 2 | 2 | 4/6 | HIGH -- both methods agree |
 | `0x41` | `ADDEP` | 2 | 2 | 8/9 | HIGH -- both methods agree |
 | `0x42` | `ENCEXIT` | 0 | 0 | 15/15 | HIGH -- both methods agree, votes unanimous |
