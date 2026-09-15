@@ -142,3 +142,39 @@ argument:
 
 After mapping, every skill id in the ROM falls in 0–13 — the same range
 Countdown's own scripts use, which is a decent independent check.
+
+## Monster numbering
+
+The two games number monsters independently, exactly as they number skills
+independently, and a play session caught it the same way: *"I'm fighting
+squids and they've poisoned half my team... seems odd for a beginning."*
+
+Matrix Cubed's monster 5 and 6 are `PURGE COMMANDO` and `PURGE WARRIOR` —
+the Terran supremacists who take Dr. Romney in the Salvation prologue.
+Countdown's 5 and 6 are `HEXADILLO` and `SAND SQUID`. Passing the ids
+through unchanged replaced a scripted fight with Terran soldiers by one
+with poisonous desert wildlife several tiers above a starting party.
+
+| source | records | where |
+|---|---|---|
+| DOS | 63 | `dos_game/matrix/MON0CHA.DAX`, name at the start of each block |
+| Genesis | 54 | a stream at `0x9E77C`, laid out like the GEO stream |
+
+The Genesis stream is a count word, then that many ids, then fixed 214-byte
+records with the name first. The loader at `0x048E8` searches the id list
+and prints `"couldnt load monster"` on a miss; its id buffer is `0x40`
+bytes, so **the engine caps at 64 monsters**.
+
+`tools/monstermap.py` maps all 63 DOS monsters onto the Genesis roster, 20
+of them exact name matches (`SAND SQUID`, `HYPERCRAB`, `URSADDER`,
+`RAM WARRIOR`, `LEANDER`, `ZANE`, `BUCK ROGERS`). The rest map by role — a
+leader to a leader, a security robot to a security robot, an insect to an
+insect — because substituting a creature of the wrong weight is what made
+the opening fight unwinnable.
+
+### Replacing the roster outright
+
+Substitution is a stopgap. The stream has the same shape as the GEO stream,
+which is already additive, and Matrix Cubed's 63 records fit under the
+engine's 64 cap with one to spare. What that needs is the 214-byte Genesis
+record mapped against the 259-byte DOS one, field by field.

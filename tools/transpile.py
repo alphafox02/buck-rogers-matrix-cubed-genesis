@@ -35,6 +35,7 @@ from collections import OrderedDict
 
 import artmap
 import ecl
+import monstermap
 import skillmap
 import flagmap
 import genesis_disasm as G
@@ -321,10 +322,16 @@ def transpile(block: bytes, flags=None):
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
             if mon_at == k and arg.type == 0x00 and arg.value < 0x80:
-                new, replaced = artmap.monster(arg.value)
-                if replaced:
+                # The two games number monsters independently: Matrix Cubed's
+                # 5 and 6 are PURGE COMMANDO and PURGE WARRIOR, Countdown's
+                # are HEXADILLO and SAND SQUID. Passing ids through turned
+                # the prologue's fight with Terran supremacists into one with
+                # poisonous desert wildlife.
+                new, exact = monstermap.translate(arg.value)
+                if not exact:
                     report.append((off, "monster",
-                                   f"{ins.name} 0x{arg.value:02X} -> 0x{new:02X}"))
+                                   f"{monstermap.DOS_NAMES.get(arg.value, hex(arg.value))}"
+                                   f" -> {monstermap.GENESIS.get(new, hex(new))}"))
                 args.append(("imm", new))
                 continue
             if art_at == k and arg.type == 0x00:
