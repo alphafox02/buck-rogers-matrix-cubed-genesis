@@ -1,85 +1,58 @@
 """
-Guard Matrix Cubed's art references against Countdown's smaller resource set.
+Guard Matrix Cubed's art references against the resources the ROM has.
 
-Matrix Cubed names pictures and views by id, and the Genesis cartridge does
-not contain all of them. An id the ROM has no entry for makes the picture
-loader read a bad offset, and the chunked decompressor at 0x09C10 then
-overshoots its remaining-bytes counter:
+The engine resolves art through two directories, both found by following
+the `PICTURE` opcode rather than by guessing (see docs/re_notes.md):
 
-    09C26: sub.w  d3, d6        ; remaining -= chunk
-    09C28: bmi.w  $9cf6         ; negative -> "loadpieces error 1"
+    0x51326 / 0x51360   ECL pictures, 88x88 portraits, ids 0x20-0x6F
+    0x51302 / 0x5130A   VIEW big pictures, 288x120, ids 0x70-0x78
 
-which is a hard stop. A play session hit it during the Sun King coronation.
-
-Ids with the high bit set mean "no picture" rather than an index -- the
-loader tests for it before doing any lookup:
+An id neither directory holds sends the loader off the end of its id list,
+which is not ignored -- it lands in the chunked decompressor and used to
+stop the game. `tools/softfail.py` makes that non-fatal, but a blank is
+still worse than a picture, so references that cannot resolve are rewritten
+to 0xFF, which the loader tests for before doing any lookup:
 
     04DFA: move.b $b525.w, d0
     04DFE: bpl.b  $4e04         ; negative -> clear instead of load
 
-so an unavailable id is rewritten to 0xFF. The scene then plays without its
-artwork instead of killing the game. This is a stopgap: all 3430 Matrix
-Cubed images are already converted (679 KB against 848 KB free), and once
-they are injected this table should shrink to nothing.
+An earlier version of this file guarded against the item icon table at
+0xF14F2 and against which (mode, id) pairs stock Countdown happened to use.
+Both were wrong: the icon table is a different resource entirely, and
+VIEW's mode selects a drawing style, not a resource space. The mode is
+irrelevant to whether an id resolves.
 
-Valid ids come from the directory itself, not from what Countdown's scripts
-happen to use. `PICTURE` resolves through a 110-entry table of 4-byte
-pointers at 0xF14F2 -- found by clustering every ROM location that points
-at a decodable picture -- and all 110 entries decode, so ids 0..109 are
-real. Only one Matrix Cubed id falls outside it.
-
-An earlier version of this file allowed only the 33 ids Countdown's scripts
-reference, which blanked 183 uses of perfectly valid art.
+`tools/expand_pictures.py` adds ids to the picture directory, so the set
+below is the stock one plus whatever build.py injects.
 """
 
 NO_PICTURE = 0xFF
 
-# The PICTURE directory: 110 pointers at 0xF14F2, so ids 0..109 resolve.
-PICTURE_DIR = 0xF14F2
-PICTURE_COUNT = 110
+# Stock contents of the two directories.
+PICTURES = (32, 35, 58, 59, 64, 65, 66, 67, 68, 70, 71, 75, 76, 77, 79, 80, 81, 82, 83, 84, 87, 88, 89, 92, 93, 60, 61, 69, 72, 73, 74, 62, 85, 86, 90, 91, 94, 95, 97, 105, 33, 34, 36, 37, 38, 39, 40, 41, 48, 49, 50, 111, 42, 43, 51, 52, 44)
 
-# Kept for reference: the ids Countdown's own scripts use.
-PICTURES = (35, 37, 43, 50, 52, 58, 59, 60, 61, 62, 64, 65, 66, 67, 68, 70, 71, 72, 73, 74, 75, 76, 79, 81, 85, 86, 91, 92, 93, 94, 95, 97, 255)
+BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 
-# VIEW's OPERAND PAIR, not just the id. The first operand is a mode, and the
-# mode selects which resource space the id indexes: Countdown uses (4, 0x72)
-# while Matrix Cubed uses (1, 0x72) -- the same id in a different archive.
-# Checking the id alone let VIEW 1, 0x72 through, and that is the call that
-# crashed a play session at the Sun King coronation. Countdown never uses
-# mode 3 at all.
-VIEW_PAIRS = ((0, 65), (0, 255), (1, 112), (1, 115), (1, 116), (1, 117), (1, 119), (1, 120), (2, 92), (2, 255), (4, 59), (4, 113), (4, 114))
+# Ids tools/expand_pictures.py adds; kept in step with build.PORTRAIT_IDS.
+ADDED = (0x02, 0x04, 0x17, 0x1D, 0x1E, 0x1F, 0x37, 0x38, 0x39, 0x60, 0x62,
+         0x63, 0x65, 0x66, 0x67, 0x68, 0x6A, 0x6B, 0x71, 0x72)
 
-
-# The figure directory at 0x09A14, {pointer, id, chunk, flags} records ended
-# by a negative id. LOAD_MON and SPRITE_START name ids in this space, and a
-# miss is not ignored: the search at 0x099CC runs off the end into 0x099F6
-# and loads a garbage pointer, which lands in the chunked decompressor and
-# stops the game with "loadpieces error 1". That is the crash a play session
-# kept hitting when the Sun King coronation broke into combat.
-MONSTERS = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 58, 59, 60, 61, 62, 64)
-
-
-def monster(mid):
-    """Map a monster id onto one the figure directory actually holds.
-
-    Substituting the nearest lower id keeps the encounter -- it fights with
-    another creature's sprite -- where blanking it would drop the fight.
-    """
-    if mid in MONSTERS:
-        return mid, False
-    lower = [m for m in MONSTERS if m < mid]
-    return (max(lower) if lower else min(MONSTERS)), True
+AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS) | frozenset(ADDED)
 
 
 def picture(pid):
     """Return (id_to_emit, was_replaced) for a PICTURE operand."""
-    if pid >= 0x80 or pid < PICTURE_COUNT:
+    if pid >= 0x80 or pid in AVAILABLE:
         return pid, False
     return NO_PICTURE, True
 
 
 def view(mode, vid):
-    """Return (id_to_emit, was_replaced) for VIEW's resource operand."""
-    if vid >= 0x80 or (mode, vid) in VIEW_PAIRS:
+    """Return (id_to_emit, was_replaced) for VIEW's resource operand.
+
+    `mode` is accepted and ignored: it selects how the picture is drawn, not
+    where it comes from.
+    """
+    if vid >= 0x80 or vid in AVAILABLE:
         return vid, False
     return NO_PICTURE, True

@@ -37,20 +37,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import integrity
 
+# The ECL picture directory: ids, data pointers, animation metadata.
 IDS, PTRS, META = 0x51326, 0x51360, 0x51444
 OPERANDS = ((0x0B7C2, "ids"), (0x0B7C8, "ptrs"), (0x0B7CE, "meta"),
             (0x01B36, "ids"), (0x01B3C, "ptrs"))
-NEW_TABLES = 0x1B0000        # clear of the art at 0x1A0000 and the streams
+
+# The VIEW big-picture directory. Two tables, two operands, no metadata.
+BIG_IDS, BIG_PTRS = 0x51302, 0x5130A
+BIG_OPERANDS = ((0x0B768, "ids"), (0x0B76E, "ptrs"))
+
+NEW_TABLES = 0x1B0000        # tables here, artwork from 0x1C0000 up
+BIG_TABLES = 0x1B0800
 
 
-def read(rom):
-    ids, a = [], IDS
+def read(rom, ids_at=IDS, ptrs_at=PTRS, meta_at=META):
+    ids, a = [], ids_at
     while rom[a] < 0x80:
         ids.append(rom[a])
         a += 1
     n = len(ids)
-    ptrs = [struct.unpack_from(">I", rom, PTRS + k * 4)[0] for k in range(n)]
-    meta = [struct.unpack_from(">I", rom, META + k * 4)[0] for k in range(n)]
+    ptrs = [struct.unpack_from(">I", rom, ptrs_at + k * 4)[0] for k in range(n)]
+    meta = ([struct.unpack_from(">I", rom, meta_at + k * 4)[0] for k in range(n)]
+            if meta_at else None)
     return ids, ptrs, meta
 
 
@@ -60,6 +68,35 @@ def static_meta(rom, meta):
         if rom[m] == 0:
             return m
     raise SystemExit("no zero-count metadata blob to reuse")
+
+
+def apply_big(rom: bytes, new_ids) -> bytes:
+    """Same move for the VIEW directory, which has no metadata table."""
+    rom = bytearray(rom)
+    ids, ptrs, _ = read(bytes(rom), BIG_IDS, BIG_PTRS, None)
+    print(f"  big-picture directory holds {len(ids)}: {[hex(x) for x in ids]}")
+    added = [p for p in new_ids if p not in ids]
+    if not added:
+        print("  nothing to add")
+        return bytes(rom)
+    for pid in added:
+        ids.append(pid)
+        ptrs.append(ptrs[0])
+    print(f"  adding {[hex(x) for x in added]} -> {len(ids)} total")
+    at = BIG_TABLES
+    id_at = at
+    rom[at:at + len(ids)] = bytes(ids)
+    rom[at + len(ids)] = 0xFF
+    at += len(ids) + 2
+    ptr_at = at
+    for p in ptrs:
+        struct.pack_into(">I", rom, at, p)
+        at += 4
+    where = {"ids": id_at, "ptrs": ptr_at}
+    for site, kind in BIG_OPERANDS:
+        struct.pack_into(">I", rom, site, where[kind])
+        print(f"    0x{site:05X} -> 0x{where[kind]:06X} ({kind})")
+    return integrity.repair(bytes(rom))
 
 
 def apply(rom: bytes, new_ids) -> bytes:
@@ -107,7 +144,9 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         sys.exit(__doc__)
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
-    new = [int(v, 0) for v in sys.argv[3:]]
-    out = apply(src.read_bytes(), new)
+    args = [a for a in sys.argv[3:] if a != "--bigpic"]
+    new = [int(v, 0) for v in args]
+    fn = apply_big if "--bigpic" in sys.argv else apply
+    out = fn(src.read_bytes(), new)
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'FAILS'}; wrote {dst}")

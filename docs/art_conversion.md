@@ -594,3 +594,27 @@ The cartridge serial was changed so an emulator's ROM database would miss
 and fall back to the header name. It does — but that database entry also
 supplies the **SRAM mapping**, and without it the game stopped loading. The
 serial is left alone; the window title is the emulator's business.
+
+### Both directories, all of the art
+
+`tools/expand_pictures.py` now relocates either directory, and
+`tools/inject_portrait.py` writes into either:
+
+| directory | stock | added | holds |
+|---|---|---|---|
+| ECL pictures `0x51326` | 57 | 18 | **75**, all decoding |
+| VIEW big pictures `0x51302` | 7 | 2 | **9**, all decoding |
+
+Injected: **31 Matrix Cubed portraits** at 88x88 with their animation
+frames, and **6 big pictures** at 288x120. The DOS big pictures are 304x120,
+so eight pixels come off each side rather than scaling — the heights already
+match and a resize would soften every edge.
+
+**No art reference in the game is blanked any more**, down from 202 when the
+guard was pointed at the wrong table.
+
+The last correction was to `tools/artmap.py`, which had been guarding against
+the item icon table and against which `(mode, id)` pairs stock Countdown
+happened to use. Both were wrong: the icon table is a different resource,
+and `VIEW`'s mode chooses a drawing style rather than a resource space. It
+now simply asks whether an id is in one of the two directories.

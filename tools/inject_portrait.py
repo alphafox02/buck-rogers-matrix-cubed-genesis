@@ -49,17 +49,28 @@ except ImportError:
 # The directory address is read from the loader's own operands, so this
 # works both before and after tools/expand_pictures.py relocates the tables.
 IDS_OPERAND, PTRS_OPERAND = 0x0B7C2, 0x0B7C8
+BIG_IDS_OPERAND, BIG_PTRS_OPERAND = 0x0B768, 0x0B76E
+
+# Big pictures are a single 36x15-tile frame, 288x120. The DOS originals are
+# 304x120, so eight pixels come off each side rather than scaling -- the
+# heights already match and a resize would soften every edge.
+BIG_W, BIG_H = 36, 15
 CELLS = 121              # 11x11 tiles
 SIDE = 11
 # Above the relocated directory tables at 0x1B0000. Twenty-eight
 # portraits run to roughly 90 KB, so starting at 0x1A0000 overran them.
-ART_BASE = 0x1C0000
+# Where injected artwork goes. The relocated directory tables sit at
+# 0x1B0000; big pictures and portraits each get their own region so one
+# cannot overrun the other, which happened once and left the pointers
+# reading nonsense.
+ART_BASE = 0x1C0000        # big pictures
+PORTRAIT_BASE = 0x1E0000   # portraits
 FLAG_PALETTE = 0x0008
 
 
-def directory(rom):
-    ids_at = struct.unpack_from(">I", rom, IDS_OPERAND)[0]
-    ptrs_at = struct.unpack_from(">I", rom, PTRS_OPERAND)[0]
+def directory(rom, big=False):
+    ids_at = struct.unpack_from(">I", rom, BIG_IDS_OPERAND if big else IDS_OPERAND)[0]
+    ptrs_at = struct.unpack_from(">I", rom, BIG_PTRS_OPERAND if big else PTRS_OPERAND)[0]
     ids, a = [], ids_at
     while rom[a] < 0x80:
         ids.append(rom[a])
@@ -105,7 +116,7 @@ def nearest(px, rgb):
     return best
 
 
-def encode(images, frames):
+def encode(images, frames, w=SIDE, h=SIDE):
     """Build (blob, tile count) for one picture."""
     while len(images) < frames:
         images.append(images[len(images) % len(images)] if images else images[0])
@@ -115,9 +126,9 @@ def encode(images, frames):
     tiles, order, nm = {}, [], []
     for im in images:
         px = im.convert("RGB").load()
-        idx = [[nearest(px[x, y], rgb) for x in range(88)] for y in range(88)]
-        for ty in range(SIDE):
-            for tx in range(SIDE):
+        idx = [[nearest(px[x, y], rgb) for x in range(w * 8)] for y in range(h * 8)]
+        for ty in range(h):
+            for tx in range(w):
                 raw = bytearray()
                 for y in range(8):
                     for x in range(0, 8, 2):
@@ -139,8 +150,8 @@ def encode(images, frames):
 
 def sources(path):
     """Every frame of a picture, in order."""
-    base = REPO / "extracted" / "images_vd"
     d, name = path.split("/")
+    base = REPO / "extracted" / ("images" if d == "BIGPIC1" else "images_vd")
     exact = base / d / f"{name}.png"
     if exact.exists():
         return [Image.open(exact).convert("RGB")]
@@ -149,11 +160,13 @@ def sources(path):
 
 
 def main():
-    if len(sys.argv) < 4:
+    big = "--bigpic" in sys.argv
+    argv = [a for a in sys.argv[1:] if a != "--bigpic"]
+    if len(argv) < 3:
         sys.exit(__doc__)
-    src, dst, specs = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3:]
+    src, dst, specs = Path(argv[0]), Path(argv[1]), argv[2:]
     rom = bytearray(src.read_bytes())
-    ids, ptrs_at = directory(bytes(rom))
+    ids, ptrs_at = directory(bytes(rom), big)
     # Slots expand_pictures.py added all share one placeholder pointer; those
     # take their frame count from the artwork instead of from what was there.
     seen = {}
@@ -162,7 +175,7 @@ def main():
         seen.setdefault(p, []).append(k)
     placeholder = {k for p, ks in seen.items() if len(ks) > 1 for k in ks[1:]}
 
-    cursor = ART_BASE
+    cursor = ART_BASE if big else PORTRAIT_BASE
     for spec in specs:
         pid, path = spec.split(":", 1)
         pid = int(pid, 0)
@@ -174,8 +187,16 @@ def main():
             print(f"  picture 0x{pid:02X}: no image for {path}, skipped")
             continue
         slot = ids.index(pid)
-        frames = len(imgs) if slot in placeholder else frames_of(bytes(rom), ptrs_at, slot)
-        blob, ntiles = encode(imgs, frames)
+        if big:
+            crop = []
+            for im in imgs[:1]:
+                x0 = max(0, (im.width - BIG_W * 8) // 2)
+                crop.append(im.crop((x0, 0, x0 + BIG_W * 8, BIG_H * 8)))
+            blob, ntiles = encode(crop, 1, BIG_W, BIG_H)
+            frames = 1
+        else:
+            frames = len(imgs) if slot in placeholder else frames_of(bytes(rom), ptrs_at, slot)
+            blob, ntiles = encode(imgs, frames)
         packed = lzw_encode.compress(blob)
         if genesis_ecl.decompress(packed, limit=0x40000) != blob:
             sys.exit(f"compressed {path} does not round-trip")
