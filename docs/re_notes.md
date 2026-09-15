@@ -1226,3 +1226,30 @@ uses of art that resolves perfectly well. Exactly one Matrix Cubed
 The Genesis port shows 24x24 icons where DOS shows 88x88 portraits, so
 injecting Matrix Cubed's art here means reducing its portraits to the
 icon slot the port designed for, not pasting them in at source size.
+
+### `"loadpieces error 1"` is a FIGURE miss, not a picture miss
+
+The error at `0x09CF6` is raised from the chunked decompressor at `0x09BB6`,
+which has exactly three callers — `0x09982`, `0x099EC` and `0x158A0`. None
+of them is the picture path, which runs `0x08516` → `0x08562` → `0x095BE`.
+So no `PICTURE` operand can ever produce this error, and hours were spent
+guarding the wrong opcode.
+
+The resource id is dispatched at `0x099BC`:
+
+```
+099BC: bclr.b #$7, d0      ; bit 7 set?
+099C0: bne.b  $9964        ; yes -> a 12-entry table at 0x0998C, NO bounds check
+099C6: lea.l  $9a14.l, a1  ; no  -> search the figure directory by id
+099D0: bmi.b  $99f6        ; ran off the end: not found
+```
+
+A miss is not ignored. `0x099F6` loads a pointer that was never a resource,
+the decompressor reads nonsense, its remaining-bytes counter goes negative,
+and the game stops.
+
+The figure directory holds 52 ids. Matrix Cubed's `LOAD_MON` and
+`SPRITE_START` name ten it does not have — `0x2E`–`0x36` and `0x3F` — across
+**237 references**. `tools/artmap.py` substitutes the nearest lower id,
+which keeps the encounter with another creature's sprite rather than
+dropping the fight.

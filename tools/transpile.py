@@ -317,8 +317,16 @@ def transpile(block: bytes, flags=None):
         # VIEW. Keying this on "VIEW" meant the guard never fired for it.
         art_at = (0 if ins.name == "PICTURE" else
                   1 if ins.name == "PICTURE2" else None)
+        mon_at = 0 if ins.name in ("LOAD_MON", "SPRITE_START") else None
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
+            if mon_at == k and arg.type == 0x00 and arg.value < 0x80:
+                new, replaced = artmap.monster(arg.value)
+                if replaced:
+                    report.append((off, "monster",
+                                   f"{ins.name} 0x{arg.value:02X} -> 0x{new:02X}"))
+                args.append(("imm", new))
+                continue
             if art_at == k and arg.type == 0x00:
                 if ins.name == "PICTURE":
                     new, replaced = artmap.picture(arg.value)

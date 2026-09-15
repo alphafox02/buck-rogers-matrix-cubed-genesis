@@ -50,6 +50,27 @@ PICTURES = (35, 37, 43, 50, 52, 58, 59, 60, 61, 62, 64, 65, 66, 67, 68, 70, 71, 
 VIEW_PAIRS = ((0, 65), (0, 255), (1, 112), (1, 115), (1, 116), (1, 117), (1, 119), (1, 120), (2, 92), (2, 255), (4, 59), (4, 113), (4, 114))
 
 
+# The figure directory at 0x09A14, {pointer, id, chunk, flags} records ended
+# by a negative id. LOAD_MON and SPRITE_START name ids in this space, and a
+# miss is not ignored: the search at 0x099CC runs off the end into 0x099F6
+# and loads a garbage pointer, which lands in the chunked decompressor and
+# stops the game with "loadpieces error 1". That is the crash a play session
+# kept hitting when the Sun King coronation broke into combat.
+MONSTERS = (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 58, 59, 60, 61, 62, 64)
+
+
+def monster(mid):
+    """Map a monster id onto one the figure directory actually holds.
+
+    Substituting the nearest lower id keeps the encounter -- it fights with
+    another creature's sprite -- where blanking it would drop the fight.
+    """
+    if mid in MONSTERS:
+        return mid, False
+    lower = [m for m in MONSTERS if m < mid]
+    return (max(lower) if lower else min(MONSTERS)), True
+
+
 def picture(pid):
     """Return (id_to_emit, was_replaced) for a PICTURE operand."""
     if pid >= 0x80 or pid < PICTURE_COUNT:
