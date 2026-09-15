@@ -33,8 +33,13 @@ NO_PICTURE = 0xFF
 # Picture ids stock Countdown references, and therefore certainly has.
 PICTURES = (35, 37, 43, 50, 52, 58, 59, 60, 61, 62, 64, 65, 66, 67, 68, 70, 71, 72, 73, 74, 75, 76, 79, 81, 85, 86, 91, 92, 93, 94, 95, 97, 255)
 
-# VIEW's second operand, same reasoning.
-VIEWS = (59, 65, 92, 112, 113, 114, 115, 116, 117, 119, 120, 255)
+# VIEW's OPERAND PAIR, not just the id. The first operand is a mode, and the
+# mode selects which resource space the id indexes: Countdown uses (4, 0x72)
+# while Matrix Cubed uses (1, 0x72) -- the same id in a different archive.
+# Checking the id alone let VIEW 1, 0x72 through, and that is the call that
+# crashed a play session at the Sun King coronation. Countdown never uses
+# mode 3 at all.
+VIEW_PAIRS = ((0, 65), (0, 255), (1, 112), (1, 115), (1, 116), (1, 117), (1, 119), (1, 120), (2, 92), (2, 255), (4, 59), (4, 113), (4, 114))
 
 
 def picture(pid):
@@ -44,8 +49,8 @@ def picture(pid):
     return NO_PICTURE, True
 
 
-def view(vid):
+def view(mode, vid):
     """Return (id_to_emit, was_replaced) for VIEW's resource operand."""
-    if vid >= 0x80 or vid in VIEWS:
+    if vid >= 0x80 or (mode, vid) in VIEW_PAIRS:
         return vid, False
     return NO_PICTURE, True

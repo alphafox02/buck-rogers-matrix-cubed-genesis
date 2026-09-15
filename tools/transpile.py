@@ -313,13 +313,18 @@ def transpile(block: bytes, flags=None):
         is_on = ins.name in ("ON_GOTO", "ON_GOSUB")
         # Matrix Cubed names art the Genesis cartridge does not carry, and an
         # unknown id crashes the picture loader rather than being ignored.
+        # DOS names, not Genesis ones: PICTURE2 is what NAME_MAP turns into
+        # VIEW. Keying this on "VIEW" meant the guard never fired for it.
         art_at = (0 if ins.name == "PICTURE" else
-                  1 if ins.name == "VIEW" else None)
+                  1 if ins.name == "PICTURE2" else None)
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
             if art_at == k and arg.type == 0x00:
-                fn = artmap.picture if ins.name == "PICTURE" else artmap.view
-                new, replaced = fn(arg.value)
+                if ins.name == "PICTURE":
+                    new, replaced = artmap.picture(arg.value)
+                else:
+                    mode = ins.args[0].value if ins.args[0].type == 0x00 else None
+                    new, replaced = artmap.view(mode, arg.value)
                 if replaced:
                     report.append((off, "art",
                                    f"{ins.name} 0x{arg.value:02X} not in this ROM"))
