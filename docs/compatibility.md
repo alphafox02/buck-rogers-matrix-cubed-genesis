@@ -99,3 +99,46 @@ sites that hit them.
 The project's original estimate for this gap was 2.25% of instructions. The
 real figure is **0.25%**, and the difference is entirely down to reading an
 implementation instead of comparing name tables.
+
+## Skill numbering
+
+The two engines number skills completely differently, and a play session
+caught it: a message reading `TEAM FAILS AT CAREER AND`.
+
+DOS Buck Rogers carries the full tabletop skill list — 84 skills grouped by
+attribute, named in a 27-byte-record table at `0x0F336` of `START.EXE`. ECL
+refers to them **1-based**: the landing check in block 19 asks for skill 51,
+and table index 50 is `Pilot Rocket`.
+
+The Genesis port condensed that to 19 skills and prints the name as engine
+string `0x54 + id`:
+
+```
+04EE4: moveq   #$54, d0
+04EE6: add.w   d7, d0
+04EE8: jsr     $11c8e
+```
+
+So an untranslated id walks straight off the end of the skill names. DOS
+skill 46 is `Astrogation`; `0x54 + 46` is string `0x82`, which is
+`'career and'` from the character-creation text. Exactly what showed up.
+
+`tools/skillmap.py` maps the 32 skills Matrix Cubed's scripts actually use
+down to the Genesis 19. Thirteen are exact matches of meaning — `Jury Rig`
+onto `pilot rocket/juryrig`, `Notice` onto `perception`, `Fast
+Talk/Convince` onto `fast talk`. The rest are nearest fits and are open to
+argument:
+
+| DOS skill | Genesis | why |
+|---|---|---|
+| Astrogation | pilot rocket/juryrig | no navigation skill exists |
+| Open Lock | bypass security | the security skill covers both |
+| Commo / Sensor Operation | programming / perception | no equipment-operation skill |
+| Diagnose, Treat Stun, Life Suspension | treat wounds | one medical skill |
+| Acrobatics | climbing | one athletic skill |
+| Disguise, Hypnosis, Intimidate, Etiquette, Distract, Befriend Animal | fast talk | one social skill |
+| Shadowing | stealth | |
+| Planetary Survival | perception | |
+
+After mapping, every skill id in the ROM falls in 0–13 — the same range
+Countdown's own scripts use, which is a decent independent check.

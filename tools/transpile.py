@@ -34,6 +34,7 @@ import struct
 from collections import OrderedDict
 
 import ecl
+import skillmap
 import flagmap
 import genesis_disasm as G
 
@@ -296,8 +297,21 @@ def transpile(block: bytes, flags=None):
             report.append((off, ins.name, "no Genesis counterpart"))
             opcode = STUB_OPCODE
         is_jump = ins.name in ecl._JUMPS
+        # The two engines number skills completely differently: DOS uses the
+        # full 84-skill tabletop list 1-based, the Genesis 19 of its own.
+        # The engine prints the name as string 0x54 + id, so an untranslated
+        # id indexes past the skill names into unrelated text -- DOS 46
+        # (Astrogation) came out as "career and" in play.
+        is_skill = ins.name in ("PARTY_SKILL_CHECK", "SKILL_CHECK")
         args = []
-        for arg in list(ins.args) + list(ins.dyn_args):
+        for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
+            if is_skill and k == 0 and arg.type == 0x00:
+                gid, exact = skillmap.translate(arg.value)
+                if not exact:
+                    report.append((off, "skill", f"{skillmap.DOS_NAMES.get(arg.value, arg.value)}"
+                                                 f" -> {skillmap.GENESIS[gid]} (nearest fit)"))
+                args.append(("imm", gid))
+                continue
             if arg.type == 0x80:
                 args.append(("str", pool.intern(str(arg.value))))
             elif arg.is_memory:
