@@ -270,3 +270,66 @@ assignment and palette construction to a fixed point.
 Floyd-Steinberg buys smoother gradients at the cost of a speckle that reads
 as noise at Genesis resolution, and it is clearly worse on the test image —
 the starfield turns grainy. SSI's own Genesis art does not dither.
+
+---
+
+## "VGA dependent" images — the portraits — CONFIRMED
+
+`PIC1.DAX` (46 blocks, 400 KB), `SPRIT1.DAX` (23), `PIC7` and `PIC8` are not
+the plain VGA images `gbimage.py` handles. They were silently rejected by the
+extractor's header sanity check for roughly a third of the game's art,
+including every character portrait.
+
+The game configuration names the format: Matrix Cubed sets
+`picture.format=VD` and `sprite.format=VD`.
+
+### Layout
+
+```
+u16  height
+u16  width / 8
+u16  x placement
+u16  y placement
+u8   image_count - 1
+u8   colour_base
+u8   colour_count
+...  colour_count * 3 bytes of 6-bit VGA palette
+...  colour_count / 2 bytes mapping VGA indices to EGA
+4    unrecognised
+u8   index of the base image
+1    unrecognised
+...  3 bytes per image, packed sizes
+...  RLE data for every frame, concatenated
+```
+
+Every block is 88x88 with 224 colours based at 32. `PIC1` holds one frame
+per block; `SPRIT1` holds three.
+
+### Two differences that matter
+
+**The RLE is not the container's.** It is a near-relative in which the
+repeat branch *also* stores count-1, so a run is `count + 1` long in both
+branches. Decoding with the DAX container's rule desynchronises after the
+first run — which is why four brute-forced variants all failed before the
+format was read properly.
+
+**Frames after the first are XOR deltas** against a designated base frame.
+That explains block sizes varying from 4,782 to 22,049 bytes for what are
+nominally fixed-size portraits: a delta of a near-identical frame compresses
+to almost nothing.
+
+### Result
+
+**71 of 71 blocks decompress to exactly the expected size**, yielding 173
+images: character portraits, alien and monster art, and three-frame sprite
+animations.
+
+Structure cross-checked against `farmboy0/ssi-engine`
+(`data/image/VGADependentImages.java`).
+
+### Lesson
+
+This is the third time in the project that reading an existing
+implementation beat guessing. The DAX palette `colour_base` field, the
+dungeon map's four-plane layout, and now this were all solved in minutes by
+opening a file, after considerably longer spent inferring from bytes.
