@@ -1464,3 +1464,105 @@ MIDI-to-Genesis tools apply because they target SMPS or GEMS.
 The alternative is to replace the driver wholesale with one that has
 tooling, and retarget the 68000's calls. That trades reversing an unknown
 format for porting a known one, and would change every sound effect too.
+
+### The driver's sequence language is MIDI-shaped — CONFIRMED
+
+Disassembled with `tools/z80dump.py` (`pip install z80dis`). The dispatch at
+Z80 `0x087D` switches on the **top nibble** of a status byte and takes the
+channel from the low nibble:
+
+```
+087D: LD B,A
+087E: AND 0xF0
+0880: CP 0x80    ->  note off
+089F: CP 0x90    ->  note on
+08AE: CP 0xC0    ->  program change
+08C7: CP 0xF0 / CP 0xFC  ->  end of track
+088E: AND 15     ->  channel
+08F2: JP 0x08F2  ->  anything else hangs the driver
+```
+
+Running status is the MIDI convention exactly — a byte with bit 7 clear
+reuses the previous status:
+
+```
+0960: LD A,(IY)
+0964: JP m,0x096c     ; bit 7 set: this is a new status byte
+0967: LD A,(0x00E7)   ; otherwise reuse the last one
+0973: LD (0x00E7),A
+```
+
+and every handler returns through `0x0914`, which reads **one delta byte**
+into the tick countdown at `0x00E8`. Channel 9 is percussion, keyed by
+**General MIDI note numbers** — `0x24` bass drum, `0x26` snare, `0x31`
+crash, `0x36` tambourine.
+
+So an event is `status, data…, delta`, with running status, over GM
+semantics. **That is very close to XMI's own encoding**, which is what makes
+converting Matrix Cubed's music plausible rather than hopeless.
+
+### What is still unknown
+
+Where the sequence bytes live. The Z80 plays from a 1 KB ring buffer at
+`0x1A00`–`0x1E00` (`0x049A` wraps `IY` back to `0x1A00` at `0x1E00`), and
+the 68000 copies only a 24-byte header to `0xA0003A` before starting
+playback (`0x1B8DC`). Two tables were ruled out by decoding them:
+
+| table | holds |
+|---|---|
+| `0x1BA20` | **DAC samples** — data sits around `0x88`, which is near-silence in unsigned 8-bit PCM |
+| `0x1BAF4` | **FM voice parameters** — short records, no status bytes |
+
+Neither decodes as a sequence, and a track cannot begin with a running-status
+byte, so the stream starts somewhere the 24-byte header points at. Finding
+that is the remaining piece before an XMI converter can be written.
+
+### The music format — SOLVED
+
+The sequences are **not** at either table ruled out above. The dispatch at
+`0x1B900` tests the kind byte: bit 7 means music, and that branch indexes a
+third table:
+
+```
+1B990: andi.b #$7f, d0
+1B9B2: lea.l  $1bac0.l, a0      ; the MUSIC table
+1B9B8: move.l (a0, d0.w), d0
+1B9BC: bsr.w  $1b64a
+```
+
+`0x1BAC0` points straight at the event stream. A track is:
+
+```
+[lead-in delta] then repeated:  [status or running status] [1 data byte] [1 delta byte]
+```
+
+| status | meaning |
+|---|---|
+| `0x8n` | note off, one data byte: the note |
+| `0x9n` | note on, one data byte: the note |
+| `0xCn` | program change, one data byte: the patch |
+| `0xFC` | end of track |
+
+Channel is the low nibble and **channel 9 is General MIDI percussion**.
+There is **one** data byte per event, not MIDI's two — no velocity. The
+handler at `0x088D` reads exactly one (`LD D,(IY)`, `CALL 0x049A`).
+
+Decoding `0x0360D8` gives music rather than noise, which is the test that
+matters:
+
+```
+C1 program 04      C2 program 01      C3 program 06
+99 note_on 24  (percussion, GM bass drum)
+91 note_on 21  A1        81 note_off 21
+91 note_on 23  B1        81 note_off 23
+93 note_on 42  F#4       93 note_on 47  B4
+99 note_on 29  (percussion, GM floor tom)
+```
+
+A bass line on channel 1, a fifth on channel 3, and GM drums. `tools/seq2mid.py`
+exports any track as a standard MIDI file for listening.
+
+**This is what makes converting Matrix Cubed's music tractable.** XMI is
+MIDI; the driver wants MIDI with a narrower encoding. The conversion is
+re-timing to one-byte deltas, dropping velocity, and emitting running
+status — not a translation between unrelated formats.
