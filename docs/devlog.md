@@ -399,6 +399,24 @@ A supporting signal noticed before play: the checkerboard ROM executes 1024
 distinct addresses against stock's 985. Different geometry drives the
 renderer down more paths.
 
+### How it looked, and why
+
+*"grey gravel looking ground with walls up that seem to slightly cut off"*.
+
+The grey gravel is the stock tarmac wallset — `LOADPIECES` and the 32-byte
+table at `0x51836` were untouched, so Countdown's own tiles are drawing
+Matrix-Cubed-shaped geometry. That is exactly the separation the format
+analysis predicted: geometry and graphics are independent.
+
+The cut-off edges are the checkerboard being a pathological case rather than
+a defect. Every walled square in it is an isolated one-square box with four
+walls and no neighbours; the isometric renderer is built for connected runs
+of wall, where corners join and faces occlude each other. 128 free-floating
+cubes is geometry nobody designed for.
+
+A real map, with rooms and connected walls, should render cleanly. Worth
+re-testing with Matrix Cubed map 18 now that the pipeline itself is proven.
+
 ### What it does not yet show
 
 Scripts and art. Maps were the easy content type — they convert by dropping
