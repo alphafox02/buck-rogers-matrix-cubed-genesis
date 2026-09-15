@@ -178,3 +178,26 @@ Substitution is a stopgap. The stream has the same shape as the GEO stream,
 which is already additive, and Matrix Cubed's 63 records fit under the
 engine's 64 cap with one to spare. What that needs is the 214-byte Genesis
 record mapped against the 259-byte DOS one, field by field.
+
+## Argument type 0x81 is a string pointer, not a variable
+
+ECL argument type `0x81` means *the string is at this address*. Type `0x01`
+means *this is a variable*. `ecl.Argument.is_memory` reports True for both —
+`self.type != 0x80 and (self.type & 0x01)` — so the transpiler classified
+`0x81` as memory and re-emitted it as `0x01`.
+
+The effect is visible wherever the game prints a character's name:
+
+```
+0D1A: LOADCHARACTER  [0x9E71]
+0D1E: PRINT_CLEAR    str[0x7C00]     ; the loaded character's record
+```
+
+With the type collapsed, the engine read the record as a number instead of
+a string and drew garbage glyphs in the name slot — which is what a play
+session saw beside a failed perception check.
+
+**244 arguments** across the 33 blocks were affected: `WRITE_MEM` (87),
+`PRINT_CLEAR` (84), `PRINT` (46), `COMPARE` (20), `INPUT_STRING` (6) and
+`LOGBOOK_ENTRY` (1). The value is still an address and still goes through
+the variable map; only its type is preserved now.

@@ -127,6 +127,12 @@ def _encode_arg(kind, value):
         return bytes([0x80]) + struct.pack("<H", value)
     if kind in ("code", "var"):
         return bytes([0x01]) + struct.pack("<H", value & 0xFFFF)
+    if kind == "strptr":
+        # Type 0x81 is "the string is at this address", not "this is a
+        # variable". Both engines read it the same way. Collapsing it to
+        # 0x01 made PRINT_CLEAR str[0x7C00] -- print the loaded character's
+        # name -- render the record as if it were a number.
+        return bytes([0x81]) + struct.pack("<H", value & 0xFFFF)
     if value <= 0xFF:
         return bytes([0x00, value])
     if value <= 0xFFFF:
@@ -354,6 +360,11 @@ def transpile(block: bytes, flags=None):
                 continue
             if arg.type == 0x80:
                 args.append(("str", pool.intern(str(arg.value))))
+            elif arg.type == 0x81:
+                # Still an address, so it goes through the variable map --
+                # but it must keep its type. ecl.Argument.is_memory reports
+                # True for 0x81, which is how it was being lost.
+                args.append(("strptr", map_variable(arg.value, flags, report, off)))
             elif arg.is_memory:
                 # Only a jump's operands are code addresses, and not even
                 # all of those -- see is_on above.
