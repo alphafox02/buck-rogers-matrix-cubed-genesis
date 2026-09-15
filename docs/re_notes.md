@@ -1609,7 +1609,7 @@ only music that plays is what Countdown's boot code starts. Fixing it means
 mapping those six ids onto the Genesis music ids -- `0x2C`, `0x2E`-`0x36` --
 in the transpiler, not in the injector.
 
-### A track is preceded by its end pointer
+### A track is preceded by a region end pointer
 
 This is what made injected music silent. On the way to the Z80 the 68000
 reads the longword **before** the track:
@@ -1619,10 +1619,18 @@ reads the longword **before** the track:
 1B658: move.l  -$4(a0), $d8ee.w
 ```
 
-Every stock track has one. `0x0360D8` runs 0x800 bytes and the longword at
-`0x0360D4` is `0x0368D8` — exactly where it ends. Writing a track without
-it leaves the driver with a garbage end address and nothing plays, which
-looked like a conversion failure and was not: the sequences decoded
-correctly the whole time.
+It is the end of a contiguous music **region**, not of one song: slots 3 and
+12 start at `0x354A8` and `0x35B18` and share the value `0x35BA8`, so two
+tracks live in one region. For an isolated track it works out the same as
+start plus length, which is what `tools/inject_music.py` writes.
 
-`tools/inject_music.py` now writes the end pointer ahead of each track.
+The 68000 primes the Z80 rather than letting it fetch: `0x1B824` copies the
+first 1024 bytes of a track straight into the ring buffer at Z80 `0x1A00`
+and keeps the advanced pointer at `0xD8E2`.
+
+**This did not make injected music work.** The pointers are right, the
+sequences decode correctly, and the tracks are the right shape, and it still
+misbehaves in play. What is still unaccounted for is how the 68000 refills
+the ring buffer as the Z80 consumes it, and whether anything there assumes
+music lives in the first megabyte -- every stock track does, and the
+injected ones are at `0x190000`.
