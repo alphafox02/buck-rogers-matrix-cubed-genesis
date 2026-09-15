@@ -60,6 +60,18 @@ PORTRAITS = {
     0x61: "PIC1/097",
 }
 
+# Music. Only the two slots a player actually hears at the front of the game:
+# slot 2 is the intro (SOUND 0x2E) and slot 10 the menu and team setup
+# (SOUND 0x36). Replacing all fourteen was tried and crashed the machine
+# about two runs in three, while one slot and two slots both measure clean,
+# so the rest wait until the reason is understood rather than being pushed
+# in because they fit.
+#
+# BUCKA, BUCKB and BUCKC hold the SAME seven songs in three arrangements for
+# different DOS sound cards -- their tick lengths match to within two -- and
+# BUCKA is the richest.
+MUSIC = {2: ("BUCKA.XMI", 0), 10: ("BUCKA.XMI", 6)}
+
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
 BIGPIC_IDS = [112, 115, 116, 117]

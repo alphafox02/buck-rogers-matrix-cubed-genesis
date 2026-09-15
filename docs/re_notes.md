@@ -1566,3 +1566,45 @@ exports any track as a standard MIDI file for listening.
 MIDI; the driver wants MIDI with a narrower encoding. The conversion is
 re-timing to one-byte deltas, dropping velocity, and emitting running
 status — not a translation between unrelated formats.
+
+### Converting Matrix Cubed's music
+
+`tools/xmi.py` parses XMI, `tools/xmi2seq.py` converts it, and
+`tools/inject_music.py` repoints an entry in the music table at `0x1BAC0`.
+
+Three things the driver forces, all measured against SSI's own tracks rather
+than guessed. Decoding the title theme at `0x0360D8` gives channels 1, 2, 3
+and 9, notes 31 to 76, and never more than three notes sounding at once on a
+channel. Matrix Cubed's XMI uses seven channels, notes to 94 and up to six at
+once, and handing the driver that produced music for a moment and then
+static — it walks its frequency and voice tables off the end rather than
+clamping. So the converter folds the extra melodic channels onto 1-3, folds
+notes into range an octave at a time, and drops notes past the third
+sounding on a channel.
+
+Velocity is dropped because events carry one data byte, delays over 255
+ticks are split with a redundant program change, and anything that is not
+note on, note off or program change is discarded — the dispatch at Z80
+`0x08F2` is an infinite loop, so an unexpected status hangs the machine.
+
+**Only two slots are replaced.** Replacing all fourteen crashed the machine
+about two runs in three; one slot and two slots both measure clean. Slot 2
+is the intro and slot 10 the menu and team setup, which is all a player
+hears before the game proper. Why fourteen breaks is not yet known — slots 0
+and 1 originally share one pointer, which may be a silence marker rather
+than a song.
+
+### Matrix Cubed's own music cues never fire
+
+Its scripts call `SOUND_EVENT` with ids `0x81`-`0x86`, and the driver's
+dispatch rejects anything above `0x4B`:
+
+```
+1B904: cmp.b #$4b, d0
+1B908: bhi.w $1b9ce      ; ignored
+```
+
+So every music cue in the transplanted scripts is silently dropped, and the
+only music that plays is what Countdown's boot code starts. Fixing it means
+mapping those six ids onto the Genesis music ids -- `0x2C`, `0x2E`-`0x36` --
+in the transpiler, not in the injector.
