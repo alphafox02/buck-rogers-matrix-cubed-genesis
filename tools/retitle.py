@@ -27,20 +27,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import integrity
 
-DOMESTIC, OVERSEAS, COPYRIGHT = 0x120, 0x150, 0x110
-NAME_LEN, COPY_LEN = 48, 16
+DOMESTIC, OVERSEAS, COPYRIGHT, SERIAL = 0x120, 0x150, 0x110, 0x180
+NAME_LEN, COPY_LEN, SERIAL_LEN = 48, 16, 14
 DEFAULT_NAME = "BUCK ROGERS MATRIX CUBED"
 DEFAULT_COPY = "(C)T-50 1992.JAN"
+# The serial is deliberately LEFT ALONE. Emulators look the cartridge up in
+# a database by serial before reading the header, which is why BlastEm still
+# titles its window "Countdown to Doomsday" whatever the name fields say --
+# but that database entry also carries the SRAM mapping, and changing the
+# serial to force a miss stopped the game loading. A cosmetic window title
+# is not worth the save memory.
+DEFAULT_SERIAL = None
 
 
-def apply(rom: bytes, name=DEFAULT_NAME, copyright=DEFAULT_COPY) -> bytes:
+def apply(rom: bytes, name=DEFAULT_NAME, copyright=DEFAULT_COPY,
+          serial=DEFAULT_SERIAL) -> bytes:
     rom = bytearray(rom)
     field = name.upper()[:NAME_LEN].ljust(NAME_LEN).encode("ascii")
     for at in (DOMESTIC, OVERSEAS):
         rom[at:at + NAME_LEN] = field
     rom[COPYRIGHT:COPYRIGHT + COPY_LEN] = copyright[:COPY_LEN].ljust(COPY_LEN).encode("ascii")
+    if serial is not None:
+        rom[SERIAL:SERIAL + SERIAL_LEN] = serial[:SERIAL_LEN].ljust(SERIAL_LEN).encode("ascii")
     print(f"  name      -> {field.decode().strip()!r}")
     print(f"  copyright -> {copyright!r}")
+    print(f"  serial    -> {serial!r} (unchanged: the emulator ROM database "
+          f"keyed on it also supplies the SRAM mapping)")
     return integrity.repair(bytes(rom))
 
 

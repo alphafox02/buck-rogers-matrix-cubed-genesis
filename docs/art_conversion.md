@@ -550,3 +550,47 @@ it in bits 13-14. What that needs is for the engine to load 16 words into
 behind a conditional inside a fade routine, so hooking it is a gamble
 rather than a patch. That is the next piece of work, and it is worth doing
 carefully rather than quickly.
+
+---
+
+## Injecting into the real picture directory
+
+`tools/inject_portrait.py` writes Matrix Cubed's portraits into the
+directory the `PICTURE` opcode actually uses, and
+`tools/expand_pictures.py` makes that directory additive first.
+
+This is the whole difference from the earlier attempt, which wrote into the
+item icon table at `0xF14F2`:
+
+| | slot | palette | mean error |
+|---|---|---|---|
+| icon table (wrong) | 24x24, one frame | the area's | ~63 |
+| picture directory | **88x88, animated** | **its own, embedded** | ~16 |
+
+The DOS originals are 88x88 with multiple frames, which is exactly what
+this container holds, so nothing is scaled and nothing borrows colour. Side
+by side the injected portraits are hard to tell from the DOS art.
+
+### Making the directory additive
+
+Countdown carries 57 pictures over ids `0x20`–`0x6F`. Matrix Cubed names 31
+and fifteen of those ids do not exist. The id list at `0x51326` is followed
+one byte later by the pointer array, so it cannot grow in place — but it can
+move, the same way the ECL and GEO directories did. Three tables relocate
+together (ids, data pointers, animation metadata) and five instruction
+operands are retargeted: `0x0B7C2`, `0x0B7C8`, `0x0B7CE` in the loader, and
+`0x01B36`, `0x01B3C` in a second consumer that looks up id `0x6F`.
+
+The directory now holds **72 pictures, all decoding cleanly**, with 28
+Matrix Cubed portraits among them.
+
+### Two mistakes worth keeping
+
+Art was first written at `0x1A0000` and the relocated tables at `0x1B0000`.
+Twenty-eight portraits run to about 90 KB, so the art overran the tables and
+their pointers came back as nonsense. Art now starts at `0x1C0000`.
+
+The cartridge serial was changed so an emulator's ROM database would miss
+and fall back to the header name. It does — but that database entry also
+supplies the **SRAM mapping**, and without it the game stopped loading. The
+serial is left alone; the window title is the emulator's business.

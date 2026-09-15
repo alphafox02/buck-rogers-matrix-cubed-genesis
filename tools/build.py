@@ -45,6 +45,13 @@ DEFAULT_OUT = REPO / "roms/matrix_play.gen"
 # Transplanted as <area>:<block>[:<map>]; a block of `-` is map-only.
 MAP_ONLY = ["0x01:-:1", "0x33:-:51", "0x34:-:52"]
 
+# PICTURE ids Matrix Cubed's scripts name that have recovered artwork. They
+# go into the real ECL picture directory at 0x51326/0x51360, at the full
+# 88x88 the DOS originals use, with the palette embedded in each image.
+PORTRAIT_IDS = [0x02, 0x1D, 0x1E, 0x1F, 0x20, 0x37, 0x38, 0x39, 0x3C, 0x50,
+                0x51, 0x52, 0x54, 0x55, 0x56, 0x5B, 0x5D, 0x5E, 0x5F, 0x60,
+                0x61, 0x62, 0x65, 0x66, 0x67, 0x68, 0x6A, 0x6B]
+
 # NOT INJECTED. The table at 0xF14F2 these ids index turned out to be the
 # engine's ITEM AND UI icon table, not the ECL PICTURE directory -- its two
 # consumers are a 0xFF-terminated batch loader at 0x0A794 and an item lookup
@@ -98,9 +105,19 @@ def main():
     rc = subprocess.call([sys.executable, str(REPO / "tools/softfail.py"), str(out), str(out)])
     if rc:
         raise SystemExit(rc)
-    # NOTE: art injection is deliberately not run here. See PICTURES below.
+    rc = subprocess.call([sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)])
+    if rc:
+        raise SystemExit(rc)
+    # Matrix Cubed's own portraits, in the directory the PICTURE opcode uses.
+    # The directory is relocated first so ids Countdown never had can be added.
+    rc = subprocess.call(
+        [sys.executable, str(REPO / "tools/expand_pictures.py"), str(out), str(out)]
+        + [f"0x{p:02X}" for p in PORTRAIT_IDS])
+    if rc:
+        raise SystemExit(rc)
     raise SystemExit(subprocess.call(
-        [sys.executable, str(REPO / "tools/retitle.py"), str(out), str(out)]))
+        [sys.executable, str(REPO / "tools/inject_portrait.py"), str(out), str(out)]
+        + [f"0x{p:02X}:PIC1/{p:03d}" for p in PORTRAIT_IDS]))
 
 
 if __name__ == "__main__":
