@@ -22,17 +22,19 @@ What this does NOT do is invent semantics:
 
   * Opcodes with no Genesis counterpart are reported, not guessed at --
     see docs/compatibility.md.
-  * Variable addresses are passed through unchanged. The two engines have
-    DIFFERENT memory maps (DOS party flags sit around 0x4C00-0x7F00, the
-    Genesis around 0x97xx-0x9Bxx), so a real port needs a variable mapping
-    that does not exist yet. Until it does, transpiled output is
-    structurally correct but reads the wrong addresses.
+  * Engine-shared variables are translated only where the mapping has been
+    established (see docs/variable_map.md); the rest pass through and are
+    reported. Script-only story flags are reallocated by `flagmap`, which
+    matters more than it sounds: DOS keeps them below 0x8000, and Genesis
+    ECL addresses sign-extend, so untranslated they would resolve into ROM
+    and the writes would vanish.
 """
 
 import struct
 from collections import OrderedDict
 
 import ecl
+import flagmap
 import genesis_disasm as G
 
 DOS_BASE = 0x8000
@@ -109,13 +111,51 @@ def _encode_arg(kind, value):
     return bytes([0x04]) + struct.pack("<I", value)
 
 
-def transpile(block: bytes):
+# Engine-shared variables whose Genesis counterpart is established.
+VARIABLE_MAP = {
+    0x7F79: 0x9E6F, 0x7F7A: 0x9E70, 0x7F7B: 0x9E71,   # scratch bank
+    0x4BF2: 0x97E8,                                    # current area
+    0xC04B: 0x9AF6, 0xC04C: 0x9AF7, 0xC04D: 0x9AFA,    # position, direction
+}
+
+# Contiguous banks that map as ranges: (dos_lo, dos_hi, genesis_lo).
+#
+# The scratch bank is consecutive in both engines -- 0x7F79/0x7F7A/0x7F7B
+# against 0x9E6F/0x9E70/0x9E71 -- so the slots beyond the three confirmed by
+# usage follow by construction rather than by guesswork. Scripts use the
+# bank as an array, indexing several slots deep for nested expressions.
+#
+# The two per-character windows are ranges by definition: the address
+# resolver at 0x042E0 redirects each as a block.
+WINDOW_MAP = (
+    (0x7F79, 0x7F80, 0x9E6F),      # scratch bank
+    (0x7C00, 0x7C4D, 0x9AFC),      # selected-character record
+    (0x7D00, 0x7D1A, 0x9BF6),      # selected-character status
+)
+
+
+def map_variable(addr, flags, report, offset):
+    """Translate one DOS variable address, or report it untranslated."""
+    if addr in VARIABLE_MAP:
+        return VARIABLE_MAP[addr]
+    for lo, hi, base in WINDOW_MAP:
+        if lo <= addr < hi:
+            return base + (addr - lo)
+    if addr in flags:
+        return flags[addr]
+    report.append((offset, f"var 0x{addr:04X}", "no Genesis mapping"))
+    return addr
+
+
+def transpile(block: bytes, flags=None):
     """
     Translate one DOS ECL block.
 
     Returns (genesis_code, text_pool, report) where report lists any
     instructions that could not be translated.
     """
+    if flags is None:
+        flags = {}
     found, _entries, _errors = ecl.disassemble_block(block)
     # DOS code is addressed from 0x8000, and 0x8000 is the first byte AFTER
     # the 5000 marker -- so converting a jump target to a block offset must
@@ -149,7 +189,10 @@ def transpile(block: bytes):
                 args.append(("str", pool.intern(str(arg.value))))
             elif arg.is_memory:
                 # Only a jump's operands are code addresses.
-                args.append(("code" if is_jump else "var", arg.value))
+                if is_jump:
+                    args.append(("code", arg.value))
+                else:
+                    args.append(("var", map_variable(arg.value, flags, report, off)))
             else:
                 args.append(("imm", arg.value))
         size = 1 + sum(len(_encode_arg(k, 0 if k in ("code", "var") else v))

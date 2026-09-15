@@ -175,3 +175,57 @@ Four of fifty confirmed, seven more with strong candidates. Script-only
 reallocation is not yet implemented in `tools/transpile.py`, which passes all
 addresses through unchanged — which is why transplanted scripts execute with
 correct structure and incorrect addressing.
+
+---
+
+## Flag reallocation — implemented
+
+`tools/flagmap.py` places Matrix Cubed's 360 script-only flags into Genesis
+RAM. This is not an optimisation: **255 of them sit below `0x8000` in DOS**,
+and Genesis ECL addresses are used as 68000 absolute-short operands, which
+sign-extend. A DOS flag at `0x4C54` becomes `0x00004C54` — ROM — and the
+write vanishes.
+
+### Where they go
+
+Two sources, preferred in order:
+
+1. **The flags Countdown itself uses** (193 addresses). We are replacing its
+   campaign, so its story flags are free — and they are the best-evidenced
+   safe RAM available, because the shipped game keeps its own flags there.
+2. **Gaps inside the same region** (3,786 more). Addresses in
+   `0x9000`-`0x9FFF` touched by neither Countdown's scripts nor its engine.
+
+Free-looking RAM *elsewhere* was rejected deliberately. Detection of engine
+use relies on absolute-short operands and cannot see access through a
+register, so distance from known-used addresses is not evidence of safety;
+being inside the range the engine devotes to script state is.
+
+Both per-character windows are excluded — the resolver would silently
+scatter a flag placed there across the party.
+
+### Coverage
+
+**91.8% of the 10,019 variable references in Matrix Cubed's scripts now
+translate correctly**, leaving 821 across 38 addresses.
+
+| source | references |
+|---|---|
+| script-only flags, reallocated | most of the 8,755 |
+| confirmed engine variables | scratch bank, area, position, direction |
+| character windows | mapped as ranges |
+| **still unmapped** | **821 (8.2%)** |
+
+### Two bugs this surfaced
+
+**The allocator was reassigning live engine registers.** The configuration
+names `TEMP_START` at `0x7F79` and says nothing about the slots after it,
+but `0x7F7A` onward are the same scratch bank — that is how the mapping was
+confirmed in the first place. They were being handed out as free story
+flags. Banks are now excluded as ranges.
+
+**Jump operands were being classified by instruction, not by position.**
+`GOTO` and `GOSUB` take a single target, but `ON_GOTO` and `ON_GOSUB` take a
+**selector variable**, a count, and only then a tail of targets. Treating
+every operand of a branching instruction as an address rewrote the selector
+as though it were code. Operand roles are now per-position.
