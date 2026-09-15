@@ -684,3 +684,26 @@ its id by three to index ten wall sets, and Matrix Cubed's ids all fold
 into that range — so the geometry is Matrix Cubed's and the texture on it
 is Countdown's. That is the art pipeline's job and it is the next piece of
 work, along with the 173 recovered portraits.
+
+### First play session: empty text boxes are SSI's
+
+An empty text box appeared early in play. It is authentic. `PRINTCLEAR ""`
+is the Gold Box idiom for clearing the text window without printing, and
+counting inline strings on both sides confirms it:
+
+```
+DOS Matrix Cubed   3818 inline strings,  62 empty
+transplanted ROM   4116 string refs,     57 empty
+```
+
+The gap is blocks 1 and 2, which were deliberately left out.
+
+A string audit also flagged 36 references past the end of a text pool, all
+in areas `0x00`, `0x43` and `0x63` — stock areas never touched — with
+values like `0x9AFC` and `0xA022` that are RAM addresses, not offsets.
+`genesis_disasm` mis-types argument types `0x80`/`0x81` in that range. A
+disassembler artifact, not a ROM defect, but worth fixing so the audit
+stays useful as a regression check.
+
+Confirmed working in play: area transitions, space travel, and combat
+encounters driven by transplanted scripts.
