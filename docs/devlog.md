@@ -768,3 +768,49 @@ opens with `"DO YOU WANT TO START FROM SCRATCH OR USE THE JUMPER?"` and an
 block 1. Genesis area `0x01` is the combat test room, the same as Matrix
 Cubed's block 2. They are direct counterparts, not collisions, so blocks 1
 and 2 can be transplanted after all.
+
+---
+
+## It runs
+
+A play session reached Matrix Cubed's opening scene: Dr. Romney pushing the
+papers into the party's hands, the Sun King's coronation, the Martian
+assassins opening fire. Movement works, area transitions work, dialogue
+works, skill checks work, combat fires.
+
+The last bug was not in any of the tooling. The engine chooses its entry
+area at `0x04146` and has four of them, and "load default team" — the
+option a player actually picks — enters at area `0x10`, not `0x00`. Every
+boot fix had gone into `0x00`. Matrix Cubed's area `0x10` is a 30-byte
+stub whose whole body is `NEWECL 0x13`, so the game went straight to the
+space hub every time, and the boot marker planted in `0x00` never printed.
+
+Two things made that take far longer than it should have:
+
+**A two-byte error in my own notes.** `re_notes.md` recorded the ECL loader
+at `0x040CE`. It begins at `0x040D0`; `0x040CE` is the `rts` of the routine
+above it. Searching the whole ROM for callers of `0x040CE` returned none,
+which made the loader look unreachable and sent me looking at SRAM instead
+of at the dispatch sitting twenty bytes further down.
+
+**Not asking sooner.** The decisive fact — which menu option was being
+chosen — was one question away for most of the session. A marker string in
+the boot block, which is what finally settled it, cost five minutes and
+should have been the first move once the symptom stopped matching the code.
+
+### What the session established
+
+- the resource directory is additive; 39 areas where the cartridge shipped 27
+- the GEO loader's 32-byte stack buffer is the only hard ceiling, at 32 map areas
+- all 33 ECL blocks transpile with zero unmapped variables
+- DOS skill ids are the 84-skill tabletop list, 1-based, and map onto the Genesis 19
+- `ON_GOTO`'s first operand is a selector, not a target — 295 menus were reading from `CODE_BASE`
+- both games' area `0x00` is a developer warp harness, not a boot block
+- `LOADFILES` names a map, `LOADPIECES` a wall set indexed by id/3
+
+### Next
+
+Art. All 3,430 images are converted and the whole set is 679 KB against
+848 KB free, so it fits. The loaders need the same additive treatment the
+ECL and GEO directories got: wall sets first, since they are on screen
+constantly, then the title sequence, then portraits.
