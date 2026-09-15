@@ -429,3 +429,46 @@ addresses, see `docs/variable_map.md`); art needs downconversion from
 Maps were the easy content type — they need no conversion beyond dropping a
 2-byte header. Scripts need the variable mapping, and art needs
 downconversion from 256-colour VGA. Neither is blocked, both are work.
+
+---
+
+## CONFIRMED with real content: Matrix Cubed map 18 renders as predicted
+
+The checkerboard proved the write path. This proves the *decoder*.
+
+`roms/countdown_mcmap.gen` carries the genuine Matrix Cubed map 18 in area
+`0x10`. First look, it appeared unchanged — because the wall distribution
+computed from our own decoder is:
+
+```
+walls per column (west->east):  9  9  9  8  7  3  3  3  3  3  3  3  2  0  0  0
+walls per row  (north->south): 13 13 12  5  5  5  5  4  3  0  0  0  0  0  0  0
+```
+
+The southeast quarter of that map is genuinely empty — zero walls in the last
+three columns and the bottom seven rows. Standing there, there is nothing to
+see, and it looks exactly like the stock tarmac.
+
+The prediction made from that table was: head northwest, expect a long
+east-west wall run across the top and a complex of small rooms with doors in
+the corner.
+
+Aaron, having walked there: *"seems to be exactly as you described"*.
+
+### Why this is the stronger result
+
+The checkerboard showed that bytes we write reach the screen. This shows our
+interpretation of the format is correct, because a layout predicted in
+advance from the extracted data is what the engine actually drew. A decoder
+with the wall planes transposed, the nibbles swapped, or the row/column order
+wrong would still have produced *some* geometry — just not that geometry.
+
+It also retroactively validates the ASCII floor plans in
+`extracted/maps/`: they are what the game renders.
+
+### The first attempt, in hindsight
+
+The initial inconclusive test used this same ROM. The failure was not the
+data but the vantage point — the player was standing in the empty quarter.
+A test that depends on where someone happens to be standing is not a test,
+which is what the synthetic checkerboard fixed by filling all 256 squares.
