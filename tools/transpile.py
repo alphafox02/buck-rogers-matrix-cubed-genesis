@@ -303,6 +303,13 @@ def transpile(block: bytes, flags=None):
         # id indexes past the skill names into unrelated text -- DOS 46
         # (Astrogation) came out as "career and" in play.
         is_skill = ins.name in ("PARTY_SKILL_CHECK", "SKILL_CHECK")
+        # ON_GOTO/ON_GOSUB are jumps whose FIRST operand is not a target: it
+        # is the selector variable the engine indexes the target list with.
+        # Classifying operands by instruction rather than by position sent
+        # it through jump rebasing, where it missed the layout and fell back
+        # to GEN_BASE -- so every menu in the game read its choice from the
+        # code base instead of from the variable the menu had just written.
+        is_on = ins.name in ("ON_GOTO", "ON_GOSUB")
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
             if is_skill and k == 0 and arg.type == 0x00:
@@ -315,8 +322,9 @@ def transpile(block: bytes, flags=None):
             if arg.type == 0x80:
                 args.append(("str", pool.intern(str(arg.value))))
             elif arg.is_memory:
-                # Only a jump's operands are code addresses.
-                if is_jump:
+                # Only a jump's operands are code addresses, and not even
+                # all of those -- see is_on above.
+                if is_jump and not (is_on and k == 0):
                     args.append(("code", arg.value))
                 else:
                     args.append(("var", map_variable(arg.value, flags, report, off)))

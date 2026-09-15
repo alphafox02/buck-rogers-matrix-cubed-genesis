@@ -707,3 +707,64 @@ stays useful as a regression check.
 
 Confirmed working in play: area transitions, space travel, and combat
 encounters driven by transplanted scripts.
+
+### Every menu in the game was broken, and Salvation Port showed it
+
+Disassembling the transplanted area `0x12` to check its services menu:
+
+```
+035C: HMENU    [0x9E6F], 0x5, "BAR", "CLINIC", "DEPOT", "TRAINING", "PORT"
+03B2: ONGOTO   [0x6AF6], 0x6, [0x6EC0], ...
+```
+
+`HMENU` writes the player's choice to `0x9E6F`, and `ONGOTO` was reading
+its selector from `0x6AF6` — `CODE_BASE`.
+
+The transpiler classified jump operands **by instruction rather than by
+position**. `ON_GOTO` and `ON_GOSUB` are jumps, so every memory operand
+went through jump rebasing, including the first one, which is not a target
+at all but the selector variable. It missed the layout and fell back to
+`GEN_BASE`. The transpile report had been saying so all along —
+`target 0x7F79 not in layout`, three times in block 19 — and 0x7F79 is the
+variable, not an address.
+
+295 `ONGOTO`/`ONGOSUB` instructions across the 31 areas, every one of them
+wrong. Fixed by exempting operand 0 of those two opcodes from jump
+rebasing.
+
+### Why the ship could not move
+
+The play report was "it says I can't move, then continue puts me in space".
+Area `0x13` is Matrix Cubed's space hub, and its movement handler is a fuel
+check:
+
+```
+07D6: WRITE_MEM 10, [0x7F79]          ; cost of the move
+07F8: PARTY_SKILL_CHECK 46, ...       ; Astrogation
+0807: IF_LESS -> ADD 10               ; a failed roll costs 10 more
+081C: COMPARE 0, [0x4D1E]  IF_EQUALS -> "YOU CAN'T MOVE..."
+0832: COMPARE [0x7F79], [0x4D1E] IF_GREATER -> the same
+083E: SUBTRACT [0x7F79], [0x4D1E], [0x4D1E]
+```
+
+`0x4D1E` is fuel, and it was zero. Not a transplant defect: area `0x12` is
+Salvation Port, and refuelling is a menu choice there, not automatic —
+
+```
+1191: "YOU ARE IN THE SALVATION PORT AREA."
+11B1: SELECT_ACTION [0x7F79], 6
+1254: "YOUR SHIP IS REFUELED."   -> WRITE_MEM 450, [0x4D1E]
+```
+
+The boot was entering at area `0x10`, whose stub jumps straight to the
+space hub, skipping the port. Booting at `0x11` instead puts the player on
+the tarmac with Salvation Port reachable, which is the game's own order.
+
+### Genesis areas 0x00 and 0x01 are Matrix Cubed blocks 1 and 2
+
+Worth recording because it was assumed otherwise. Stock Genesis area `0x00`
+opens with `"DO YOU WANT TO START FROM SCRATCH OR USE THE JUMPER?"` and an
+`HMENU` of `"JUMPER"` / `"START"` — the same opening as Matrix Cubed's
+block 1. Genesis area `0x01` is the combat test room, the same as Matrix
+Cubed's block 2. They are direct counterparts, not collisions, so blocks 1
+and 2 can be transplanted after all.
