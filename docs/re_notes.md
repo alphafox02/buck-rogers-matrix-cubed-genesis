@@ -1770,3 +1770,106 @@ distant; the table and any new handlers need space in the first 64 KB.
 **Still unverified:** whether anything else reads `$17(a2)` and indexes a
 three-entry table with it -- portrait choice and the combat figure are the
 candidates. That has to be checked before a fourth race is safe.
+
+---
+
+## Picture directory: why expanding it kept failing
+
+Expanding the ECL picture directory was written, shelved as "causes
+intermittent crashes", and blamed on the wrong thing. Two separate faults:
+
+**The one that was recorded.** `expand_pictures.apply` gave every added id
+`ptrs[0]` as a placeholder, and `ptrs[0]` is id `0x20` -- the largest
+picture in the cartridge, six frames and 12 KB. An id the directory lacks
+takes the engine's own fallback at `0x082EC`, which picks something sensible
+and retries, so *missing* ids were always safe; adding one turned a safe
+miss into a hit on the biggest blob in the ROM. Real, but only a problem for
+ids added without artwork.
+
+**The one that was actually killing it.** After writing the id list the tool
+did `at += len(ids) + 2`, which leaves the longword tables wherever the id
+count happens to put them -- and an odd count puts them on an odd address:
+
+```
+ids 0x1B0000   ptrs 0x1B0043   meta 0x1B0147
+```
+
+The 68000 raises an address error on a longword read from an odd address, so
+`movea.l (a1), a0` in the loader at `0x0B81E` froze the machine the moment
+anything looked up a picture. **57 stock ids would have landed odd too**, so
+this could never have worked at any id count. It is not something the added
+ids provoked, and it is why the first attempt looked like an intermittent
+data problem when it was a hard CPU fault.
+
+Both directories are now expanded and aligned: 72 ECL pictures (57 stock
+plus 15) and 9 VIEW big pictures (7 stock plus 2), with the rule that the
+list of ids added and the list of ids injected are the same list.
+
+The budget is real and worth recording. The portrait path sets `0xB4CD` and
+the decompressor then targets a fixed buffer:
+
+```
+09DE2: lea.l  $b56a.w, a2     ; descriptor
+09DE6: lea.l  $a0f6.w, a1     ; destination
+09DF2: move.w #$370, d0       ; 880 tiles = 28,160 bytes
+```
+
+The injected portraits are 99 to 136 tiles each.
+
+## The figure-sheet index is unbounded — this is the junk on the floor
+
+The resource dispatcher splits on bit 7 of the id:
+
+```
+099BC: bclr.b #$7, d0      ; strip bit 7 and test it
+099C0: bne.b  $9964        ; it was set -> the figure-sheet path
+...
+09974: asl.w  #$2, d0
+09976: lea.l  $998c.l, a0  ; a table of exactly 12 entries
+0997C: movea.l (a0, d0.w), a0
+09982: bsr.w  $9bb6        ; decompress whatever that was
+```
+
+`bclr` leaves `d0` as `id & 0x7F`, so 0 to 127, and nothing checks it
+against the twelve entries at `0x0998C`-`0x099BC`. Any id at or above `0x80`
+whose low bits reach 12 reads a pointer from past the end of the table and
+decompresses it into the figure buffer -- coloured junk on the floor where a
+figure belongs. Countdown never trips it because its own ids are in range.
+
+`tools/softfail.py` clamps it, using a helper written over the freed
+`LoadFigure error` string at `0x09A02`.
+
+## The ECL dispatch does not bounds check the opcode
+
+```
+03346: move.b (a2)+, d1      ; any byte, 0..255
+03356: asl.w  #$1, d1
+03358: lea.l  $336e.l, a3    ; 94 entries, ending at 0x342A
+0335E: move.w (a3, d1.w), d1
+03362: jsr    (a3, d1.w)
+```
+
+The transpiler used to emit `0xFF` for an untranslatable opcode, on the
+grounds that it is outside the engine's 94 and therefore obvious in a dump.
+It is also a wild jump: `0xFF` reads a word from `0x356C`, inside the
+handler code well past the table, and jumps through it. There were 62, in
+nearly every area. They are now a `GOTO` to the following instruction.
+
+## Two decoders, and only one of them is the real one
+
+`ecl.disassemble` is a linear sweep and stops at the first data region --
+block 64 decodes 2.1% of its bytes that way, block 48 11.1%. That looks like
+most of the game being dropped and is not: `ecl.disassemble_block` is
+entry-point driven and gets 95.7% to 99.6% on the same blocks. Measure
+coverage with the function the transpiler actually calls.
+
+## Item ids need no translation at all
+
+Both games' item tables are the same 91 entries in the same order. The DOS
+one is 16-byte records in `ITEM0.DAX` and the Genesis one 10-byte records at
+`0xF17D8`; bytes 2-3 (DOS) and 0-1 (Genesis) are indices into a shared name
+fragment list, and decoding both gives 91 of 91 identical, `knife` at 1
+through `mercurian battle armor` at 88.
+
+This is the only table so far that matched outright. Skills, monsters,
+sounds, walls and art all needed hand-built maps.
