@@ -60,6 +60,27 @@ OPERANDS = ((0x0B7C2, "ids"), (0x0B7C8, "ptrs"), (0x0B7CE, "meta"),
 BIG_IDS, BIG_PTRS = 0x51302, 0x5130A
 BIG_OPERANDS = ((0x0B768, "ids"), (0x0B76E, "ptrs"))
 
+# A metadata record that really does hold still.
+#
+# Reusing an existing zero-count record was wrong. The count byte being zero
+# does not mean "no animation" -- the loader at 0x0B810 then takes `record+1`
+# as a single animation STREAM, and the stream is pairs of (frame, duration)
+# ending in a negative byte that jumps back to the start:
+#
+#     id 0x20: 00 | 00 08 01 01 02 01 03 01 04 02 05 01 01 01 | f1 00
+#              ^count  seven (frame, duration) pairs            ^-15, loops
+#
+# So every injected picture inherited id 0x20's six-frame cycle while having
+# exactly one frame, and stepped through five frames that do not exist. That
+# is the scrambled, moving portrait.
+#
+# This record is one pair that loops to itself: frame 0, held, for ever.
+STILL_AT = 0x1B0900
+STILL = bytes((0x00,        # count
+               0x00, 0x7F,  # frame 0, long duration
+               0xFD,        # -3: back to the same pair
+               0x00))
+
 NEW_TABLES = 0x1B0000        # tables here, artwork from 0x1C0000 up
 BIG_TABLES = 0x1B0800
 
@@ -76,12 +97,10 @@ def read(rom, ids_at=IDS, ptrs_at=PTRS, meta_at=META):
     return ids, ptrs, meta
 
 
-def static_meta(rom, meta):
-    """A metadata blob whose count byte is zero: the picture does not animate."""
-    for m in meta:
-        if rom[m] == 0:
-            return m
-    raise SystemExit("no zero-count metadata blob to reuse")
+def write_still(rom):
+    """Put the never-animates record in the ROM and return its address."""
+    rom[STILL_AT:STILL_AT + len(STILL)] = STILL
+    return STILL_AT
 
 
 def apply_big(rom: bytes, new_ids) -> bytes:
@@ -131,7 +150,7 @@ def apply(rom: bytes, new_ids) -> bytes:
     print(f"  directory holds {len(ids)} pictures, ids "
           f"0x{min(ids):02X}-0x{max(ids):02X}")
     blank = ptrs[0]
-    still = static_meta(bytes(rom), meta)
+    still = write_still(rom)
     added = []
     for pid in new_ids:
         if pid in ids:

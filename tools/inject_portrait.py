@@ -241,13 +241,16 @@ def main():
     # is what froze the team screen. Replaced pictures are pointed at a
     # zero-count script -- the portrait still shows, it simply does not
     # animate -- rather than inventing a format that has not been reversed.
+    # Not an existing zero-count record -- see the note in expand_pictures.
+    # A zero count still carries an animation stream, and borrowing another
+    # picture's stream makes a one-frame portrait cycle through frames it
+    # does not have. Write a record that genuinely holds still.
     still = None
     if meta_at is not None:
-        for k in range(len(ids)):
-            m = struct.unpack_from(">I", rom, meta_at + k * 4)[0]
-            if rom[m] == 0:
-                still = m
-                break
+        import expand_pictures
+        rom[expand_pictures.STILL_AT:
+            expand_pictures.STILL_AT + len(expand_pictures.STILL)] = expand_pictures.STILL
+        still = expand_pictures.STILL_AT
     # Slots expand_pictures.py added all share one placeholder pointer; those
     # take their frame count from the artwork instead of from what was there.
     seen = {}
