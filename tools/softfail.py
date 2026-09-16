@@ -32,6 +32,24 @@ So the branch is pointed at the routine's own clean exit instead:
 which unwinds the stack frame properly and returns. The picture simply does
 not appear. One byte: the branch displacement, 0xCC to 0xBA.
 
+A second site needs the same treatment, and play found it: the figure
+directory search itself.
+
+    099C6: lea.l   $9a14.l, a1     ; the combat figure directory
+    099CC: move.b  $4(a1), d1      ; this record's id
+    099D0: bmi.b   $99f6           ; ran off the end -> "LoadFigure error"
+    099D2: cmp.b   d0, d1
+    099D6: addq.l  #$8, a1         ; next record
+    099F0: movem.l (a7)+, d3-d4    ; the clean exit
+    099F4: rts
+
+Patching only the decompressor left this one reachable: SPRITE_START with
+an id Countdown has no figure for walks the directory to its terminator and
+prints the error before any decompression is attempted. Block 17 does
+exactly that -- `SPRITE_START 255, 0, 1, 0` right after the Sun King papers
+-- and it ended the run. Pointing the bmi at 0x099F0 makes the sprite simply
+not appear.
+
 This is a safety net, not a licence to leave ids unmapped -- a substituted
 sprite is better than a blank one, and docs/art_todo.md still tracks what
 needs injecting. It exists so that one unmapped id cannot cost a whole
@@ -53,6 +71,27 @@ BRANCH = 0x09C2A          # displacement word of the bmi.w at 0x09C28
 ERROR_TARGET = 0x09CF6
 CLEAN_EXIT = 0x09CE4
 
+# The figure-directory search. A short branch, so the displacement is the
+# second byte of the instruction itself.
+FIG_BRANCH = 0x099D0
+FIG_ERROR = 0x099F6
+FIG_CLEAN = 0x099F0
+
+
+def _short_branch(rom, at, want_error, clean, what):
+    if rom[at] != 0x6B:
+        raise SystemExit(f"expected bmi.b at 0x{at:05X}, found {rom[at]:02X}")
+    have = rom[at + 1]
+    if at + 2 + have != want_error:
+        raise SystemExit(f"{what} branch goes to 0x{at + 2 + have:05X}, "
+                         f"not the error site 0x{want_error:05X}")
+    new = clean - (at + 2)
+    if not 0 < new < 0x80:
+        raise SystemExit(f"{what} clean exit is out of short-branch range")
+    rom[at + 1] = new
+    print(f"  0x{at:05X} bmi.b: 0x{want_error:05X} -> 0x{clean:05X} "
+          f"(displacement 0x{have:02X} -> 0x{new:02X})  [{what}]")
+
 
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
@@ -65,6 +104,7 @@ def apply(rom: bytes) -> bytes:
     struct.pack_into(">h", rom, BRANCH, CLEAN_EXIT - BRANCH)
     print(f"  0x{BRANCH - 2:05X} bmi.w: 0x{ERROR_TARGET:05X} -> 0x{CLEAN_EXIT:05X} "
           f"(displacement 0x{have:04X} -> 0x{CLEAN_EXIT - BRANCH:04X})")
+    _short_branch(rom, FIG_BRANCH, FIG_ERROR, FIG_CLEAN, "LoadFigure")
     return integrity.repair(bytes(rom))
 
 
