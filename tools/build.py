@@ -187,7 +187,7 @@ def main():
 
     # Both games' area 0x00 is a developer warp menu rather than a boot
     # block, so replace it with a stub that just enters the game.
-    step("bootstub.py", *START)
+    step("bootstub.py", *START, "--intro")
     # A resource Countdown does not carry must not be able to end the run.
     step("softfail.py")
     step("retitle.py")

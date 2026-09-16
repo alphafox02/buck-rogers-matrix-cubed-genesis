@@ -51,7 +51,8 @@ Give the map area explicitly in that case; it defaults to the script's area,
 which is right for an ordinary room.
 
 Usage:
-    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [map] [facing] [--marker]
+    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [map] [facing]
+                [--intro] [--marker]
 """
 
 import struct
@@ -83,8 +84,47 @@ def _mem(v):
 
 MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 
+# The DOS game opens on a briefing before it drops the player into the
+# coronation, and the Genesis build went straight to the room. The text is
+# Matrix Cubed's own, lifted verbatim from block 19 at 0x0568 onward.
+#
+# It lives here rather than in block 19 because entering that block is not
+# safe: it never does NEWECL -- it IS the script for that stretch -- and its
+# movement hook is the ship, so a player who can move walks into space. The
+# stub runs before anyone can move, which is exactly what this needs.
+#
+# Pictures 101 and 57 are ids Countdown does not carry, so they substitute;
+# SOUND 0x30 is where tools/soundmap.py sends the cue block 19 fires here.
+INTRO_MUSIC = 0x30
+INTRO = [
+    (101, "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP THE COM SWITCH FOR A "
+          "FINAL BRIEFING. THE IMAGE OF BUCK ROGERS, NOW IN CHARGE OF SPECIAL "
+          "MISSIONS, APPEARS ONSCREEN."),
+    (57,  "'I KNOW YOU'RE ITCHING TO PULL MORE COMBAT DUTY INSTEAD OF "
+          "BABYSITTING THIS NEW SUN KING, LORD BERKELEY, BUT THIS MISSION IS "
+          "CRITICAL."),
+    (None, "'BERKELEY IS CALLING FOR A BROTHERHOOD BETWEEN ALL RACES. NOT "
+           "EVERYONE LIKES THE IDEA. PROTECT HIM FROM ANY ASSASSINATION "
+           "ATTEMPTS."),
+    (None, "'IF BERKELEY SUCCEEDS, WE WILL HAVE A UNITED FRONT AGAINST RAM. "
+           "TRY TO FORGE THIS NEW ALLIANCE. GOOD LUCK TEAM!'"),
+]
 
-def build(area, wallset, x, y, map_area=None, facing=0, marker=False):
+
+def _intro_pool():
+    """Text pool for the briefing, and each screen's offset into it."""
+    import transpile
+    pool = bytearray(b"\0")
+    screens = []
+    for pic, text in INTRO:
+        for k, chunk in enumerate(transpile._split(text)):
+            screens.append((pic if k == 0 else None, len(pool)))
+            pool += chunk.encode("ascii", "replace") + b"\0"
+    return bytes(pool), screens
+
+
+def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
+          intro=False):
     table = G.load_opcodes()
     op = {n: o for o, (n, _) in table.items()}
 
@@ -106,6 +146,14 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False):
         # 0x00?". Printed before anything else the stub does.
         out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
         out += bytes([op["CONTINUE"]])
+    if intro:
+        _, screens = _intro_pool()
+        out += bytes([op["SOUND"]]) + _imm(INTRO_MUSIC)
+        for pic, at in screens:
+            if pic is not None:
+                out += bytes([op["PICTURE"]]) + _imm(pic)
+            out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", at)
+            out += bytes([op["CONTINUE"]])
     out += bytes([op["NEWECL"]]) + _imm(area)
     out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
         + _imm(0x7F) + _imm(0xFF)
@@ -136,7 +184,8 @@ def main():
         sys.exit(f"area 0x{area:02X} not present")
 
     marker = "--marker" in sys.argv
-    code = build(area, wallset, x, y, map_area, facing, marker)
+    intro = "--intro" in sys.argv
+    code = build(area, wallset, x, y, map_area, facing, marker, intro)
     print(f"boot stub: {len(code)} bytes, entering area 0x{area:02X} "
           f"at ({x},{y}) with wall set {wallset}, "
           f"map area 0x{(area if map_area is None else map_area):02X}, "
@@ -152,7 +201,11 @@ def main():
     for off in sorted(found):
         print(f"    {off:04X}: {found[off].render()}")
 
-    text = b"\0" + MARKER + b"\0" if marker else b"\0"
+    if intro:
+        text, screens = _intro_pool()
+        print(f"  briefing: {len(screens)} screens, {len(text)} bytes of text")
+    else:
+        text = b"\0" + MARKER + b"\0" if marker else b"\0"
     for entry in ENTRIES:
         if entry not in ids or entry == area:
             continue
