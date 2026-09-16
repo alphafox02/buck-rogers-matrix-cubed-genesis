@@ -297,6 +297,56 @@ def map_variable(addr, flags, report, offset):
     return addr
 
 
+# The Genesis text window is four lines of thirty-five columns, greedily
+# word wrapped, and the engine does not clip: it writes a whole string into
+# the window and runs off the end back to the start, so anything longer
+# overwrites its own opening.
+#
+# Two screenshots pinned it exactly. Dr Romney's 156-character introduction
+# wrapped to
+#
+#     A MAN CARRYING A BUNDLE OF PAPERS   (33)
+#     RUSHES UP TO YOU. HE GRABS YOUR ARM (35)
+#     DESPERATELY. 'I AM DR. ROMNEY.      (30)
+#     PLEASE HELP ME GET TO THE SUN KING. (35)
+#
+# consuming 136 characters and leaving 19 -- and 19 is exactly what landed
+# on top of "A MAN CARRYING A BU". The next line of the same scene, 142
+# characters, wraps to 35/35/32/32 = 137 and leaves 4, and exactly 4 --
+# "YOU." -- appeared over "'TAK".
+#
+# So the limit is not a character count. It depends on where the words fall,
+# which is why a flat 137 was right for one string and wrong for the next.
+COLUMNS, LINES = 35, 4
+
+
+def _wrap(text):
+    """Greedy word wrap, the way the window does it."""
+    lines, cur = [], ""
+    for word in text.split(" "):
+        if not cur:
+            cur = word
+        elif len(cur) + 1 + len(word) <= COLUMNS:
+            cur += " " + word
+        else:
+            lines.append(cur)
+            cur = word
+        while len(cur) > COLUMNS:          # a single word wider than the line
+            lines.append(cur[:COLUMNS])
+            cur = cur[COLUMNS:]
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _split(text):
+    """Break a string into screenfuls of LINES wrapped lines."""
+    lines = _wrap(text)
+    if len(lines) <= LINES:
+        return [text]
+    return [" ".join(lines[i:i + LINES]) for i in range(0, len(lines), LINES)]
+
+
 def transpile(block: bytes, flags=None):
     """
     Translate one DOS ECL block.
@@ -356,6 +406,7 @@ def transpile(block: bytes, flags=None):
         # to GEN_BASE -- so every menu in the game read its choice from the
         # code base instead of from the variable the menu had just written.
         is_on = ins.name in ("ON_GOTO", "ON_GOSUB")
+        overflow = []
         # Matrix Cubed names art the Genesis cartridge does not carry, and an
         # unknown id crashes the picture loader rather than being ignored.
         # DOS names, not Genesis ones: PICTURE2 is what NAME_MAP turns into
@@ -458,7 +509,18 @@ def transpile(block: bytes, flags=None):
                 text = str(arg.value)
                 if shortened:
                     text = shortened.get(text, text)
-                args.append(("str", pool.intern(text)))
+                chunks = _split(text)
+                # Only a lone string argument is safe to continue onto a
+                # second screen -- an instruction carrying other operands
+                # would have them repeated, which is not what any of them
+                # mean. In practice the long ones are all PRINT.
+                if len(chunks) > 1 and len(ins.args) == 1:
+                    overflow = chunks[1:]
+                    report.append((off, "text",
+                                   f"{len(text)} chars -> {len(chunks)} screens"))
+                else:
+                    chunks = [text]
+                args.append(("str", pool.intern(chunks[0])))
             elif arg.type == 0x81:
                 # Still an address, so it goes through the variable map --
                 # but it must keep its type. ecl.Argument.is_memory reports
@@ -478,6 +540,17 @@ def transpile(block: bytes, flags=None):
         layout[off] = pos
         pieces.append((off, opcode, args))
         pos += size
+        # Continued screens follow, each behind a wait so the player reads
+        # one before the next replaces it. `layout[off]` already points at
+        # the first piece, so every jump to this instruction still lands on
+        # the start of the sequence.
+        for chunk in overflow:
+            cont, _ = gen["CONTINUE"]
+            pieces.append((off, cont, []))
+            pos += 1
+            more = [("str", pool.intern(chunk))]
+            pieces.append((off, opcode, more))
+            pos += 1 + sum(len(_encode_arg(k, v)) for k, v in more)
 
     # Pass 2: emit, rebasing jump targets through the new layout.
     out = bytearray()
