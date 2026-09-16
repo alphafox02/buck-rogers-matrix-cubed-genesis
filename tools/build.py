@@ -35,31 +35,30 @@ sys.path.insert(0, str(REPO / "tools"))
 import dax
 import soundmap
 
-# Where the player starts. Area 0x18 is block 24, and block 24 is the
-# game's actual opening -- not a room but the prologue cutscene, which is
-# what seeds the party with the story NPCs:
+# Where the player starts. Area 0x13 is block 19 -- the Mercury arrival,
+# which is where Matrix Cubed actually begins:
 #
-#     00040  LOAD_AREA_MAP   64, 127, 255
-#     00047  LOAD_AREA_DECO  7, 127, 127
-#     0004E  WRITE_MEM       13, [0xC04B]   ; party x
-#     00054  WRITE_MEM       8,  [0xC04C]   ; party y
-#     0005A  WRITE_MEM       3,  [0xC04D]   ; facing
-#     00060  SOUND_EVENT     129            ; music cue 0x81
-#     00068  NPC_ADD         55, 100        ; Buck Rogers and company
-#     00077  PRINT_CLEAR     "UNDER THE LEADERSHIP OF BUCK ROGERS, YOUR TEAM
-#                             MUST NOW EMBARK ON A MISSION OF SALVATION..."
+#     00545  WRITE_MEM       2, [0xC04C]     ; party y
+#     0054B  WRITE_MEM       0, [0xC04B]     ; party x
+#     00551  WRITE_MEM       1, [0xC04D]     ; facing
+#     00557  LOAD_AREA_MAP   17, 127, 255
+#     0055E  LOAD_AREA_DECO  5, 127, 127
+#     00565  SOUND_EVENT     130             ; music cue 0x82
+#     00568  PRINT_CLEAR     "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP
+#                             THE COM SWITCH FOR A FINAL BRIEFING..."
+#     005E4  PICTURE         57              ; Buck Rogers
+#     00737  TREASURE        8000, 20, {...} ; the starting kit
 #
-# It was area 0x11 before, which is block 17 -- the Mercury coronation. That
-# is a real scene and it plays, but it is not the beginning: the party
-# arrives there already knowing who Buck Rogers is, because the prologue
-# that introduces him was never run.
+# Two earlier guesses were wrong and both are worth recording. Area 0x11 is
+# block 17, the coronation room -- the right ROOM, since block 19 loads map
+# 17 too, but entered with the briefing skipped. Area 0x18 is block 24,
+# which reads like a prologue and is actually the DEMO: its narration is
+# box copy ("THIS ADVENTURE TAKES YOU TO THE FURTHEST REACHES OF CIVILIZED
+# SPACE"), and it has no map of its own at all.
 #
-# Block 24 has no map of its own (GEO1 has no map 24); it loads map 64,
-# which this build already installs at geo area 0x40. Wall set and position
-# match what the script sets for itself.
-# The fifth value is the MAP area: block 24 has no map of its own and
-# loads map 64, which this build installs at geo area 0x40.
-START = ("0x18", "7", "13", "8", "0x40")
+# The fifth value is the MAP area, which block 19 names separately: it runs
+# as area 0x13 but loads map 17, installed here at geo area 0x11.
+START = ("0x13", "5", "0", "2", "0x11")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
