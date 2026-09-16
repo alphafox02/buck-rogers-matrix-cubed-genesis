@@ -33,6 +33,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
 import dax
+import soundmap
 
 # Where the player starts. Area 0x11 is the station the story opens on;
 # (8,1) is one of the 49 squares in its map with no wall on any side, and
@@ -60,7 +61,7 @@ PORTRAITS = {
     0x61: "PIC1/097",
 }
 
-# Music. Only the two slots a player actually hears at the front of the game:
+# Music. Every slot the game can reach with a Matrix Cubed song.
 # slot 2 is the intro (SOUND 0x2E) and slot 10 the menu and team setup
 # (SOUND 0x36). Replacing all fourteen was tried and crashed the machine
 # about two runs in three, while one slot and two slots both measure clean,
@@ -70,7 +71,12 @@ PORTRAITS = {
 # BUCKA, BUCKB and BUCKC hold the SAME seven songs in three arrangements for
 # different DOS sound cards -- their tick lengths match to within two -- and
 # BUCKA is the richest.
-MUSIC = {2: ("BUCKA.XMI", 0), 10: ("BUCKA.XMI", 6)}
+# slot 2 is the intro (SOUND 0x2E) and slot 10 the menu (SOUND 0x36); the
+# rest are the slots tools/soundmap.py sends Matrix Cubed's six music cues
+# to, so every cue in the scripts now reaches a Matrix Cubed song.
+MUSIC = {2: ("BUCKA.XMI", 0)}
+MUSIC.update({slot: ("BUCKA.XMI", song)
+              for slot, song in sorted(soundmap.SONGS.items())})
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
