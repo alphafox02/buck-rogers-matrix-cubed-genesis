@@ -1697,3 +1697,76 @@ is the only assignment that uses every song exactly once.
 are rendered to `audio/song0.wav` through `audio/song6.wav`, so reaching any
 scene in the table above and hearing which one plays decides it. DOSBox is
 not installed on this machine.
+
+---
+
+## Character creation: what a race and a career actually are
+
+The creation screen is menu 1. Menus resolve through a pair table at
+`0x13CC6`:
+
+```
+13CA0: asl.w   #$2, d0        ; menu number * 4
+13CA2: lea.l   $13cc6.l, a2
+13CA8: move.w  $2(a2,d0.w), d1
+13CB8: adda.w  (a2,d0.w), a2
+13CBC: bsr.w   $1391a
+```
+
+`base + second word` is the option list: a four-byte box (x, y, w, h) then
+16-bit string ids ending at `0xFFFF`. Menu 1's list is at `0x13CDA`, box
+19/22/34/22, and reads
+
+```
+human | desert runner | tinker | rocket jock | medic | warrior | rogue
+| male | female | reroll stats | done
+```
+
+Strings come from a 134-entry offset table at `0x11DC4`, base-relative to
+itself. Entries 19 to 22 are `martian`, `venusian`, `mercurian` and
+`lunarian` -- **the Matrix Cubed race names are already in the ROM**.
+
+The selection runs through a jump table at `0x606`:
+
+```
+005E6: moveq   #$1, d0
+005E8: jsr     $13c9c.l       ; open menu 1
+005F8: asl.w   #$1, d0
+005FA: lea.l   $606.l, a0
+00600: adda.w  (a0, d0.w), a0
+00604: jmp     (a0)
+```
+
+| option | handler | what it writes |
+|---|---|---|
+| human | 0x006A2 | move `$24`=8, clears `$0C`, race 1 |
+| desert runner | 0x006BC | move `$24`=10, `$2A`=3, `$2C`=1, race 2, falls into warrior |
+| tinker | 0x006D6 | move `$24`=6, clears `$2C`, race 3, falls into medic |
+| rocket jock | 0x00714 | career 1, `$26`=2, `$1E`=1250 |
+| medic | 0x00728 | career 2, `$26`=2, `$1E`=1500 |
+| warrior | 0x0073C | career 3, `$26`=4, `$1E`=2000 |
+| rogue | 0x00750 | career 4, `$26`=2, `$1E`=1250 |
+
+Race is set by `0x6E8` into `$17(a2)` and career by `0x704` into `$18(a2)`,
+both small integers in the character record. `$1E` is the experience needed
+for the next level and `$26` looks like the hit die.
+
+**This is the good news: neither race nor career is an index into a
+fixed-size table.** Each option is a handler that writes its own stat
+modifiers inline. So adding one is not blocked by a three-entry table
+somewhere; it is three concrete edits:
+
+1. insert the string id into the `0xFFFF`-terminated list at `0x13CDA`
+2. add an entry to the jump table at `0x606`
+3. write a handler that sets `$17(a2)` and the stat fields
+
+**The one real obstacle** is that the jump table is 11 entries, 22 bytes,
+and the code resumes at `0x61C` immediately after it -- there is no room to
+grow in place. The table has to move, and because the dispatch is
+`adda.w (a0,d0.w), a0` the offsets are 16-bit signed, so a relocated table
+must stay within 32 KB of its handlers. Expanded ROM above 1 MB is far too
+distant; the table and any new handlers need space in the first 64 KB.
+
+**Still unverified:** whether anything else reads `$17(a2)` and indexes a
+three-entry table with it -- portrait choice and the combat figure are the
+candidates. That has to be checked before a fourth race is safe.
