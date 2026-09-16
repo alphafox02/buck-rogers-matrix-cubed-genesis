@@ -172,24 +172,19 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         # 0x00?". Printed before anything else the stub does.
         out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
         out += bytes([op["CONTINUE"]])
-    out += bytes([op["NEWECL"]]) + _imm(area)
-    out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
-        + _imm(0x7F) + _imm(0xFF)
-    out += bytes([op["LOADPIECES"]]) + _imm(wallset)
-    out += bytes([op["SAVE"]]) + _imm(y) + _mem(DUNGEON_Y)
-    out += bytes([op["SAVE"]]) + _imm(x) + _mem(DUNGEON_X)
-    out += bytes([op["SAVE"]]) + _imm(facing) + _mem(DUNGEON_DIR)
-    out += bytes([op["NEWREGION"]]) + b"".join(
-        _imm(v) for v in (0, 1, 0, 0, 0x0F, 0x0F))
-    # The briefing plays AFTER the area is set up, not before.
+    # The briefing plays BEFORE the area is set up, and has to.
     #
-    # Run first, it painted over the team-select screen: text across the top
-    # and the empty character slots showing through underneath, with nowhere
-    # for PICTURE to draw. The DOS game shows its briefing over the ordinary
-    # game screen -- picture window, party roster, text box -- so the area
-    # has to exist before any of it is printed. NEWECL through NEWREGION
-    # build that screen; the stub keeps running afterwards, and EXIT at the
-    # end is what finally hands the player control.
+    # Moving it after NEWECL/NEWREGION was tried, to get it drawn over the
+    # ordinary game screen -- picture window, party roster, text box -- the
+    # way the DOS game shows it. Nothing played at all: the player went
+    # straight from "begin adventure" into the room. Setting up the region
+    # hands control to the area, and whatever the stub still has queued
+    # after that never runs.
+    #
+    # So it runs first, over the team-select screen, which means text across
+    # the top with the empty character slots showing through and nowhere for
+    # PICTURE to draw. Plain, but it happens -- and a briefing that plays
+    # beats a better-looking one that does not.
     if intro:
         _, before, after = _intro_pool()
 
@@ -207,6 +202,16 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
             + _imm(len(STARTING_KIT)) + b"".join(_imm(i) for i in STARTING_KIT)
         for pic, at in after:
             screen(pic, at)
+
+    out += bytes([op["NEWECL"]]) + _imm(area)
+    out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
+        + _imm(0x7F) + _imm(0xFF)
+    out += bytes([op["LOADPIECES"]]) + _imm(wallset)
+    out += bytes([op["SAVE"]]) + _imm(y) + _mem(DUNGEON_Y)
+    out += bytes([op["SAVE"]]) + _imm(x) + _mem(DUNGEON_X)
+    out += bytes([op["SAVE"]]) + _imm(facing) + _mem(DUNGEON_DIR)
+    out += bytes([op["NEWREGION"]]) + b"".join(
+        _imm(v) for v in (0, 1, 0, 0, 0x0F, 0x0F))
     out += bytes([op["EXIT"]])
     return bytes(out)
 
