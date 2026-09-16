@@ -43,8 +43,15 @@ The engine picks its entry area at 0x04146, and there is more than one:
 Choosing "load default team" boots area 0x10, so a stub in 0x00 alone is
 never reached. The stub goes into every new-game entry.
 
+The map is named separately from the script, because they are not always
+the same. A cutscene block carries no geometry of its own -- block 24, the
+game's opening, has no map 24 in GEO1 and does `LOAD_AREA_MAP 64` itself --
+so `LOADFILES <area>` would ask the engine for a map that does not exist.
+Give the map area explicitly in that case; it defaults to the script's area,
+which is right for an ordinary room.
+
 Usage:
-    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [--marker]
+    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [map] [--marker]
 """
 
 import struct
@@ -77,7 +84,7 @@ def _mem(v):
 MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 
 
-def build(area, wallset, x, y, marker=False):
+def build(area, wallset, x, y, map_area=None, marker=False):
     table = G.load_opcodes()
     op = {n: o for o, (n, _) in table.items()}
 
@@ -100,7 +107,8 @@ def build(area, wallset, x, y, marker=False):
         out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
         out += bytes([op["CONTINUE"]])
     out += bytes([op["NEWECL"]]) + _imm(area)
-    out += bytes([op["LOADFILES"]]) + _imm(area) + _imm(0x7F) + _imm(0xFF)
+    out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
+        + _imm(0x7F) + _imm(0xFF)
     out += bytes([op["LOADPIECES"]]) + _imm(wallset)
     out += bytes([op["SAVE"]]) + _imm(y) + _mem(DUNGEON_Y)
     out += bytes([op["SAVE"]]) + _imm(x) + _mem(DUNGEON_X)
@@ -116,6 +124,8 @@ def main():
         sys.exit(__doc__)
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
     area, wallset, x, y = (int(v, 0) for v in sys.argv[3:7])
+    rest = [a for a in sys.argv[7:] if not a.startswith("--")]
+    map_area = int(rest[0], 0) if rest else None
 
     rom = src.read_bytes()
     blocks = [(bid, genesis_ecl.decompress(c), genesis_ecl.decompress(t))
@@ -125,9 +135,10 @@ def main():
         sys.exit(f"area 0x{area:02X} not present")
 
     marker = "--marker" in sys.argv
-    code = build(area, wallset, x, y, marker)
+    code = build(area, wallset, x, y, map_area, marker)
     print(f"boot stub: {len(code)} bytes, entering area 0x{area:02X} "
-          f"at ({x},{y}) with wall set {wallset}")
+          f"at ({x},{y}) with wall set {wallset}, "
+          f"map area 0x{(area if map_area is None else map_area):02X}")
 
     # Verify the stub reads back as the instructions it was meant to be.
     table = G.load_opcodes()

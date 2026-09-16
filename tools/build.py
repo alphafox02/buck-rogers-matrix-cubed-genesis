@@ -57,7 +57,9 @@ import soundmap
 # Block 24 has no map of its own (GEO1 has no map 24); it loads map 64,
 # which this build already installs at geo area 0x40. Wall set and position
 # match what the script sets for itself.
-START = ("0x18", "7", "13", "8")
+# The fifth value is the MAP area: block 24 has no map of its own and
+# loads map 64, which this build installs at geo area 0x40.
+START = ("0x18", "7", "13", "8", "0x40")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
