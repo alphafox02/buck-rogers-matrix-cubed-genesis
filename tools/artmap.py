@@ -33,11 +33,14 @@ PICTURES = (32, 35, 58, 59, 64, 65, 66, 67, 68, 70, 71, 75, 76, 77, 79, 80, 81, 
 
 BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 
-# Nothing is added. The directory is left at its stock size: see the note in
-# build.py about what adding ids did. An id the directory lacks is better
-# left to the engine's own fallback at 0x082EC, which picks a default and
-# retries, than turned into a hit on something the wrong size.
-AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS)
+# Ids tools/expand_pictures.py adds, every one of which build.py also injects
+# artwork for. The rule that matters is that the two lists stay equal: an
+# added id with no art inherits the directory's first entry, which is the
+# largest picture in the cartridge, and that is what crashed the first
+# attempt at expanding this.
+ADDED = (0x39, 0x60, 0x62, 0x65, 0x66, 0x67, 0x68, 0x6B)
+
+AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS) | frozenset(ADDED)
 
 
 def picture(pid):

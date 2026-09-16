@@ -100,6 +100,18 @@ def apply_big(rom: bytes, new_ids) -> bytes:
 
 
 def apply(rom: bytes, new_ids) -> bytes:
+    """
+    Add ids to the directory.
+
+    Every id added MUST have artwork injected in the same build. An added id
+    with no art of its own inherits `ptrs[0]`, which is id 0x20 -- the
+    largest picture in the ROM, six frames and 12 KB. That is what made the
+    first attempt at this crash: an id the directory lacked used to take the
+    engine's own fallback at 0x082EC, which picks something sensible and
+    retries, and adding the id turned every one of those safe misses into a
+    hit on the biggest blob in the cartridge. The caller is responsible for
+    following this with the matching injection.
+    """
     rom = bytearray(rom)
     ids, ptrs, meta = read(bytes(rom))
     print(f"  directory holds {len(ids)} pictures, ids "

@@ -85,6 +85,22 @@ PORTRAITS = {
     0x56: "PIC1/086",   0x5B: "PIC1/091",   0x5C: "PIC8/092",
     0x5D: "PIC1/093",   0x5E: "PIC1/094",   0x5F: "PIC1/095",
     0x61: "PIC1/097",
+}
+
+# Ids the stock directory does NOT hold, added by tools/expand_pictures.py.
+# These are what the opening scenes name -- Buck Rogers is 57, Mercury 101 --
+# and until now every one of them missed the directory and drew whatever the
+# engine's fallback picked, which is the wrong art in the portrait window.
+#
+# This list and the expansion list are the same list on purpose. An added id
+# with no art inherits the directory's first entry, the largest picture in
+# the cartridge, and that is what crashed the earlier attempt.
+ADDED_PORTRAITS = {
+    0x39: "PIC1/057",   # Buck Rogers, the briefing
+    0x60: "PIC1/096",   0x62: "PIC1/098",
+    0x65: "PIC1/101",   # Mercury from orbit
+    0x66: "PIC1/102",   0x67: "PIC1/103",
+    0x68: "PIC1/104",   0x6B: "PIC1/107_5",
     # NOT 0x6F. It is the one opening-area picture already in the directory,
     # so it looked like a free win, but no Countdown script references it --
     # meaning whatever loads it is engine UI, and the team-selection screen
@@ -163,6 +179,7 @@ def main():
     bigpics = "--no-bigpic" not in sys.argv
     portraits = "--no-portrait" not in sys.argv
     music = "--no-music" not in sys.argv
+    expand = "--no-expand" not in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path(argv[0]) if argv else DEFAULT_OUT
 
@@ -211,8 +228,14 @@ def main():
     # Replacing what is already there has no such effect: same id, same
     # budget, art that fits.
     if art and portraits:
+        shown = dict(PORTRAITS)
+        if expand:
+            # The directory grows and the new ids are injected in the same
+            # breath -- see the note on ADDED_PORTRAITS.
+            step("expand_pictures.py", *[f"0x{k:02X}" for k in sorted(ADDED_PORTRAITS)])
+            shown.update(ADDED_PORTRAITS)
         step("inject_portrait.py",
-             *[f"0x{k:02X}:{v}" for k, v in sorted(PORTRAITS.items())])
+             *[f"0x{k:02X}:{v}" for k, v in sorted(shown.items())])
     if art and bigpics:
         # The intro screens are named by lea operands rather than a
         # directory, so replacing them needs no table to grow.
