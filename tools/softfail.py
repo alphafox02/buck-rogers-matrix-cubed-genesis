@@ -47,8 +47,25 @@ Patching only the decompressor left this one reachable: SPRITE_START with
 an id Countdown has no figure for walks the directory to its terminator and
 prints the error before any decompression is attempted. Block 17 does
 exactly that -- `SPRITE_START 255, 0, 1, 0` right after the Sun King papers
--- and it ended the run. Pointing the bmi at 0x099F0 makes the sprite simply
-not appear.
+-- and it ended the run.
+
+Sending the branch to the clean exit at 0x099F0 was tried and was WORSE. It
+skips `movea.l (a1), a0`, so the caller carries on with whatever a0 held and
+writes through it: the machine froze on a write to 0xDFFFFE. A loader that
+returns without loading is not a safe failure when its caller expects a
+pointer back.
+
+So the error path is replaced with what the picture loader at 0x0B7D6
+already does on a miss -- substitute a default and retry. The twelve bytes
+of `lea` plus `jsr` become
+
+    099F6: lea.l  $9a14.l, a1      ; back to the first record
+    099FC: bra.b  $99da            ; and load that one
+
+Record 0 is a real figure (pointer 0x075E10, chunk 0x12), so a0 comes back
+valid and the decompressor is handed actual data. The wrong character
+appears rather than none, which is the same bargain the art substitution
+makes everywhere else.
 
 This is a safety net, not a licence to leave ids unmapped -- a substituted
 sprite is better than a blank one, and docs/art_todo.md still tracks what
@@ -71,26 +88,29 @@ BRANCH = 0x09C2A          # displacement word of the bmi.w at 0x09C28
 ERROR_TARGET = 0x09CF6
 CLEAN_EXIT = 0x09CE4
 
-# The figure-directory search. A short branch, so the displacement is the
-# second byte of the instruction itself.
-FIG_BRANCH = 0x099D0
+# The figure-directory search: its error path, the directory it walks, and
+# the instruction that loads a record once one is found.
 FIG_ERROR = 0x099F6
-FIG_CLEAN = 0x099F0
+FIG_ERROR_END = 0x09A02          # where "LoadFigure error" itself starts
+FIG_DIRECTORY = 0x09A14
+FIG_LOAD = 0x099DA
+FIG_ORIGINAL = bytes.fromhex("41f900009a024eb9000132a6")
 
 
-def _short_branch(rom, at, want_error, clean, what):
-    if rom[at] != 0x6B:
-        raise SystemExit(f"expected bmi.b at 0x{at:05X}, found {rom[at]:02X}")
-    have = rom[at + 1]
-    if at + 2 + have != want_error:
-        raise SystemExit(f"{what} branch goes to 0x{at + 2 + have:05X}, "
-                         f"not the error site 0x{want_error:05X}")
-    new = clean - (at + 2)
-    if not 0 < new < 0x80:
-        raise SystemExit(f"{what} clean exit is out of short-branch range")
-    rom[at + 1] = new
-    print(f"  0x{at:05X} bmi.b: 0x{want_error:05X} -> 0x{clean:05X} "
-          f"(displacement 0x{have:02X} -> 0x{new:02X})  [{what}]")
+def _figure_fallback(rom):
+    at = FIG_ERROR
+    if bytes(rom[at:FIG_ERROR_END]) != FIG_ORIGINAL:
+        raise SystemExit(f"0x{at:05X} is not the LoadFigure error path")
+    patch = bytearray()
+    patch += b"\x43\xf9" + struct.pack(">I", FIG_DIRECTORY)   # lea.l dir, a1
+    disp = FIG_LOAD - (at + len(patch) + 2)
+    if not -0x80 <= disp < 0:
+        raise SystemExit("figure load is out of short-branch range")
+    patch += bytes([0x60, disp & 0xFF])                        # bra.b load
+    patch += b"\x4e\x71" * ((FIG_ERROR_END - at - len(patch)) // 2)
+    rom[at:at + len(patch)] = patch
+    print(f"  0x{at:05X} LoadFigure error -> fall back to figure record 0 "
+          f"(lea 0x{FIG_DIRECTORY:05X}, bra 0x{FIG_LOAD:05X})")
 
 
 def apply(rom: bytes) -> bytes:
@@ -104,7 +124,7 @@ def apply(rom: bytes) -> bytes:
     struct.pack_into(">h", rom, BRANCH, CLEAN_EXIT - BRANCH)
     print(f"  0x{BRANCH - 2:05X} bmi.w: 0x{ERROR_TARGET:05X} -> 0x{CLEAN_EXIT:05X} "
           f"(displacement 0x{have:04X} -> 0x{CLEAN_EXIT - BRANCH:04X})")
-    _short_branch(rom, FIG_BRANCH, FIG_ERROR, FIG_CLEAN, "LoadFigure")
+    _figure_fallback(rom)
     return integrity.repair(bytes(rom))
 
 
