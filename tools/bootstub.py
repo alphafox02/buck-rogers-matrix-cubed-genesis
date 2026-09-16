@@ -126,6 +126,28 @@ MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 ARRIVAL = ("YOU STEP OUT ONTO THE EXPANSIVE DOCK AND FIND IT THRONGED WITH "
            "PEOPLE DRESSED FOR THE CORONATION. A MAN APPROACHES.")
 
+# And the man who approaches. In the DOS game he speaks the instant you
+# arrive; here the stub prints the arrival line and hands over, so block 17's
+# copy of the scene waits behind a step and the player is just left standing
+# on the dock.
+#
+# This is block 17's own scene, lifted from 0x081A:
+#
+#     0081A  PICTURE     86
+#     0081D  OR          4, [0x4C2F], [0x4C2F]    ; remember he has spoken
+#     00826  PRINT_CLEAR "'WELCOME TO CALORIS...'"
+#     008B4  PICTURE2    0, 255                   ; clear the window
+#
+# The flag matters: without it block 17 plays the scene again on the first
+# step. DOS 0x4C2F is Genesis 0x9859, so the same bit can be set here, and
+# OR rather than a plain write because the other bits of that byte are in
+# use elsewhere in the block.
+CHANCELLOR_PICTURE = 86
+CHANCELLOR_FLAG, CHANCELLOR_BIT = 0x9859, 4
+CHANCELLOR = ("'WELCOME TO CALORIS. I AM LORD BERKELEY'S CHANCELLOR, ALPHONSE "
+              "DE SADE. LORD BERKELEY SENDS HIS GREETINGS. THE CORONATION "
+              "WILL BEGIN SHORTLY.' HE TURNS HIS BACK AND QUICKLY MOVES AWAY.")
+
 STARTING_CREDITS = 8000
 STARTING_KIT = [22, 22, 22, 22, 23, 23, 33, 33, 33, 8,
                 8, 15, 6, 6, 6, 18, 10, 10, 35, 35]
@@ -161,6 +183,9 @@ def _intro_pool():
             pool += chunk.encode("ascii", "replace") + b"\0"
     for chunk in transpile._split(ARRIVAL):
         after.append((None, len(pool)))
+        pool += chunk.encode("ascii", "replace") + b"\0"
+    for k, chunk in enumerate(transpile._split(CHANCELLOR)):
+        after.append((CHANCELLOR_PICTURE if k == 0 else None, len(pool)))
         pool += chunk.encode("ascii", "replace") + b"\0"
     return bytes(pool), before, after
 
@@ -237,6 +262,10 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         out += bytes([op["COMBAT"]])
         for pic, at in after:
             screen(pic, at)
+        # Mark him as having spoken, so block 17 does not replay the scene.
+        out += bytes([op["OR"]]) + _imm(CHANCELLOR_BIT) \
+            + _mem(CHANCELLOR_FLAG) + _mem(CHANCELLOR_FLAG)
+        out += bytes([op["VIEW"]]) + _imm(0x00) + _imm(0xFF)
 
     out += bytes([op["NEWECL"]]) + _imm(area)
     out += bytes([op["NEWREGION"]]) + b"".join(
