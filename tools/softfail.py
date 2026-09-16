@@ -67,6 +67,29 @@ valid and the decompressor is handed actual data. The wrong character
 appears rather than none, which is the same bargain the art substitution
 makes everywhere else.
 
+A third site draws the junk on the floor that a play session kept
+photographing. The resource dispatcher splits on bit 7 of the id:
+
+    099BC: bclr.b #$7, d0      ; strip bit 7 and test it
+    099C0: bne.b  $9964        ; it was set -> the figure-sheet path
+    ...
+    09968: ext.w  d0
+    09974: asl.w  #$2, d0
+    09976: lea.l  $998c.l, a0  ; a table of exactly 12 entries
+    0997C: movea.l (a0, d0.w), a0
+    09982: bsr.w  $9bb6        ; decompress whatever that was
+
+`bclr` leaves d0 as `id & 0x7F`, so 0 to 127, and nothing checks it against
+the twelve entries at 0x0998C-0x099BC. Any id at or above 0x80 whose low
+bits reach 12 reads a pointer from past the end of the table -- the figure
+directory, and then the code after it -- and decompresses it into the
+figure buffer. Countdown never does this; Matrix Cubed's ids are not the
+same ids.
+
+The `ext.w d0` and `movea.l a3, a1` at 0x09968 become a call to a helper
+written over the freed "LoadFigure error" string, which does the same two
+things with a clamp between them.
+
 This is a safety net, not a licence to leave ids unmapped -- a substituted
 sprite is better than a blank one, and docs/art_todo.md still tracks what
 needs injecting. It exists so that one unmapped id cannot cost a whole
@@ -113,6 +136,33 @@ def _figure_fallback(rom):
           f"(lea 0x{FIG_DIRECTORY:05X}, bra 0x{FIG_LOAD:05X})")
 
 
+# The figure-sheet path, its 12-entry table, and the freed error string the
+# bounds check is written into.
+SHEET_CALL = 0x09968
+SHEET_ORIGINAL = bytes.fromhex("4880224b")     # ext.w d0 / movea.l a3, a1
+SHEET_ENTRIES = 12
+HELPER = 0x09A02
+HELPER_LIMIT = 0x09A14                         # the figure directory starts here
+
+
+def _sheet_bounds(rom):
+    if bytes(rom[SHEET_CALL:SHEET_CALL + 4]) != SHEET_ORIGINAL:
+        raise SystemExit(f"0x{SHEET_CALL:05X} is not the figure-sheet entry")
+    helper = (b"\x48\x80"                       # ext.w   d0
+              + b"\x0c\x40" + struct.pack(">H", SHEET_ENTRIES)   # cmpi.w #12, d0
+              + b"\x6d\x02"                     # blt.b   .ok
+              + b"\x70\x00"                     # moveq   #0, d0
+              + b"\x22\x4b"                     # .ok: movea.l a3, a1
+              + b"\x4e\x75")                    # rts
+    if HELPER + len(helper) > HELPER_LIMIT:
+        raise SystemExit("bounds-check helper does not fit before the directory")
+    rom[HELPER:HELPER + len(helper)] = helper
+    disp = HELPER - (SHEET_CALL + 2)
+    rom[SHEET_CALL:SHEET_CALL + 4] = b"\x61\x00" + struct.pack(">h", disp)
+    print(f"  0x{SHEET_CALL:05X} figure-sheet index now clamped to "
+          f"{SHEET_ENTRIES} entries (helper at 0x{HELPER:05X}, {len(helper)} bytes)")
+
+
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
     if rom[BRANCH - 2] != 0x6B or rom[BRANCH - 1] != 0x00:
@@ -125,6 +175,7 @@ def apply(rom: bytes) -> bytes:
     print(f"  0x{BRANCH - 2:05X} bmi.w: 0x{ERROR_TARGET:05X} -> 0x{CLEAN_EXIT:05X} "
           f"(displacement 0x{have:04X} -> 0x{CLEAN_EXIT - BRANCH:04X})")
     _figure_fallback(rom)
+    _sheet_bounds(rom)
     return integrity.repair(bytes(rom))
 
 
