@@ -96,8 +96,24 @@ MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 # Pictures 101 and 57 are ids Countdown does not carry, so they substitute;
 # SOUND 0x30 is where tools/soundmap.py sends the cue block 19 fires here.
 # The kit the DOS game hands the party at the end of the briefing, straight
-# from block 19: `TREASURE 8000, 20, {...}`. It opens the same take/divvy
-# menu the DOS game shows.
+# from block 19: `CLEAR_MON`, `TREASURE 8000, 20, {...}`, `COMBAT`.
+#
+# All three matter. TREASURE only fills a buffer -- credits to 0xBA34, the
+# count to 0xB9F3 and the ids to 0xB9F4 -- and shows nothing:
+#
+#     0392C: bsr.w  $404a          ; credits
+#     03934: bsr.w  $404a          ; count
+#     0393E: lea.l  $b9f4.w, a3    ; the item list
+#     03964: move.b d0, (a3)+      ; each id in turn
+#     03976: rts
+#
+# COMBAT is what presents the take-and-divvy screen. Every one of the five
+# TREASURE calls in Countdown's own scripts is followed immediately by
+# COMBAT, and so is block 19's. Without it the kit is handed over invisibly
+# and the player never sees an item.
+#
+# CLEARMONSTERS first, so COMBAT has nothing to fight and goes straight to
+# the spoils, which is what block 19 relies on too.
 #
 # The item ids need no translation. Both games' item tables are the same 91
 # entries in the same order -- the DOS one is 16-byte records in
@@ -198,8 +214,10 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         out += bytes([op["SOUND"]]) + _imm(INTRO_MUSIC)
         for pic, at in before:
             screen(pic, at)
+        out += bytes([op["CLEARMONSTERS"]])
         out += bytes([op["TREASURE"]]) + _imm(STARTING_CREDITS) \
             + _imm(len(STARTING_KIT)) + b"".join(_imm(i) for i in STARTING_KIT)
+        out += bytes([op["COMBAT"]])
         for pic, at in after:
             screen(pic, at)
 
