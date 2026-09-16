@@ -38,7 +38,8 @@ BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 # added id with no art inherits the directory's first entry, which is the
 # largest picture in the cartridge, and that is what crashed the first
 # attempt at expanding this.
-ADDED = (0x39, 0x60, 0x62, 0x65, 0x66, 0x67, 0x68, 0x6B)
+ADDED = (0x02, 0x04, 0x1D, 0x1E, 0x1F, 0x37, 0x39,
+         0x60, 0x62, 0x63, 0x65, 0x66, 0x67, 0x68, 0x6B)
 
 AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS) | frozenset(ADDED)
 

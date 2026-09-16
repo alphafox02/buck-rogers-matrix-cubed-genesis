@@ -101,6 +101,14 @@ ADDED_PORTRAITS = {
     0x65: "PIC1/101",   # Mercury from orbit
     0x66: "PIC1/102",   0x67: "PIC1/103",
     0x68: "PIC1/104",   0x6B: "PIC1/107_5",
+    # The rest of what the scripts name and the cartridge lacks, ordered by
+    # how often they are used: 0x1D is called 41 times and 0x37 21 times, so
+    # these are not corner cases -- they are faces the player meets over and
+    # over. Ids below 0x20 are fine; the loader searches the list linearly
+    # and does not care what range the stock ids happen to occupy.
+    0x02: "PIC1/002",   0x04: "PIC1/004",   0x1D: "PIC1/029",
+    0x1E: "PIC1/030",   0x1F: "PIC1/031",   0x37: "PIC1/055",
+    0x63: "PIC1/099",
     # NOT 0x6F. It is the one opening-area picture already in the directory,
     # so it looked like a free win, but no Countdown script references it --
     # meaning whatever loads it is engine UI, and the team-selection screen
