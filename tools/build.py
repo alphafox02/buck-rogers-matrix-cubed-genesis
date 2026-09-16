@@ -35,10 +35,29 @@ sys.path.insert(0, str(REPO / "tools"))
 import dax
 import soundmap
 
-# Where the player starts. Area 0x11 is the station the story opens on;
-# (8,1) is one of the 49 squares in its map with no wall on any side, and
-# wall set 5 is what the area's own script loads.
-START = ("0x11", "5", "8", "1")
+# Where the player starts. Area 0x18 is block 24, and block 24 is the
+# game's actual opening -- not a room but the prologue cutscene, which is
+# what seeds the party with the story NPCs:
+#
+#     00040  LOAD_AREA_MAP   64, 127, 255
+#     00047  LOAD_AREA_DECO  7, 127, 127
+#     0004E  WRITE_MEM       13, [0xC04B]   ; party x
+#     00054  WRITE_MEM       8,  [0xC04C]   ; party y
+#     0005A  WRITE_MEM       3,  [0xC04D]   ; facing
+#     00060  SOUND_EVENT     129            ; music cue 0x81
+#     00068  NPC_ADD         55, 100        ; Buck Rogers and company
+#     00077  PRINT_CLEAR     "UNDER THE LEADERSHIP OF BUCK ROGERS, YOUR TEAM
+#                             MUST NOW EMBARK ON A MISSION OF SALVATION..."
+#
+# It was area 0x11 before, which is block 17 -- the Mercury coronation. That
+# is a real scene and it plays, but it is not the beginning: the party
+# arrives there already knowing who Buck Rogers is, because the prologue
+# that introduces him was never run.
+#
+# Block 24 has no map of its own (GEO1 has no map 24); it loads map 64,
+# which this build already installs at geo area 0x40. Wall set and position
+# match what the script sets for itself.
+START = ("0x18", "7", "13", "8")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
