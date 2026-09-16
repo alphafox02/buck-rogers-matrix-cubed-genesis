@@ -35,33 +35,31 @@ sys.path.insert(0, str(REPO / "tools"))
 import dax
 import soundmap
 
-# Where the player starts. Area 0x13 is block 19 -- the Mercury arrival,
-# which is where Matrix Cubed actually begins:
+# Where the player starts.
 #
-#     00545  WRITE_MEM       2, [0xC04C]     ; party y
-#     0054B  WRITE_MEM       0, [0xC04B]     ; party x
-#     00551  WRITE_MEM       1, [0xC04D]     ; facing
-#     00557  LOAD_AREA_MAP   17, 127, 255
-#     0055E  LOAD_AREA_DECO  5, 127, 127
-#     00565  SOUND_EVENT     130             ; music cue 0x82
-#     00568  PRINT_CLEAR     "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP
-#                             THE COM SWITCH FOR A FINAL BRIEFING..."
-#     005E4  PICTURE         57              ; Buck Rogers
-#     00737  TREASURE        8000, 20, {...} ; the starting kit
+# Area 0x11 is block 17, the coronation room. It is where the DOS game puts
+# you after its opening, and it is the configuration that plays stably.
 #
-# Two earlier guesses were wrong and both are worth recording. Area 0x11 is
-# block 17, the coronation room -- the right ROOM, since block 19 loads map
-# 17 too, but entered with the briefing skipped. Area 0x18 is block 24,
-# which reads like a prologue and is actually the DEMO: its narration is
-# box copy ("THIS ADVENTURE TAKES YOU TO THE FURTHEST REACHES OF CIVILIZED
-# SPACE"), and it has no map of its own at all.
+# Block 19 is the opening proper -- the Mercury briefing, matching the DOS
+# game beat for beat -- and booting into it was tried and reverted. It never
+# does NEWECL: it IS the script for that stretch, and its movement hook
+# (GOTO 0x87CC) is the ship, so with the stub dropping the player into a
+# walkable map 17 straight away, the first step east goes to space and the
+# jury-rig check. Block 19 expects to run its cutscene before anyone can
+# move. Entering it properly means the stub loading no map and letting the
+# script place the player, which is a change to make deliberately and test,
+# not to bolt on.
 #
-# The fifth value is the MAP area, which block 19 names separately: it runs
-# as area 0x13 but loads map 17, installed here at geo area 0x11.
-# ...and the sixth is the facing the script sets at 0x551.
-# Wall set 4 is Genesis set 1, what tools/wallmap.py maps block 19's
-# LOAD_AREA_DECO 5 onto. Passing 5 straight through put it on set 0.
-START = ("0x13", "4", "0", "2", "0x11", "1")
+# The map is named separately because a block's map need not share its id,
+# and the facing needs translating rather than copying: the Genesis delta
+# table at 0x146E0 gives dy/dx of (0,-1), (+1,0), (0,+1), (-1,0) for
+# directions 0..3, and play confirms y increases northward, so the Genesis
+# order is W, N, E, S against the DOS N, E, S, W -- genesis = (dos + 1) & 3.
+# Block 17 is entered facing east, which is Genesis 2.
+#
+# Wall set 4 is Genesis set 1, what tools/wallmap.py maps block 17's
+# LOAD_AREA_DECO 5 onto. Passing the DOS 5 straight through put it on set 0.
+START = ("0x11", "4", "0", "2", "0x11", "2")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
@@ -82,13 +80,17 @@ PORTRAITS = {
     0x56: "PIC1/086",   0x5B: "PIC1/091",   0x5C: "PIC8/092",
     0x5D: "PIC1/093",   0x5E: "PIC1/094",   0x5F: "PIC1/095",
     0x61: "PIC1/097",
-    # Used by the opening area, and the only one of its pictures already in
-    # the directory. The rest of what block 19 and block 17 name -- 57, 96,
-    # 98, 101, 102, 103, 104, 107 -- are ids Countdown does not carry, so
-    # they miss the directory and the loader substitutes a default. That is
-    # the wrong art in the portrait window, and fixing it needs the
-    # directory expanded rather than a slot replaced.
-    0x6F: "PIC1/111",
+    # NOT 0x6F. It is the one opening-area picture already in the directory,
+    # so it looked like a free win, but no Countdown script references it --
+    # meaning whatever loads it is engine UI, and the team-selection screen
+    # went odd the moment it was replaced. One picture is not worth breaking
+    # a screen the player has to pass through.
+    #
+    # The rest of what block 19 and block 17 name -- 57, 96, 98, 101, 102,
+    # 103, 104, 107 -- are ids Countdown does not carry at all, so they miss
+    # the directory and the loader substitutes a default. That is the wrong
+    # art in the portrait window, and fixing it needs the directory
+    # expanded rather than a slot replaced.
 }
 
 # Music. Every slot the game can reach with a Matrix Cubed song.
