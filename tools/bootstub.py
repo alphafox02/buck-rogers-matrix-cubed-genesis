@@ -153,6 +153,25 @@ STARTING_KIT = [22, 22, 22, 22, 23, 23, 33, 33, 33, 8,
                 8, 15, 6, 6, 6, 18, 10, 10, 35, 35]
 
 INTRO_MUSIC = 0x30
+
+# The orbit line plays over a full-width picture rather than the dock.
+#
+# VIEW's mode picks the layout and any id at or above 0x70 draws full width:
+#
+#     0851E: cmp.w  #$70, d3
+#     08522: bcc.b  $8556        ; -> the big-picture loader
+#     08550: bsr.w  $b7b4        ; otherwise the portrait window
+#
+# Countdown uses `VIEW 1, <big picture>` exactly six times, once each for
+# ids 0x70, 0x73, 0x74, 0x75, 0x77 and 0x78 -- its cutscenes. 0x71 is
+# Matrix Cubed's own BIGPIC1/113, a ship among asteroids, which is a better
+# backdrop for "you ease into orbit" than standing on the coronation dock
+# several scenes early.
+#
+# It reverts to VIEW 0 for Buck, so the establishing shot gives way to the
+# ordinary screen with him talking in the window.
+BRIEFING_VIEW_MODE, BRIEFING_BIGPIC = 0x01, 0x71
+
 INTRO = [
     (101, "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP THE COM SWITCH FOR A "
           "FINAL BRIEFING. THE IMAGE OF BUCK ROGERS, NOW IN CHARGE OF SPECIAL "
@@ -252,10 +271,14 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
                        + struct.pack("<H", at))
             out.extend(bytes([op["CONTINUE"]]))
 
-        out += bytes([op["VIEW"]]) + _imm(VIEW_GAME_SCREEN) + _imm(VIEW_NO_PICTURE)
+        out += bytes([op["VIEW"]]) + _imm(BRIEFING_VIEW_MODE) + _imm(BRIEFING_BIGPIC)
         out += bytes([op["SOUND"]]) + _imm(INTRO_MUSIC)
-        for pic, at in before:
-            screen(pic, at)
+        for k, (pic, at) in enumerate(before):
+            if pic is not None and k:
+                # Buck: back to the ordinary screen, portrait in the window.
+                out += bytes([op["VIEW"]]) + _imm(VIEW_GAME_SCREEN) \
+                    + _imm(VIEW_NO_PICTURE)
+            screen(None if k == 0 else pic, at)
         out += bytes([op["CLEARMONSTERS"]])
         out += bytes([op["TREASURE"]]) + _imm(STARTING_CREDITS) \
             + _imm(len(STARTING_KIT)) + b"".join(_imm(i) for i in STARTING_KIT)
@@ -265,7 +288,15 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         # Mark him as having spoken, so block 17 does not replay the scene.
         out += bytes([op["OR"]]) + _imm(CHANCELLOR_BIT) \
             + _mem(CHANCELLOR_FLAG) + _mem(CHANCELLOR_FLAG)
-        out += bytes([op["VIEW"]]) + _imm(0x00) + _imm(0xFF)
+        # He turns his back and moves away, so take his face out of the
+        # window. VIEW 0, 0xFF only restores the layout -- it was leaving him
+        # sitting there until the player took a step. The clear is on the
+        # picture path, which tests the id for a sign bit:
+        #
+        #     04DFA: move.b $b525.w, d0
+        #     04DFE: bpl.b  $4e04        ; negative -> clear instead of load
+        out += bytes([op["VIEW"]]) + _imm(VIEW_GAME_SCREEN) + _imm(VIEW_NO_PICTURE)
+        out += bytes([op["PICTURE"]]) + _imm(0xFF)
 
     out += bytes([op["NEWECL"]]) + _imm(area)
     out += bytes([op["NEWREGION"]]) + b"".join(
