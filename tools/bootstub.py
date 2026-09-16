@@ -188,6 +188,22 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         # 0x00?". Printed before anything else the stub does.
         out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
         out += bytes([op["CONTINUE"]])
+    # Load the geometry BEFORE the briefing, but hold NEWREGION back.
+    #
+    # The briefing used to run with no map loaded at all, so the dungeon
+    # panel showed whatever happened to be left in it -- a corridor floating
+    # over a starfield, which is nothing to do with the coronation dock.
+    # LOADFILES and LOADPIECES put real geometry behind the text; NEWREGION
+    # is what hands control to the area, so it stays at the end. That split
+    # is why an earlier attempt to move the whole block after the setup
+    # played nothing: everything queued after NEWREGION never runs.
+    out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
+        + _imm(0x7F) + _imm(0xFF)
+    out += bytes([op["LOADPIECES"]]) + _imm(wallset)
+    out += bytes([op["SAVE"]]) + _imm(y) + _mem(DUNGEON_Y)
+    out += bytes([op["SAVE"]]) + _imm(x) + _mem(DUNGEON_X)
+    out += bytes([op["SAVE"]]) + _imm(facing) + _mem(DUNGEON_DIR)
+
     # VIEW establishes the screen. Without it the briefing painted over
     # whatever was already there -- the team-select screen, empty character
     # slots showing through, nowhere for PICTURE to draw.
@@ -199,23 +215,8 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
     #     VIEW        0x0, 0xFF     ; the ordinary game screen
     #     PICTURE     0x48          ; portrait into the window
     #     PRINTCLEAR  str[0x0000]   ; text into the box beneath
-    #
-    # which is the picture-window-and-text-box layout the DOS briefing uses.
     VIEW_GAME_SCREEN, VIEW_NO_PICTURE = 0x00, 0xFF
 
-    # The briefing plays BEFORE the area is set up, and has to.
-    #
-    # Moving it after NEWECL/NEWREGION was tried, to get it drawn over the
-    # ordinary game screen -- picture window, party roster, text box -- the
-    # way the DOS game shows it. Nothing played at all: the player went
-    # straight from "begin adventure" into the room. Setting up the region
-    # hands control to the area, and whatever the stub still has queued
-    # after that never runs.
-    #
-    # So it runs first, over the team-select screen, which means text across
-    # the top with the empty character slots showing through and nowhere for
-    # PICTURE to draw. Plain, but it happens -- and a briefing that plays
-    # beats a better-looking one that does not.
     if intro:
         _, before, after = _intro_pool()
 
@@ -238,12 +239,6 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
             screen(pic, at)
 
     out += bytes([op["NEWECL"]]) + _imm(area)
-    out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
-        + _imm(0x7F) + _imm(0xFF)
-    out += bytes([op["LOADPIECES"]]) + _imm(wallset)
-    out += bytes([op["SAVE"]]) + _imm(y) + _mem(DUNGEON_Y)
-    out += bytes([op["SAVE"]]) + _imm(x) + _mem(DUNGEON_X)
-    out += bytes([op["SAVE"]]) + _imm(facing) + _mem(DUNGEON_DIR)
     out += bytes([op["NEWREGION"]]) + b"".join(
         _imm(v) for v in (0, 1, 0, 0, 0x0F, 0x0F))
     out += bytes([op["EXIT"]])

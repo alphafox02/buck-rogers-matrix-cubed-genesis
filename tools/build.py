@@ -59,12 +59,16 @@ import soundmap
 #
 # Wall set 4 is Genesis set 1, what tools/wallmap.py maps block 17's
 # LOAD_AREA_DECO 5 onto. Passing the DOS 5 straight through put it on set 0.
-# Facing 3. The delta table makes 2 east, which is what the DOS status
-# line reads -- but the Genesis draws the room three-quarter overhead
-# rather than first person, so matching the DOS number does not match
-# the DOS view. Played side by side, 3 is the one that looks down the
-# dock at the elevator the way the DOS screen does.
-START = ("0x11", "4", "0", "2", "0x11", "3")
+# Facing 2, east -- which is what the DOS status line reads at this
+# square, "0,2 E".
+#
+# 3 was tried, on the reasoning that the Genesis draws the room
+# three-quarter overhead rather than first person so the DOS number need
+# not be the right one. It showed the player standing in space, and the
+# reason is geometry rather than art: the delta table has y increasing
+# northward, so south from y=2 looks off the bottom edge of a 16x16 map
+# and there is nothing out there to draw but the backdrop.
+START = ("0x11", "4", "0", "2", "0x11", "2")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
