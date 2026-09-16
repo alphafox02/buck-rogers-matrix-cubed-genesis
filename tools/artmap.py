@@ -35,7 +35,7 @@ BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 
 # Added to the VIEW directory by expand_pictures --bigpic, and injected
 # in the same build, under the same rule as ADDED below.
-BIG_ADDED = (113, 114)
+BIG_ADDED = (113, 114, 0x79)
 
 # Ids tools/expand_pictures.py adds, every one of which build.py also injects
 # artwork for. The rule that matters is that the two lists stay equal: an

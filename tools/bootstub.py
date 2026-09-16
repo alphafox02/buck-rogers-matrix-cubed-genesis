@@ -170,7 +170,7 @@ INTRO_MUSIC = 0x30
 #
 # It reverts to VIEW 0 for Buck, so the establishing shot gives way to the
 # ordinary screen with him talking in the window.
-BRIEFING_VIEW_MODE, BRIEFING_BIGPIC = 0x01, 0x71
+BRIEFING_VIEW_MODE, BRIEFING_BIGPIC = 0x01, 0x79
 
 INTRO = [
     (101, "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP THE COM SWITCH FOR A "

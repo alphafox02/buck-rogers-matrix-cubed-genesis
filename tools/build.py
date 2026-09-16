@@ -149,7 +149,19 @@ MUSIC.update({slot: ("BUCKA.XMI", song)
 # scripts name 113 six times -- so the VIEW tables get the same expansion
 # the portrait ones do, and every id here is injected straight after.
 BIGPIC_IDS = [112, 113, 114, 115, 116, 117]
-BIGPIC_ADDED = [113, 114]
+
+# 113 and 114 are added and injected. 0x79 is added and deliberately NOT
+# injected: expand_pictures gives every new id ptrs[0], and at that point in
+# the build ptrs[0] is still Countdown's own 0x70 -- the space scene with
+# human ships against a station gantry. Leaving it uninjected is how the
+# briefing keeps that picture after Matrix Cubed's art takes over slot 0x70.
+#
+# This is the one exception to "added ids must be injected". That rule exists
+# because an uninjected id inherits the biggest blob in the cartridge, which
+# overflowed; here the inherited picture is an ordinary 507-tile VIEW image,
+# the same size as everything else in this directory, and the VIEW tables
+# have no metadata to get out of step.
+BIGPIC_ADDED = [113, 114, 0x79]
 
 # NOT INJECTED. The table at 0xF14F2 these ids index turned out to be the
 # engine's ITEM AND UI icon table, not the ECL PICTURE directory -- its two
