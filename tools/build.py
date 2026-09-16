@@ -59,7 +59,12 @@ import soundmap
 #
 # Wall set 4 is Genesis set 1, what tools/wallmap.py maps block 17's
 # LOAD_AREA_DECO 5 onto. Passing the DOS 5 straight through put it on set 0.
-START = ("0x11", "4", "0", "2", "0x11", "2")
+# Facing 3. The delta table makes 2 east, which is what the DOS status
+# line reads -- but the Genesis draws the room three-quarter overhead
+# rather than first person, so matching the DOS number does not match
+# the DOS view. Played side by side, 3 is the one that looks down the
+# dock at the elevator the way the DOS screen does.
+START = ("0x11", "4", "0", "2", "0x11", "3")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"

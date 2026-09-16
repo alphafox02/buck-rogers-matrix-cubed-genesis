@@ -95,6 +95,25 @@ MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 #
 # Pictures 101 and 57 are ids Countdown does not carry, so they substitute;
 # SOUND 0x30 is where tools/soundmap.py sends the cue block 19 fires here.
+# The kit the DOS game hands the party at the end of the briefing, straight
+# from block 19: `TREASURE 8000, 20, {...}`. It opens the same take/divvy
+# menu the DOS game shows.
+#
+# The item ids need no translation. Both games' item tables are the same 91
+# entries in the same order -- the DOS one is 16-byte records in
+# ITEM0.DAX, the Genesis one 10-byte records at 0xF17D8, and decoding both
+# through the name fragments gives 91 of 91 identical, from "knife" at 1 to
+# "mercurian battle armor" at 88. Of everything transplanted so far this is
+# the only table that matched outright.
+# And what block 19 prints after the kit, on the way into the coronation --
+# `PRINT_CLEAR` at 0x076A, immediately before its `NEW_ECL 17` at 0x07CB.
+ARRIVAL = ("YOU STEP OUT ONTO THE EXPANSIVE DOCK AND FIND IT THRONGED WITH "
+           "PEOPLE DRESSED FOR THE CORONATION. A MAN APPROACHES.")
+
+STARTING_CREDITS = 8000
+STARTING_KIT = [22, 22, 22, 22, 23, 23, 33, 33, 33, 8,
+                8, 15, 6, 6, 6, 18, 10, 10, 35, 35]
+
 INTRO_MUSIC = 0x30
 INTRO = [
     (101, "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP THE COM SWITCH FOR A "
@@ -112,15 +131,22 @@ INTRO = [
 
 
 def _intro_pool():
-    """Text pool for the briefing, and each screen's offset into it."""
+    """Text pool for the briefing, and each screen's offset into it.
+
+    Returns (pool, before, after) -- the screens that play before the
+    starting kit is handed over, and the arrival text that follows it.
+    """
     import transpile
     pool = bytearray(b"\0")
-    screens = []
+    before, after = [], []
     for pic, text in INTRO:
         for k, chunk in enumerate(transpile._split(text)):
-            screens.append((pic if k == 0 else None, len(pool)))
+            before.append((pic if k == 0 else None, len(pool)))
             pool += chunk.encode("ascii", "replace") + b"\0"
-    return bytes(pool), screens
+    for chunk in transpile._split(ARRIVAL):
+        after.append((None, len(pool)))
+        pool += chunk.encode("ascii", "replace") + b"\0"
+    return bytes(pool), before, after
 
 
 def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
@@ -147,13 +173,22 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
         out += bytes([op["CONTINUE"]])
     if intro:
-        _, screens = _intro_pool()
-        out += bytes([op["SOUND"]]) + _imm(INTRO_MUSIC)
-        for pic, at in screens:
+        _, before, after = _intro_pool()
+
+        def screen(pic, at):
             if pic is not None:
-                out += bytes([op["PICTURE"]]) + _imm(pic)
-            out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", at)
-            out += bytes([op["CONTINUE"]])
+                out.extend(bytes([op["PICTURE"]]) + _imm(pic))
+            out.extend(bytes([op["PRINTCLEAR"]]) + bytes([0x80])
+                       + struct.pack("<H", at))
+            out.extend(bytes([op["CONTINUE"]]))
+
+        out += bytes([op["SOUND"]]) + _imm(INTRO_MUSIC)
+        for pic, at in before:
+            screen(pic, at)
+        out += bytes([op["TREASURE"]]) + _imm(STARTING_CREDITS) \
+            + _imm(len(STARTING_KIT)) + b"".join(_imm(i) for i in STARTING_KIT)
+        for pic, at in after:
+            screen(pic, at)
     out += bytes([op["NEWECL"]]) + _imm(area)
     out += bytes([op["LOADFILES"]]) + _imm(area if map_area is None else map_area) \
         + _imm(0x7F) + _imm(0xFF)
@@ -202,8 +237,10 @@ def main():
         print(f"    {off:04X}: {found[off].render()}")
 
     if intro:
-        text, screens = _intro_pool()
-        print(f"  briefing: {len(screens)} screens, {len(text)} bytes of text")
+        text, before, after = _intro_pool()
+        print(f"  briefing: {len(before)} screens, kit of {len(STARTING_KIT)} "
+              f"items and {STARTING_CREDITS} credits, then {len(after)} "
+              f"arrival screen(s); {len(text)} bytes of text")
     else:
         text = b"\0" + MARKER + b"\0" if marker else b"\0"
     for entry in ENTRIES:
