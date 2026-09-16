@@ -33,6 +33,10 @@ PICTURES = (32, 35, 58, 59, 64, 65, 66, 67, 68, 70, 71, 75, 76, 77, 79, 80, 81, 
 
 BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 
+# Added to the VIEW directory by expand_pictures --bigpic, and injected
+# in the same build, under the same rule as ADDED below.
+BIG_ADDED = (113, 114)
+
 # Ids tools/expand_pictures.py adds, every one of which build.py also injects
 # artwork for. The rule that matters is that the two lists stay equal: an
 # added id with no art inherits the directory's first entry, which is the
@@ -41,7 +45,8 @@ BIGPICS = (112, 115, 116, 117, 118, 119, 120)
 ADDED = (0x02, 0x04, 0x1D, 0x1E, 0x1F, 0x37, 0x39,
          0x60, 0x62, 0x63, 0x65, 0x66, 0x67, 0x68, 0x6B)
 
-AVAILABLE = frozenset(PICTURES) | frozenset(BIGPICS) | frozenset(ADDED)
+AVAILABLE = (frozenset(PICTURES) | frozenset(BIGPICS)
+             | frozenset(ADDED) | frozenset(BIG_ADDED))
 
 
 def picture(pid):

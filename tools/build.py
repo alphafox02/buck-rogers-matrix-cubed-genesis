@@ -141,7 +141,11 @@ MUSIC.update({slot: ("BUCKA.XMI", song)
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
-BIGPIC_IDS = [112, 115, 116, 117]
+# VIEW big pictures. 113 and 114 are NOT in the stock directory -- the
+# scripts name 113 six times -- so the VIEW tables get the same expansion
+# the portrait ones do, and every id here is injected straight after.
+BIGPIC_IDS = [112, 113, 114, 115, 116, 117]
+BIGPIC_ADDED = [113, 114]
 
 # NOT INJECTED. The table at 0xF14F2 these ids index turned out to be the
 # engine's ITEM AND UI icon table, not the ECL PICTURE directory -- its two
@@ -249,6 +253,9 @@ def main():
         # directory, so replacing them needs no table to grow.
         step("inject_title.py")
         step("trim_intro.py")
+        if expand:
+            step("expand_pictures.py", "--bigpic",
+                 *[f"0x{p:02X}" for p in BIGPIC_ADDED])
         step("inject_portrait.py", "--bigpic",
              *[f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
     if music:
