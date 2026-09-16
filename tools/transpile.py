@@ -163,7 +163,7 @@ def _encode_arg(kind, value):
     """Emit a Genesis argument. Types match the DOS engine exactly."""
     if kind == "str":
         return bytes([0x80]) + struct.pack("<H", value)
-    if kind in ("code", "var"):
+    if kind in ("code", "var", "skip"):
         return bytes([0x01]) + struct.pack("<H", value & 0xFFFF)
     if kind == "strptr":
         # Type 0x81 is "the string is at this address", not "this is a
@@ -377,7 +377,7 @@ def transpile(block: bytes, flags=None):
             for sub in CALL_EXPANSION[ins.args[0].value]:
                 opcode, _argc = gen[sub]
                 layout.setdefault(off, pos)
-                pieces.append((off, opcode, []))
+                pieces.append((off, opcode, [], 1))
                 pos += 1
             continue
 
@@ -385,13 +385,34 @@ def transpile(block: bytes, flags=None):
         if name in gen:
             opcode, _ = gen[name]
         else:
-            # Emit a stub rather than dropping the instruction. Dropping it
-            # would remove its offset from the layout and strand every jump
-            # that targets it, turning one untranslatable opcode into dozens
-            # of broken branches. 0xFF is outside the 94-opcode range, so a
-            # stub is unmistakable and cannot be mistaken for working code.
+            # Emit a GOTO over the instruction rather than dropping it.
+            #
+            # Dropping it would remove its offset from the layout and strand
+            # every jump that targets it, turning one untranslatable opcode
+            # into dozens of broken branches. But the old stub -- opcode 0xFF,
+            # chosen because it is outside the 94-opcode range and therefore
+            # unmistakable -- was worse than useless, because the dispatch
+            # does not bounds check:
+            #
+            #     03346: move.b (a2)+, d1      ; any byte, 0..255
+            #     03356: asl.w  #$1, d1
+            #     03358: lea.l  $336e.l, a3    ; 94 entries, ending 0x342A
+            #     0335E: move.w (a3, d1.w), d1
+            #     03362: jsr    (a3, d1.w)
+            #
+            # 0xFF reads a word from 0x356C -- inside the handler code, well
+            # past the table -- and jumps through it. Every stub was a wild
+            # jump waiting for a branch to reach it, and there are 62.
+            #
+            # A GOTO to the next instruction is a real opcode the engine
+            # understands, and it steps over the arguments without executing
+            # anything. It needs four bytes, so a shorter instruction grows;
+            # pass 1 accounts for that and every jump still lands correctly.
             report.append((off, ins.name, "no Genesis counterpart"))
-            opcode = STUB_OPCODE
+            opcode = gen["GOTO"][0]
+            is_jump = False
+            stub = True
+        stub = False
         is_jump = ins.name in ecl._JUMPS
         # The two engines number skills completely differently: DOS uses the
         # full 84-skill tabletop list 1-based, the Genesis 19 of its own.
@@ -535,10 +556,16 @@ def transpile(block: bytes, flags=None):
                     args.append(("var", map_variable(arg.value, flags, report, off)))
             else:
                 args.append(("imm", arg.value))
-        size = 1 + sum(len(_encode_arg(k, 0 if k in ("code", "var") else v))
-                       for k, v in args)
+        if stub:
+            # GOTO plus a 3-byte target, and never smaller than what it
+            # replaces -- the surplus is skipped over, not executed.
+            args = [("skip", 0)]
+            size = max(4, ins.size)
+        else:
+            size = 1 + sum(len(_encode_arg(k, 0 if k in ("code", "var") else v))
+                           for k, v in args)
         layout[off] = pos
-        pieces.append((off, opcode, args))
+        pieces.append((off, opcode, args, size))
         pos += size
         # Continued screens follow, each behind a wait so the player reads
         # one before the next replaces it. `layout[off]` already points at
@@ -546,17 +573,25 @@ def transpile(block: bytes, flags=None):
         # the start of the sequence.
         for chunk in overflow:
             cont, _ = gen["CONTINUE"]
-            pieces.append((off, cont, []))
+            pieces.append((off, cont, [], 1))
             pos += 1
             more = [("str", pool.intern(chunk))]
-            pieces.append((off, opcode, more))
-            pos += 1 + sum(len(_encode_arg(k, v)) for k, v in more)
+            msize = 1 + sum(len(_encode_arg(k, v)) for k, v in more)
+            pieces.append((off, opcode, more, msize))
+            pos += msize
 
     # Pass 2: emit, rebasing jump targets through the new layout.
     out = bytearray()
-    for off, opcode, args in pieces:
+    for off, opcode, args, size in pieces:
+        here = len(out)
         out.append(opcode)
         for kind, value in args:
+            if kind == "skip":
+                # Step over this instruction to the next one. The slot may be
+                # wider than the GOTO needs, and the surplus is skipped, not
+                # executed, so it is simply padded out.
+                out += _encode_arg("skip", here + size + GEN_BASE)
+                continue
             if kind == "code":
                 target = value - DOS_BASE + marker
                 if target in layout:
@@ -565,4 +600,6 @@ def transpile(block: bytes, flags=None):
                     report.append((off, "jump", f"target 0x{value:04X} not in layout"))
                     value = GEN_BASE
             out += _encode_arg(kind, value)
+        if len(out) - here < size:
+            out += bytes(size - (len(out) - here))
     return bytes(out), pool.build(), report
