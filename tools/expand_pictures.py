@@ -37,6 +37,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import integrity
 
+def _align(at):
+    """
+    Longword tables must start on an even address.
+
+    `at += len(ids) + 2` after the id list puts the pointer tables wherever
+    the id count happens to leave them, and an odd count leaves them odd.
+    The 68000 raises an address error on a longword read from an odd
+    address, so `movea.l (a1), a0` in the loader froze the machine the
+    moment a picture was looked up -- which is every picture. 57 stock ids
+    landed odd and so did 65.
+    """
+    return (at + 3) & ~3
+
+
 # The ECL picture directory: ids, data pointers, animation metadata.
 IDS, PTRS, META = 0x51326, 0x51360, 0x51444
 OPERANDS = ((0x0B7C2, "ids"), (0x0B7C8, "ptrs"), (0x0B7CE, "meta"),
@@ -87,7 +101,7 @@ def apply_big(rom: bytes, new_ids) -> bytes:
     id_at = at
     rom[at:at + len(ids)] = bytes(ids)
     rom[at + len(ids)] = 0xFF
-    at += len(ids) + 2
+    at = _align(at + len(ids) + 1)
     ptr_at = at
     for p in ptrs:
         struct.pack_into(">I", rom, at, p)
@@ -135,7 +149,7 @@ def apply(rom: bytes, new_ids) -> bytes:
     id_at = at
     rom[at:at + len(ids)] = bytes(ids)
     rom[at + len(ids)] = 0xFF
-    at += len(ids) + 2
+    at = _align(at + len(ids) + 1)
     ptr_at = at
     for p in ptrs:
         struct.pack_into(">I", rom, at, p)
