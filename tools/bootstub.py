@@ -188,6 +188,21 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         # 0x00?". Printed before anything else the stub does.
         out += bytes([op["PRINTCLEAR"]]) + bytes([0x80]) + struct.pack("<H", 1)
         out += bytes([op["CONTINUE"]])
+    # VIEW establishes the screen. Without it the briefing painted over
+    # whatever was already there -- the team-select screen, empty character
+    # slots showing through, nowhere for PICTURE to draw.
+    #
+    # Every VIEW in Countdown's own scripts passes id 0xFF, meaning "no big
+    # picture": the opcode selects a display MODE rather than an image.
+    # Area 0x10 shows the exact shape this needs --
+    #
+    #     VIEW        0x0, 0xFF     ; the ordinary game screen
+    #     PICTURE     0x48          ; portrait into the window
+    #     PRINTCLEAR  str[0x0000]   ; text into the box beneath
+    #
+    # which is the picture-window-and-text-box layout the DOS briefing uses.
+    VIEW_GAME_SCREEN, VIEW_NO_PICTURE = 0x00, 0xFF
+
     # The briefing plays BEFORE the area is set up, and has to.
     #
     # Moving it after NEWECL/NEWREGION was tried, to get it drawn over the
@@ -211,6 +226,7 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
                        + struct.pack("<H", at))
             out.extend(bytes([op["CONTINUE"]]))
 
+        out += bytes([op["VIEW"]]) + _imm(VIEW_GAME_SCREEN) + _imm(VIEW_NO_PICTURE)
         out += bytes([op["SOUND"]]) + _imm(INTRO_MUSIC)
         for pic, at in before:
             screen(pic, at)
