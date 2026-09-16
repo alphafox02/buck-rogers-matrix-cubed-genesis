@@ -36,6 +36,7 @@ from collections import OrderedDict
 import artmap
 import ecl
 import soundmap
+import wallmap
 import monstermap
 import skillmap
 import flagmap
@@ -363,6 +364,7 @@ def transpile(block: bytes, flags=None):
                   1 if ins.name == "PICTURE2" else None)
         mon_at = 0 if ins.name in ("LOAD_MON", "SPRITE_START") else None
         snd_at = 0 if ins.name == "SOUND_EVENT" else None
+        wall_at = 0 if ins.name == "LOAD_AREA_DECO" else None
         # WHMENU prints engine string 0x2D, "what do you do?", before its
         # labels, so they start 15 columns in. That is why stock Countdown's
         # widest WHMENU is 27 characters where its widest HMENU is 35. Matrix
@@ -391,6 +393,13 @@ def transpile(block: bytes, flags=None):
                                        f"{labels} -> {fitted}"))
         args = []
         for k, arg in enumerate(list(ins.args) + list(ins.dyn_args)):
+            if wall_at == k and arg.type == 0x00:
+                new, known = wallmap.translate(arg.value)
+                report.append((off, "wall",
+                               f"deco {arg.value} -> LOADPIECES {new} "
+                               f"(set {new // 3})" + ("" if known else ", unlisted")))
+                args.append(("imm", new))
+                continue
             if snd_at == k and arg.type == 0x00:
                 new, moved = soundmap.translate(arg.value)
                 if moved:

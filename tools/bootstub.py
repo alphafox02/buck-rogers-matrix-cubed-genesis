@@ -21,7 +21,7 @@ game:
     LOADPIECES <wallset>
     SAVE       <y>, [0x9AF7]      ; DUNGEON_Y
     SAVE       <x>, [0x9AF6]      ; DUNGEON_X
-    SAVE       0,   [0x9AFA]      ; DUNGEON_DIR
+    SAVE       <f>, [0x9AFA]      ; DUNGEON_DIR
     NEWREGION  0, 1, 0, 0, 0xF, 0xF
     EXIT
 
@@ -51,7 +51,7 @@ Give the map area explicitly in that case; it defaults to the script's area,
 which is right for an ordinary room.
 
 Usage:
-    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [map] [--marker]
+    bootstub.py <in.gen> <out.gen> <area> <wallset> <x> <y> [map] [facing] [--marker]
 """
 
 import struct
@@ -84,7 +84,7 @@ def _mem(v):
 MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 
 
-def build(area, wallset, x, y, map_area=None, marker=False):
+def build(area, wallset, x, y, map_area=None, facing=0, marker=False):
     table = G.load_opcodes()
     op = {n: o for o, (n, _) in table.items()}
 
@@ -112,7 +112,7 @@ def build(area, wallset, x, y, map_area=None, marker=False):
     out += bytes([op["LOADPIECES"]]) + _imm(wallset)
     out += bytes([op["SAVE"]]) + _imm(y) + _mem(DUNGEON_Y)
     out += bytes([op["SAVE"]]) + _imm(x) + _mem(DUNGEON_X)
-    out += bytes([op["SAVE"]]) + _imm(0) + _mem(DUNGEON_DIR)
+    out += bytes([op["SAVE"]]) + _imm(facing) + _mem(DUNGEON_DIR)
     out += bytes([op["NEWREGION"]]) + b"".join(
         _imm(v) for v in (0, 1, 0, 0, 0x0F, 0x0F))
     out += bytes([op["EXIT"]])
@@ -126,6 +126,7 @@ def main():
     area, wallset, x, y = (int(v, 0) for v in sys.argv[3:7])
     rest = [a for a in sys.argv[7:] if not a.startswith("--")]
     map_area = int(rest[0], 0) if rest else None
+    facing = int(rest[1], 0) if len(rest) > 1 else 0
 
     rom = src.read_bytes()
     blocks = [(bid, genesis_ecl.decompress(c), genesis_ecl.decompress(t))
@@ -135,10 +136,11 @@ def main():
         sys.exit(f"area 0x{area:02X} not present")
 
     marker = "--marker" in sys.argv
-    code = build(area, wallset, x, y, map_area, marker)
+    code = build(area, wallset, x, y, map_area, facing, marker)
     print(f"boot stub: {len(code)} bytes, entering area 0x{area:02X} "
           f"at ({x},{y}) with wall set {wallset}, "
-          f"map area 0x{(area if map_area is None else map_area):02X}")
+          f"map area 0x{(area if map_area is None else map_area):02X}, "
+          f"facing {facing}")
 
     # Verify the stub reads back as the instructions it was meant to be.
     table = G.load_opcodes()

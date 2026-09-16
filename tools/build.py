@@ -58,7 +58,10 @@ import soundmap
 #
 # The fifth value is the MAP area, which block 19 names separately: it runs
 # as area 0x13 but loads map 17, installed here at geo area 0x11.
-START = ("0x13", "5", "0", "2", "0x11")
+# ...and the sixth is the facing the script sets at 0x551.
+# Wall set 4 is Genesis set 1, what tools/wallmap.py maps block 19's
+# LOAD_AREA_DECO 5 onto. Passing 5 straight through put it on set 0.
+START = ("0x13", "4", "0", "2", "0x11", "1")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
@@ -79,6 +82,13 @@ PORTRAITS = {
     0x56: "PIC1/086",   0x5B: "PIC1/091",   0x5C: "PIC8/092",
     0x5D: "PIC1/093",   0x5E: "PIC1/094",   0x5F: "PIC1/095",
     0x61: "PIC1/097",
+    # Used by the opening area, and the only one of its pictures already in
+    # the directory. The rest of what block 19 and block 17 name -- 57, 96,
+    # 98, 101, 102, 103, 104, 107 -- are ids Countdown does not carry, so
+    # they miss the directory and the loader substitutes a default. That is
+    # the wrong art in the portrait window, and fixing it needs the
+    # directory expanded rather than a slot replaced.
+    0x6F: "PIC1/111",
 }
 
 # Music. Every slot the game can reach with a Matrix Cubed song.
