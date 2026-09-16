@@ -1634,3 +1634,66 @@ misbehaves in play. What is still unaccounted for is how the 68000 refills
 the ring buffer as the Z80 consumes it, and whether anything there assumes
 music lives in the first megabyte -- every stock track does, and the
 injected ones are at `0x190000`.
+
+---
+
+## Which song plays in which scene — what is proven and what is not
+
+The question is whether Matrix Cubed's six music cues are being matched to
+the right songs. Three things were tried.
+
+**The XMI carries no cue ids.** `BUCKA.XMI` is `FORM XDIR` (`INFO` = 7
+sequences) then `CAT XMID` holding seven `FORM XMID`, each just `TIMB` and
+`EVNT`. Songs are selected by index; nothing in the file names a cue.
+
+**The DOS code did not give it up.** Neither `GAME.OVR` nor `START.EXE`
+contains the string `XMI`; the filename is built at runtime from a
+card-indexed table of length-prefixed names at `START.EXE:0x10B19`
+(`bucka`, `buckb`, `buckc`, then the `.ADV` driver names). The ECL
+interpreter has no indexed jump (`jmp cs:[bx+d16]` and friends: zero hits),
+and all 37 real `and al,0x7F` sites in `GAME.OVR` are character and item
+record handling -- the `mul dx` by 0x22 and by 9 record strides -- not a
+sound dispatch.
+
+**What the scripts and the songs do say.** Both halves are measurable.
+
+Scene text around each cue, from `ecl.disassemble`:
+
+| cue | uses | what is happening |
+|---|---|---|
+| 0x81 | 25 | mixed; relief and arrival, but also "RATWURST ATTACK!" |
+| 0x82 | 20 | ambush -- RAM forces pour in, agents flood the hall |
+| 0x83 | 9 | grim -- slaughter, imprisonment, gutted sprawl |
+| 0x84 | 3 | awe -- the Living Ship, "ITS IMMENSE SIZE" |
+| 0x85 | 5 | villains -- "YOU ARE TOO LATE!", Lord Refuge |
+| 0x86 | 2 | warm -- help in unexpected forms, Buck and Wilma |
+
+Song character, from the note data (key by pitch-class correlation
+against Krumhansl profiles):
+
+| song | length | density | key | drums |
+|---|---|---|---|---|
+| 0 | 39.8s | 16.4/s | G# major | 214 |
+| 1 |  7.6s | 10.3/s | A# minor | 31 |
+| 2 | 11.0s | 14.0/s | A minor | 64 |
+| 3 | 12.0s |  3.7/s | A# minor | 0 |
+| 4 | 16.5s |  5.0/s | F minor | 2 |
+| 5 | 10.5s |  7.6/s | F major | 37 |
+| 6 | 21.6s | 27.6/s | E major | 191 |
+
+Under the assumption that cue 0x8n plays song n, four of the six match
+their scenes well: 0x82 ambush to the fast minor-key song 2, 0x83 grim to
+the sparse drumless song 3, 0x84 awe to the slow spacious song 4, 0x86 warm
+to the bright major song 6. 0x81 is the most-used cue and gets the shortest
+song, which is consistent with a general transition sting. **0x85 is the
+odd one**: villain reveals drawing an F major song.
+
+So the mapping is well supported but NOT confirmed. The structural argument
+is that there are exactly six cues (0x81-0x86), seven songs, nothing names
+0x80 or 0x87, song 0 is the title the intro starts by itself, and 0x8n -> n
+is the only assignment that uses every song exactly once.
+
+**How to actually settle it:** run the DOS game and listen. All seven songs
+are rendered to `audio/song0.wav` through `audio/song6.wav`, so reaching any
+scene in the table above and hearing which one plays decides it. DOSBox is
+not installed on this machine.
