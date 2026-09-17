@@ -113,6 +113,9 @@ ADDED_PORTRAITS = {
     0x02: "PIC1/002",   0x04: "PIC1/004",   0x1D: "PIC1/029",
     0x1E: "PIC1/030",   0x1F: "PIC1/031",   0x37: "PIC1/055",
     0x63: "PIC1/099",
+    # The last three the scripts name that the archives hold. With these the
+    # only PICTURE ids left substituted are 0xFF, which means "no picture".
+    0x17: "PIC1/023",   0x38: "PIC1/056",   0x6A: "PIC1/106",
     # NOT 0x6F. It is the one opening-area picture already in the directory,
     # so it looked like a free win, but no Countdown script references it --
     # meaning whatever loads it is engine UI, and the team-selection screen

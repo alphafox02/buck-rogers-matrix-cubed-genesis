@@ -69,8 +69,12 @@ def check(block_id, blob, flags):
 
     live = len(items) - stubs
     exits = sum(1 for i in items if i.name == "NEW_ECL")
+    # 0xFF is "no picture", not a missing one -- the loader tests the id for
+    # a sign bit and clears the window. Counting those as substitutions made
+    # area 17 read 11/13 when nothing was wrong with it.
     pics = [a.value for i in items if i.name == "PICTURE"
-            for a in i.args[:1] if getattr(a, "type", None) == 0x00]
+            for a in i.args[:1]
+            if getattr(a, "type", None) == 0x00 and a.value < 0x80]
     good_art = sum(1 for p in pics if p in artmap.AVAILABLE)
     return {
         "instrs": len(items), "live": live, "stubs": stubs,
@@ -111,6 +115,9 @@ def main():
               f"{r['text_kept']:5}/{r['text_want']:<4} "
               f"{fp:5.1f}% {r['art_ok']:4}/{r['art_want']:<4} {r['exits']:6}   "
               + ", ".join(notes))
+        # An area with no script is geometry, not a broken area.
+        if r["instrs"] <= 16:
+            continue
         score = min(tp, fp, ap if r["art_want"] else 100)
         worst.append((score, b))
 

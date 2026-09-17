@@ -389,11 +389,77 @@ def transpile(block: bytes, flags=None):
     pool = StringPool()
     report = []
 
-    order = sorted(found)
+    # Data tables inside the block.
+    #
+    # COPY_MEM's first operand is a code-space address, and it does not point
+    # at code: it points at a table of bytes sitting between routines --
+    #
+    #     01E86  COPY_MEM  [0xA088], [0x7F7A], [0x4BB7]
+    #     01E9C  <0x01 01 01 02 02 02 02 02 02 19 19 19 19 ...>
+    #
+    # Two things went wrong with those. The decoder walks into the table and
+    # reads it as instructions, which is where the "lost jumps" came from --
+    # phantom GOTOs to 0x0101 and 0x0303, addresses no code ever had. And
+    # because COPY_MEM is not a jump, its operand went through the variable
+    # map instead of being rebased, so after relocation it addressed
+    # whatever now sat at the old offset. 121 of them, across eight blocks.
+    #
+    # A table runs from the address COPY_MEM names to the next offset real
+    # code branches to. Emitting those bytes verbatim keeps the table intact
+    # AND keeps its length, so everything after it lands where the layout
+    # says.
+    jump_targets = set()
+    data_starts = set()
+    for ins in found.values():
+        is_j = ins.name in ecl._JUMPS
+        on = ins.name in ("ON_GOTO", "ON_GOSUB")
+        for k, a in enumerate(list(ins.args) + list(ins.dyn_args or [])):
+            v = getattr(a, "value", None)
+            if getattr(a, "type", None) != 0x01 or v is None:
+                continue
+            if not DOS_BASE <= v < 0xC000:
+                continue
+            at = v - DOS_BASE + marker
+            if is_j and not (on and k == 0):
+                jump_targets.add(at)
+            elif ins.name == "COPY_MEM" and k == 0:
+                data_starts.add(at)
+
+    data = {}
+    for start in sorted(data_starts):
+        if start in jump_targets or start >= len(block):
+            continue
+        after = [t for t in sorted(jump_targets) if t > start]
+        end = min(after[0], len(block)) if after else len(block)
+        # Stop at the next table too, so neighbours do not swallow each other.
+        nxt = [d for d in sorted(data_starts) if d > start]
+        if nxt:
+            end = min(end, nxt[0])
+        if end > start:
+            data[start] = end
+    covered = set()
+    for a, b2 in data.items():
+        covered.update(range(a, b2))
+
+    # A table's address need not be somewhere the decoder ever walked -- most
+    # are read by COPY_MEM and branched to by nothing -- so the layout pass
+    # has to visit table starts as well as decoded instructions, or their
+    # pointers have nothing to rebase onto.
+    order = sorted(set(found) | set(data))
     # Pass 1: lay out, learning each instruction's new offset.
     layout, pos = {}, 0
     pieces = []
     for off in order:
+        if off in data:
+            raw = bytes(block[off:data[off]])
+            layout[off] = pos
+            pieces.append((off, None, raw, len(raw)))
+            pos += len(raw)
+            report.append((off, "data",
+                           f"{len(raw)} bytes kept verbatim (a COPY_MEM table)"))
+            continue
+        if off in covered:
+            continue                       # inside a table, not an instruction
         ins = found[off]
         # CALL becomes one or more Genesis opcodes depending on which native
         # routine it targets, so it is handled before the ordinary name map.
@@ -573,8 +639,12 @@ def transpile(block: bytes, flags=None):
                 args.append(("strptr", map_variable(arg.value, flags, report, off)))
             elif arg.is_memory:
                 # Only a jump's operands are code addresses, and not even
-                # all of those -- see is_on above.
-                if is_jump and not (is_on and k == 0):
+                # all of those -- see is_on above. COPY_MEM's first operand
+                # is one as well: it names a table inside the block, and it
+                # has to move with everything else.
+                if (is_jump and not (is_on and k == 0)) or \
+                        (ins.name == "COPY_MEM" and k == 0
+                         and DOS_BASE <= arg.value < 0xC000):
                     args.append(("code", arg.value))
                 else:
                     args.append(("var", map_variable(arg.value, flags, report, off)))
@@ -608,6 +678,9 @@ def transpile(block: bytes, flags=None):
     out = bytearray()
     for off, opcode, args, size in pieces:
         here = len(out)
+        if opcode is None:                 # a verbatim data table
+            out += args
+            continue
         out.append(opcode)
         for kind, value in args:
             if kind == "skip":
