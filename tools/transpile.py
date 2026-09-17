@@ -346,6 +346,10 @@ def map_variable(addr, flags, report, offset):
 # which is why a flat 137 was right for one string and wrong for the next.
 COLUMNS, LINES = 35, 4
 
+# What to budget for a string operand whose length is not known until the
+# game runs -- type 0x81, almost always a character or a place name.
+VARIABLE_TEXT = 12
+
 
 def _wrap(text):
     """Greedy word wrap, the way the window does it."""
@@ -448,6 +452,71 @@ def transpile(block: bytes, flags=None):
     # are read by COPY_MEM and branched to by nothing -- so the layout pass
     # has to visit table starts as well as decoded instructions, or their
     # pointers have nothing to rebase onto.
+    # Where a run of print instructions overflows the window.
+    #
+    # _split handles one string that is too long. It does not help when the
+    # text is BUILT from several instructions, which is how the engine does
+    # anything with a variable in it:
+    #
+    #     00D25  PRINT_CLEAR  "THE TELLTALE ON THE DOOR READS,"
+    #     00D40  PRINT_RETURN x2
+    #     00D42  PRINT        "BERTH " + the berth letter
+    #     00D56  PRINT_RETURN, PRINT "SHIP:  " ... and the homeport
+    #
+    # Five lines into a four-line window, so the last one lands back on the
+    # first and the player reads "HOMEPORT: DUKE'S HILLOR READS,". DOS has a
+    # taller box and never had to care.
+    #
+    # The window is simulated across each run: PRINT_CLEAR resets it, PRINT
+    # appends and wraps, PRINT_RETURN starts a line, and anything else ends
+    # the run. Where the next instruction would push past the fourth line it
+    # gets a CONTINUE in front of it, and a PRINT there becomes a
+    # PRINT_CLEAR so the next screen starts empty. A PRINT_RETURN at a break
+    # is dropped, since a fresh window is already at the left margin.
+    #
+    # A string operand of unknown length -- type 0x81, "print what is at this
+    # address", almost always a character or place name -- is budgeted at
+    # VARIABLE_TEXT characters.
+    breaks = {}
+    _line = _col = 0
+    _active = False
+    for _off in sorted(found):
+        _ins = found[_off]
+        _n = _ins.name
+        _t = None
+        for _a in _ins.args:
+            if getattr(_a, "type", None) == 0x80:
+                _t = str(_a.value)
+            elif getattr(_a, "type", None) == 0x81:
+                _t = "x" * VARIABLE_TEXT
+        if _n == "PRINT_CLEAR":
+            _active, _line, _col = True, 0, 0
+            if _t is not None:
+                _rows = _wrap(_split(_t)[0]) or [""]
+                _line, _col = len(_rows) - 1, len(_rows[-1])
+            continue
+        if not _active:
+            continue
+        if _n == "PRINT_RETURN":
+            if _line + 1 >= LINES:
+                breaks[_off] = "drop"
+                _active = False
+            else:
+                _line += 1
+                _col = 0
+            continue
+        if _n == "PRINT" and _t is not None:
+            _rows = _wrap(_t) or [""]      # an empty string adds nothing
+            _need = _line + len(_rows) - 1 + (1 if _col + len(_rows[0]) > COLUMNS else 0)
+            if _need >= LINES:
+                breaks[_off] = "clear"
+                _line, _col = len(_rows) - 1, len(_rows[-1])
+            else:
+                _line = _need
+                _col = _col + len(_rows[0]) if len(_rows) == 1 else len(_rows[-1])
+            continue
+        _active = False
+
     order = sorted(set(found) | set(data))
     # Pass 1: lay out, learning each instruction's new offset.
     layout, pos = {}, 0
@@ -463,6 +532,15 @@ def transpile(block: bytes, flags=None):
             continue
         if off in covered:
             continue                       # inside a table, not an instruction
+        brk = breaks.get(off)
+        if brk:
+            cont, _ = gen["CONTINUE"]
+            layout.setdefault(off, pos)
+            pieces.append((off, cont, [], 1))
+            pos += 1
+            report.append((off, "window", f"page break before {found[off].name}"))
+            if brk == "drop":
+                continue
         ins = found[off]
         # CALL becomes one or more Genesis opcodes depending on which native
         # routine it targets, so it is handled before the ordinary name map.
@@ -475,6 +553,8 @@ def transpile(block: bytes, flags=None):
             continue
 
         name = NAME_MAP.get(ins.name, ins.name)
+        if brk == "clear":
+            name = "PRINTCLEAR"             # start the new screen empty
         if name in gen:
             opcode, _ = gen[name]
         else:
