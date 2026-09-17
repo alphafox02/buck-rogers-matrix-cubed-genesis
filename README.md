@@ -50,12 +50,14 @@ the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
 - **Music** converted from XMI to the Z80 driver's own sequence format
 - **Combat runs** — encounters fire, initiative resolves, experience is
   awarded
+- **Matrix Cubed's own 36 creatures** have roster slots and names, with the
+  engine's 64-monster ceiling raised to 128
 
 ## What does not, yet
 
-- Creature artwork is Countdown's, matched by role. Adding Matrix Cubed's 36
-  own creatures corrupts the combat map, so it is off by default
-  (`--creatures` builds it)
+- Creature *artwork* is still Countdown's, matched by role: Matrix Cubed's
+  36 creatures have slots and names of their own, but each looks like the
+  one it stands in for until the DOS sprites are converted
 - Some wall graphics are wrong, because a wall value selects a picture from
   the loaded wall set and the two games disagree about what each value looks
   like. Doors that Countdown would draw as solid are corrected; the rest are

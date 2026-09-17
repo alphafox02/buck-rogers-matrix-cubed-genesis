@@ -40,6 +40,18 @@ STREAM_OPERAND = 0x048F2
 RECORD = 214
 NAME = 16
 
+# The enlarged stream is written somewhere new, not over the old one.
+#
+# Stock packs into 2809 bytes at 0x09E77C and the bytes after it are real
+# data, not padding. Adding 36 creatures takes the pack to about 4 KB, so
+# writing it back in place overran roughly 1290 bytes of whatever followed.
+# The stream is reached from one lea, so it relocates the same way the
+# picture and figure directories do.
+#
+# 0x1B1000 is below the figure directory at 0x1B4000, with room for the
+# stream to grow into.
+NEW_STREAM = 0x1B1000
+
 
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
@@ -85,9 +97,12 @@ def apply(rom: bytes) -> bytes:
     packed = lzw_encode.compress(bytes(out))
     if bytes(genesis_ecl.decompress(packed, limit=0x20000)) != bytes(out):
         raise SystemExit("repacked monster stream does not decompress to itself")
-    rom[at:at + len(packed)] = packed
+    if NEW_STREAM + len(packed) > expand_figures.NEW_DIRECTORY:
+        sys.exit("the monster stream would reach the figure directory")
+    rom[NEW_STREAM:NEW_STREAM + len(packed)] = packed
+    struct.pack_into(">I", rom, STREAM_OPERAND, NEW_STREAM)
     print(f"  {added} creatures added, {len(ids)} monsters total, "
-          f"stream {len(packed)} bytes at 0x{at:06X}")
+          f"stream {len(packed)} bytes at 0x{NEW_STREAM:06X} (was 0x{at:06X})")
     return integrity.repair(bytes(rom))
 
 

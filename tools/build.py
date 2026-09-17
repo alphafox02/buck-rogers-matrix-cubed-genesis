@@ -222,19 +222,22 @@ def main():
     bigpics = "--no-bigpic" not in sys.argv
     portraits = "--no-portrait" not in sys.argv
     music = "--no-music" not in sys.argv
-    # OFF by default. Giving Matrix Cubed's 36 creatures slots of their own
-    # corrupts the combat map: tile-aligned blocks of noise appear on the
-    # floor during a fight. Bisected with tools/play.py by driving the same
-    # encounter on builds with and without them -- garbage with, clean
-    # without -- after a play session reported it and it was twice explained
-    # away as scenery.
+    # Back ON. Adding the creatures corrupted the combat map -- blocks of
+    # noise on the floor during a fight -- and the cause was two address
+    # collisions, not VRAM as first suspected:
     #
-    # The cause is not yet known. The suspicion is VRAM: 87 figures where the
-    # engine shipped 52, and the combat loader may allocate tiles by figure
-    # index. Until that is read rather than guessed, the roster stays at 54
-    # and rename_monsters gives the ones that stand in for exactly one
-    # creature the right name.
-    creatures = "--creatures" in sys.argv
+    #   the figure directory sat at 0x1B1800, INSIDE the enlarged monster
+    #   stream at 0x1B1000, so add_creatures wrote the stream over the
+    #   figure records and combat drew tiles out of compressed monster data
+    #
+    #   and add_creatures wrote that stream back IN PLACE at 0x09E77C, where
+    #   stock packs into 2809 bytes and real data follows, so about 1290
+    #   bytes of it were overrun
+    #
+    # Both are fixed -- the directory moved to 0x1B4000 and the stream
+    # relocates like everything else -- and the same encounter now draws
+    # clean with the creatures on.
+    creatures = "--no-creatures" not in sys.argv
     expand = "--no-expand" not in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path(argv[0]) if argv else DEFAULT_OUT

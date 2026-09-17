@@ -43,7 +43,19 @@ import integrity
 DIRECTORY = 0x09A14
 RECORD = 8
 OPERANDS = (0x0359C, 0x099C8, 0x099FA, 0x0C3D4, 0x0CB4A, 0x0FBB0)
-NEW_DIRECTORY = 0x1B1800        # clear of the pictures and the monster stream
+# Clear of everything else this build relocates. The map of 0x1B0000 is:
+#
+#     0x1B0000  picture id list, data pointers, metadata pointers
+#     0x1B0900  the never-animates metadata record
+#     0x1B1000  the monster stream, compressed -- around 4 KB once Matrix
+#               Cubed's creatures are added, so it reaches past 0x1B2000
+#     0x1B4000  this
+#
+# It was at 0x1B1800, which is INSIDE the monster stream. expand_figures
+# runs first and add_creatures then wrote the enlarged stream straight over
+# the figure records, so combat drew tiles out of compressed monster data --
+# the blocks of noise on the floor that a play session reported twice.
+NEW_DIRECTORY = 0x1B4000
 
 
 def read(rom, at):
