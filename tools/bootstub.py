@@ -66,7 +66,21 @@ import genesis_disasm as G
 import genesis_ecl
 import integrity
 
-DUNGEON_X, DUNGEON_Y, DUNGEON_DIR = 0x9AF6, 0x9AF7, 0x9AFA
+# X is 0x9AF7 and Y is 0x9AF6, not the other way round.
+#
+# The square lookup at 0x14CDC computes `d4 * 16 + d3`, and the caller loads
+# d3 from 0x9AF7 and d4 from 0x9AF6. Both games store their maps row major:
+# Countdown's own maps are 100% wall-consistent read as y*16+x and as low as
+# 36% read as x*16+y. So d4 is Y and d3 is X, and the addresses are the
+# reverse of what this file used to say.
+#
+# Read that way the delta table at 0x146E0 gives dx/dy of (0,-1), (+1,0),
+# (0,+1), (-1,0) -- N, E, S, W, the same order DOS uses. No facing rotation,
+# no flip, no transpose; the coordinates were simply crossed.
+#
+# Confirmed against play: at DOS (0,7) the south wall is 1 and the player
+# saw a solid wall; one square east at (1,7) it is 13 and they saw a door.
+DUNGEON_X, DUNGEON_Y, DUNGEON_DIR = 0x9AF7, 0x9AF6, 0x9AFA
 
 # Areas the engine will boot into for a new game, from the dispatch above.
 ENTRIES = (0x00, 0x10)

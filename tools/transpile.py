@@ -205,8 +205,11 @@ def _encode_arg(kind, value):
 # Engine-shared variables whose Genesis counterpart is established.
 VARIABLE_MAP = {
     0x4BF2: 0x97E8,    # LAST_ECL, the current area
-    0xC04B: 0x9AF6,    # DUNGEON_X
-    0xC04C: 0x9AF7,    # DUNGEON_Y
+    # X is 0x9AF7 and Y is 0x9AF6 -- see the note in tools/bootstub.py. The
+    # square lookup is d4*16 + d3 with d3 from 0x9AF7, and both games store
+    # maps row major, so d3 is X.
+    0xC04B: 0x9AF7,    # DUNGEON_X
+    0xC04C: 0x9AF6,    # DUNGEON_Y
     0xC04D: 0x9AFA,    # DUNGEON_DIR
     0xC04E: 0x97AD,    # MAP_WALL_TYPE     -- both top out at exactly 12
     0xC04F: 0x9AF9,    # MAP_SQUARE_INFO   -- both dominated by 63 (0x3F mask)
