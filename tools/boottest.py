@@ -33,8 +33,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 STAGES = (("logos", 6, 2000), ("title", 10, 8000), ("menu", 14, 15000))
 
+# The cartridge serial must not move. An emulator's ROM database is keyed on
+# it -- BlastEm prints "Product ID: T-50286" and then finds the entry -- and
+# that same entry supplies the SRAM mapping. Changing it once made the game
+# stop loading altogether, so retitle.py leaves it alone and this checks that
+# it stayed left alone. The name fields are free to change; the lookup does
+# not use them.
+SERIAL = (0x180, 14)
+
+
+def serial_ok(rom, stock=REPO / "roms/countdown.gen"):
+    a, n = SERIAL
+    want = Path(stock).read_bytes()[a:a + n]
+    got = Path(rom).read_bytes()[a:a + n]
+    if got != want:
+        print(f"  {Path(rom).name}: SERIAL CHANGED, {got!r} not {want!r} -- "
+              f"an emulator may refuse the ROM or lose its SRAM mapping")
+        return False
+    return True
+
 
 def check(rom):
+    ok_serial = serial_ok(rom)
     from play import Game
     g = Game(rom)
     g.run(420)
@@ -46,9 +66,10 @@ def check(rom):
             if k >= at and name not in seen and best >= want:
                 seen[name] = best
         g.tap("C", hold=6, rest=45)
-    ok = len(seen) == len(STAGES)
+    ok = len(seen) == len(STAGES) and ok_serial
     print(f"  {Path(rom).name}: " + ", ".join(
         f"{n} {'ok' if n in seen else 'MISSING'}" for n, _, _ in STAGES)
+        + f", serial {'ok' if ok_serial else 'CHANGED'}"
         + f"   (brightest frame {best} px)")
     return ok
 
