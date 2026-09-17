@@ -1936,3 +1936,35 @@ dispatch loop tests that byte before every instruction:
 `0x0438C` opens a text window and prints the ECL program counter (`a2-1`)
 followed by the next three bytes -- opcode and operands -- one instruction at
 a time. It is reachable in a normal build from the menu.
+
+---
+
+## Wall codes are per-set graphics, and the two games disagree about them
+
+A wall nibble is not "wall" or "door" -- it selects a graphic from the wall
+set the area loaded. Cross-referencing every wall value against plane 3's
+passability bits, over both games' own maps:
+
+| value | Countdown passable | Matrix Cubed passable |
+|---|---|---|
+| 1 | 1.0% | 1.8% |
+| 5 | 2.1% | 1.0% |
+| 6 | **92.9%** | 40.7% |
+| 7 | 70.0% | 69.9% |
+| 12 | 100.0% (5 uses) | 41.6% |
+| 13 | **0.0%** | 41.5% |
+
+So Countdown's door is 6 and its 13 is a solid wall, while Matrix Cubed uses
+13 for the door at the opening -- `(1,7)` south, which a play session walked
+through into a two-square closet.
+
+Transplanted maps therefore draw some doors as walls. **They are still
+passable**: the engine takes passability from plane 3, at `0x14CB4`, which
+is separate from the graphic nibble and transplants unchanged. A door that
+looks like a wall can be walked through.
+
+Mapping the codes properly means a table per wall set, since the meaning of
+a value depends on which set is loaded, and the sets do not correspond
+one-to-one either. Not attempted; the passability profiles above overlap too
+much to derive it automatically -- 7 matches at 70% in both, but 6, 12 and
+13 do not.
