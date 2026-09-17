@@ -85,7 +85,7 @@ PLANES, SIDE = 4, 16
 
 def flip_map(body):
     """
-    Turn a DOS map north-side-up for the Genesis.
+    Turn a DOS map north-side-up for the Genesis. NOT APPLIED -- see below.
 
     The two engines run their y axis opposite ways. DOS counts southward --
     its status line reads "12,4" with the marker near the top of the AREA
@@ -101,6 +101,17 @@ def flip_map(body):
     untouched by a vertical flip.
 
     Planes 2 and 3 are per-square attributes and move with their square.
+
+    This was applied and reverted. The evidence for it is real -- DOS counts
+    y southward, and the delta table at 0x146E0 gives dy = 0, +1, 0, -1 for
+    directions 0..3 -- but it rests on one further step that is not proven:
+    that the Genesis indexes its map rows from the south. If instead row 0 is
+    north in both engines, then direction 1 is SOUTH rather than north and
+    the order is W, S, E, N, with no flip needed.
+
+    Applied, it put the player somewhere that is not the DOS opening at all.
+    Backed out until the engine's own map indexing is read rather than
+    inferred from which way a player thought they were pointing.
     """
     out = bytearray(len(body))
     for p in range(PLANES):
@@ -131,7 +142,8 @@ def install_map(geo, area, map_id, maps):
         body += bytearray(1024)
         count += 1
     gslot = geo_ids.index(area)
-    body[gslot * 1024:(gslot + 1) * 1024] = flip_map(maps[map_id][2:])
+    # NOT FLIPPED -- see the note on flip_map.
+    body[gslot * 1024:(gslot + 1) * 1024] = maps[map_id][2:]
     return struct.pack(">H", count) + bytes(geo_ids) + bytes(body)
 
 

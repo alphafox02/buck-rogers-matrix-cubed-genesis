@@ -60,12 +60,9 @@ import soundmap
 #
 # Wall set 4 is Genesis set 1, what tools/wallmap.py maps block 17's
 # LOAD_AREA_DECO 5 onto. Passing the DOS 5 straight through put it on set 0.
-# The DOS start is 0,2 -- but its y counts southward and the Genesis counts
-# north, so tools/inject_area.py flips every transplanted map and the same
-# square is y = 15 - 2 = 13 here. Facing is unaffected: a vertical flip
-# leaves east and west alone.
-#
-# Facing 2 is east, which is what the DOS status line reads at this square.
+# The DOS start, 0,2 facing east, which is what its status line reads here.
+# Maps are NOT flipped -- see tools/inject_area.flip_map for why that was
+# tried and backed out -- so the coordinate is used as it stands.
 #
 # 3 was tried, on the reasoning that the Genesis draws the room
 # three-quarter overhead rather than first person so the DOS number need
@@ -73,7 +70,7 @@ import soundmap
 # reason is geometry rather than art: the delta table has y increasing
 # northward, so south from y=2 looks off the bottom edge of a 16x16 map
 # and there is nothing out there to draw but the backdrop.
-START = ("0x11", "4", "0", "13", "0x11", "2")
+START = ("0x11", "4", "0", "2", "0x11", "2")
 
 STOCK = REPO / "roms/countdown.gen"
 DEFAULT_OUT = REPO / "roms/matrix_play.gen"
