@@ -80,6 +80,43 @@ def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
     return install_map(geo, area, map_id, maps)
 
 
+PLANES, SIDE = 4, 16
+
+
+def flip_map(body):
+    """
+    Turn a DOS map north-side-up for the Genesis.
+
+    The two engines run their y axis opposite ways. DOS counts southward --
+    its status line reads "12,4" with the marker near the top of the AREA
+    map and y growing as you walk down -- while the Genesis delta table at
+    0x146E0 adds +1 to DUNGEON_Y for north. Feeding DOS data straight in
+    mirrors every map: rooms that belong in the north come out in the south
+    and doors land on the wrong side, which is what a play session found.
+
+    So the rows are reversed, and the north and south walls swap with them:
+    a wall on the north face of (x, y) is on the south face of (x, 15-y).
+    Walls live two to a byte -- plane 0 holds north in the high nibble and
+    east in the low, plane 1 south and west -- and the east/west pair is
+    untouched by a vertical flip.
+
+    Planes 2 and 3 are per-square attributes and move with their square.
+    """
+    out = bytearray(len(body))
+    for p in range(PLANES):
+        for y in range(SIDE):
+            src = (SIDE - 1 - y) * SIDE
+            dst = y * SIDE
+            out[p * 256 + dst:p * 256 + dst + SIDE] = \
+                body[p * 256 + src:p * 256 + src + SIDE]
+    for sq in range(SIDE * SIDE):
+        n, e = out[sq] >> 4, out[sq] & 15
+        s, w = out[256 + sq] >> 4, out[256 + sq] & 15
+        out[sq] = (s << 4) | e
+        out[256 + sq] = (n << 4) | w
+    return bytes(out)
+
+
 def install_map(geo, area, map_id, maps):
     if map_id is None or map_id not in maps:
         sys.exit(f"no Matrix Cubed map {map_id}")
@@ -94,7 +131,7 @@ def install_map(geo, area, map_id, maps):
         body += bytearray(1024)
         count += 1
     gslot = geo_ids.index(area)
-    body[gslot * 1024:(gslot + 1) * 1024] = maps[map_id][2:]
+    body[gslot * 1024:(gslot + 1) * 1024] = flip_map(maps[map_id][2:])
     return struct.pack(">H", count) + bytes(geo_ids) + bytes(body)
 
 
