@@ -274,6 +274,10 @@ def main():
                  *[f"0x{p:02X}" for p in BIGPIC_ADDED])
         step("inject_portrait.py", "--bigpic",
              *[f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
+    # Creature names. The rosters cannot be merged -- different animals,
+    # different record layouts -- but monstermap already substitutes by role,
+    # and the name is the only part the player reads.
+    step("rename_monsters.py")
     if music:
         step("inject_music.py",
              *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])
