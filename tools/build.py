@@ -33,6 +33,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 
 import dax
+import monstermap
 import soundmap
 
 # Where the player starts.
@@ -280,10 +281,13 @@ def main():
     # Room for both rosters. Harmless on its own -- it widens a stack buffer
     # and nothing else -- and it is what any creature added later needs.
     step("monstercap.py")
-    # Creature names. The rosters cannot be merged -- different animals,
-    # different record layouts -- but monstermap already substitutes by role,
-    # and the name is the only part the player reads.
-    step("rename_monsters.py")
+    # Matrix Cubed's own creatures, each with a slot, a name and a figure of
+    # its own. The figure directory grows first: monster id and figure id are
+    # the same number, and a monster with no figure takes the miss path.
+    step("expand_figures.py",
+         *[f"0x{nid:02X}:0x{src:02X}"
+           for nid, (_name, src) in sorted(monstermap.NEW_CREATURES.items())])
+    step("add_creatures.py")
     if music:
         step("inject_music.py",
              *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])

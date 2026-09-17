@@ -136,7 +136,83 @@ FALLBACK = 0x27          # NEO WARRIOR -- a plain humanoid
 
 
 def translate(dos_id):
-    """Return (genesis_id, exact) for a DOS monster id."""
+    """
+    Return (genesis_id, exact) for a DOS monster id.
+
+    A creature with a slot of its own goes there and counts as exact: it
+    carries Matrix Cubed's name and its role match's stats. Everything else
+    falls back on substitution, which is where this file started.
+    """
+    new = DOS_TO_NEW.get(dos_id)
+    if new is not None:
+        return new, True
     if dos_id in MAP:
         return MAP[dos_id]
     return FALLBACK, False
+
+
+# Creatures Matrix Cubed has and Countdown never did.
+#
+# Substituting by role keeps a fight the right shape, but the player reads
+# the substitute's name -- Purge commandos announcing themselves as Terrine
+# leaders. These get slots of their own instead.
+#
+# A new slot clones the record of the creature it used to stand in for, so
+# it inherits stats that suit the role, and takes Matrix Cubed's name. The
+# 214-byte record layout has not been reversed and does not need to be: a
+# clone is a valid record by construction.
+#
+# Monster id and figure id are the same number, so each also needs a figure
+# record at the same id -- tools/expand_figures.py adds one cloning the same
+# source, which is why the creature looks like what it replaced until its
+# own artwork is converted.
+#
+# Names are deduplicated. Matrix Cubed lists SID REFUGE four times at
+# different power levels, and those share one slot.
+#
+#   new id: (name, the Genesis monster it clones)
+NEW_CREATURES = {
+    0x2E: ("AMALTH SEC BOT", 0x09),            # DOS [21]
+    0x2F: ("AMALTHEAN LEAD", 0x07),            # DOS [20]
+    0x30: ("AMALTHEAN WARR", 0x26),            # DOS [19]
+    0x31: ("ASSAULT ROBOT", 0x17),             # DOS [48]
+    0x32: ("CARNIFERN", 0x21),                 # DOS [18]
+    0x33: ("COMBAT ROBOT", 0x18),              # DOS [49]
+    0x34: ("COYODORG", 0x04),                  # DOS [10]
+    0x35: ("DEFENSE ROBOT", 0x1A),             # DOS [51]
+    0x36: ("DESERT RUNNER", 0x00),             # DOS [26, 28]
+    0x37: ("DR. J. MALCOLN", 0x3B),            # DOS [31]
+    0x38: ("GANG LEADER", 0x0D),               # DOS [12]
+    0x39: ("GANG MEMBER", 0x0C),               # DOS [58]
+    0x3F: ("GANG RECRUIT", 0x0C),              # DOS [59]
+    0x40: ("GANG VETERAN", 0x0C),              # DOS [13]
+    0x41: ("JOVIAN DRAGON", 0x24),             # DOS [63]
+    0x42: ("KILLER KANE", 0x3A),               # DOS [30]
+    0x43: ("LOWLANDER", 0x01),                 # DOS [25, 27]
+    0x44: ("LOWLANDER MINER", 0x02),           # DOS [23]
+    0x45: ("LUNAR SEC ROBOT", 0x1C),           # DOS [17]
+    0x46: ("LUNARIAN LEADER", 0x20),           # DOS [16]
+    0x47: ("LUNARIAN WARR", 0x01),             # DOS [14, 15]
+    0x48: ("ORG SKORP", 0x12),                 # DOS [9]
+    0x49: ("PIR. COM. ROBOT", 0x0E),           # DOS [45]
+    0x4A: ("PURGE COMMANDO", 0x20),            # DOS [5]
+    0x4B: ("PURGE SEC ROBOT", 0x1C),           # DOS [8]
+    0x4C: ("PURGE WARRIOR", 0x29),             # DOS [6]
+    0x4D: ("RAM CBT. GENNIE", 0x14),           # DOS [54]
+    0x4E: ("RATWURST", 0x1F),                  # DOS [11]
+    0x4F: ("SECURITY ROBOT", 0x1C),            # DOS [50]
+    0x50: ("SID REFUGE", 0x01),                # DOS [1, 2, 3, 4]
+    0x51: ("STAGE 5 ECG", 0x2A),               # DOS [32]
+    0x52: ("STORMRIDER", 0x27),                # DOS [29]
+    0x53: ("TECHNICIAN", 0x1D),                # DOS [38, 53]
+    0x54: ("VENUS DINOSAUR", 0x24),            # DOS [22]
+    0x55: ("WARRIOR", 0x27),                   # DOS [7]
+    0x56: ("WASPHOPPER", 0x21),                # DOS [64]
+}
+
+# DOS monster id -> the new slot, for the ids these creatures cover.
+DOS_TO_NEW = {}
+for _nid, (_name, _src) in NEW_CREATURES.items():
+    for _did, _n in DOS_NAMES.items():
+        if _n == _name:
+            DOS_TO_NEW[_did] = _nid
