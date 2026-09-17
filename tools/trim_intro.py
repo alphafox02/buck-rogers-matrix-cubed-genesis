@@ -43,6 +43,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import integrity
 
+# The title card waits for a button, and stock Countdown gives up after
+# about fifteen seconds and plays the attract demo instead:
+#
+#     00366: jsr    $88c4        ; draw the card
+#     00370: move.l #$384, d2    ; 900 frames
+#     0037C: jsr    $f1b66       ; read the pad
+#     00384: bne.b  $38e         ; pressed -> carry on
+#     00386: dbra   d2, $376     ; else keep waiting
+#     0038A: st.b   $ba5a.w      ; timed out -> demo
+#     003A4: bne.b  $3b6         ; demo, or fall through to the menu
+#
+# Turning the demo off leaves that timeout falling straight through to the
+# team menu, so the title screen appears to leave on its own after fifteen
+# seconds. Making the wait unconditional restores what a player expects:
+# the card stays up until a button is pressed.
+WAIT = 0x00386
+WAIT_ORIGINAL = bytes.fromhex("51caffee")     # dbra d2, $376
+WAIT_FOREVER = bytes.fromhex("60ee4e71")      # bra.b $376 ; nop
+
 OVERLAYS_AT = 0x01408        # first instruction of the overlay sequence
 INTRO_EXIT = 0x015F0         # the routine's own skip path
 ATTRACT_SET = 0x0038A        # st.b $ba5a.w on the input timeout
@@ -50,6 +69,14 @@ ATTRACT_SET = 0x0038A        # st.b $ba5a.w on the input timeout
 EXPECT_OVERLAY = bytes.fromhex("74067611")   # moveq #6,d2 / moveq #$11,d3
 EXPECT_ATTRACT = bytes.fromhex("50f8ba5a")   # st.b $ba5a.w
 CLR_ATTRACT = bytes.fromhex("4238ba5a")      # clr.b $ba5a.w
+
+
+def wait_for_button(rom):
+    if bytes(rom[WAIT:WAIT + 4]) != WAIT_ORIGINAL:
+        raise SystemExit(f"0x{WAIT:05X} is not the title-card timeout")
+    rom[WAIT:WAIT + 4] = WAIT_FOREVER
+    print(f"  0x{WAIT:05X} dbra -> bra: the title card waits for a button "
+          f"instead of timing out")
 
 
 def apply(rom: bytes) -> bytes:
@@ -73,6 +100,7 @@ def apply(rom: bytes) -> bytes:
     rom[ATTRACT_SET:ATTRACT_SET + 4] = CLR_ATTRACT
     print(f"  0x{ATTRACT_SET:05X}: st.b $ba5a -> clr.b $ba5a (no attract demo)")
 
+    wait_for_button(rom)
     return integrity.repair(bytes(rom))
 
 
