@@ -206,6 +206,16 @@ def specs():
 
 
 def main():
+    # Say plainly whether the two games are present before doing anything.
+    import checkinputs
+    missing, _ = checkinputs.check()
+    if missing:
+        raise SystemExit(
+            "\nNothing to build from. This repository contains no game data:\n"
+            "  roms/countdown.gen    a Countdown to Doomsday cartridge dump\n"
+            "  dos_game/matrix/      a Matrix Cubed DOS installation\n"
+            "Run tools/checkinputs.py for the full list.")
+
     # --no-art stops before the picture work, to tell a transplant problem
     # apart from an art one.
     art = "--no-art" not in sys.argv

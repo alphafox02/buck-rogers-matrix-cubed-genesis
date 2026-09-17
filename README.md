@@ -1,64 +1,90 @@
 # Buck Rogers: Matrix Cubed — Genesis
 
-An attempt to answer one question:
+Transplanting the DOS scenario *Buck Rogers: Matrix Cubed* (1992) into the
+Sega Genesis engine of *Buck Rogers: Countdown to Doomsday* (1991), so the
+second game can be played on the console the first one never reached.
 
-> Can an authentic *Matrix Cubed* scenario be made to run correctly inside
-> the Genesis *Countdown to Doomsday* engine?
+Both games run SSI's Gold Box engine. The Genesis one is a port of it, and
+the two are close enough that a scenario written for one can be made to run
+on the other — but only after every id that crosses between them is
+translated, because the engine rarely errors on a wrong id. It indexes off
+the end of a table and carries on.
 
-Everything else depends on that result. The long-term goal is Matrix Cubed
-as if SSI had shipped it for the Mega Drive / Genesis in 1992, with optional
-32X and Sega CD enhancement much later.
+## This repository contains no game data
 
-See [`PROJECT_BRIEF_Matrix_Cubed_Genesis_32X.md`](PROJECT_BRIEF_Matrix_Cubed_Genesis_32X.md)
-for the full plan and [`docs/devlog.md`](docs/devlog.md) for what has
-actually happened.
+It is tooling and reverse-engineering notes. Everything it needs is read out
+of copies of the two originals that you already own, and nothing from either
+game is committed here. You supply:
 
-## Status
+```
+roms/countdown.gen            a Countdown to Doomsday cartridge dump (1 MB)
+dos_game/matrix/              a Matrix Cubed DOS installation
+```
 
-| | |
-|---|---|
-| DAX container + compression | **solved** — 611/611 blocks |
-| Gold Box VGA image format | **solved** — 3,430 images extracted |
-| Genesis engine identified | **Gold Box ECL, 94 opcodes located** |
-| ECL disassembler | not started |
-| Genesis build loop | not started |
+Run `python3 tools/checkinputs.py` to see exactly which files are wanted and
+whether yours are the dumps every offset in `tools/` was measured against. A
+different revision is a warning, not a refusal — it may well work.
+
+## Building
+
+```
+python3 tools/checkinputs.py          # are the inputs there and right?
+python3 tools/build.py roms/out.gen   # write the ROM
+python3 tools/boottest.py roms/out.gen
+```
+
+`tools/build.py` is the whole recipe: it transplants the areas, replaces the
+boot block, injects artwork, converts the music, maps the ids and repairs
+the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
+`--no-expand`, `--creatures`.
+
+## What works
+
+- **All 33 areas** transplanted, all 78 area transitions intact, 29 of 33
+  reachable from the opening (the four that are not are SSI's developer
+  menu, its combat test room, an empty stub and the attract demo)
+- **4,536 of 4,552 text lines** survive, re-paginated for a window four
+  lines shorter than the DOS one
+- **The opening plays**: space cutscene, Buck Rogers briefing, the starting
+  kit of 8000 credits and 20 items, the dock, the chancellor
+- **Music** converted from XMI to the Z80 driver's own sequence format
+- **Combat runs** — encounters fire, initiative resolves, experience is
+  awarded
+
+## What does not, yet
+
+- Creature artwork is Countdown's, matched by role. Adding Matrix Cubed's 36
+  own creatures corrupts the combat map, so it is off by default
+  (`--creatures` builds it)
+- Some wall graphics are wrong, because a wall value selects a picture from
+  the loaded wall set and the two games disagree about what each value looks
+  like. Doors that Countdown would draw as solid are corrected; the rest are
+  left alone
+- Three instructions in SSI's developer block still do nothing
 
 ## Layout
 
 ```
-docs/       findings, formats, development log
-tools/      extraction and conversion tooling (Python 3)
-reverse/    Genesis disassembly work
-campaign/   converted scenario data
-extracted/  generated output            (gitignored)
-roms/       Genesis ROMs                (gitignored)
-dos_game/   DOS Matrix Cubed files      (gitignored)
+docs/re_notes.md    the reverse engineering: formats, addresses, what was
+                    measured and what is still a guess
+docs/devlog.md      what happened, including what was wrong and why
+tools/              ~30 programs; build.py is the entry point
+tests/              unit tests for the codecs
 ```
 
-## Usage
+## Verifying
 
-```bash
-# Verify the DAX reader against the game files
-python3 tools/dax.py dos_game/matrix/*.DAX
+`tools/play.py` drives a build under a scriptable Genesis core: it presses
+buttons, reads RAM and captures frames. It boots, loads the pregenerated
+team, plays the opening and walks the dungeon, which is how the map and the
+party's start square are checked without anyone watching. It cannot fight,
+so it stalls at the first encounter.
 
-# Extract every image to PNG
-cd tools && python3 extract_images.py ../extracted/images ../dos_game/matrix/*.DAX
-```
+`tools/boottest.py` is the cheap version: does the ROM boot, reach the menu,
+and still carry its cartridge serial.
 
-Requires Python 3 and Pillow.
+## Credit
 
-## Legal
-
-Use legitimately owned copies. **No commercial game data, ROMs, artwork or
-extracted assets are committed to this repository** — see `.gitignore`.
-This project produces tools and patches, not redistributable game content.
-
-## Prior art
-
-- [`farmboy0/ssi-engine`](https://gitlab.com/farmboy0/ssi-engine) — Gold Box
-  engine reimplementation in Java. GPLv3. Read as documentation only.
-- [`simeonpilgrim/goldboxexplorer`](https://github.com/simeonpilgrim/goldboxexplorer)
-  and [`coab`](https://github.com/simeonpilgrim/coab) — the upstream source
-  of most Gold Box format knowledge.
-- [`viciious/d32xr`](https://github.com/viciious/d32xr) — reference for 32X
-  dual-SH2 architecture, if we ever get there.
+*Countdown to Doomsday* and *Matrix Cubed* are SSI's, from TSR's Buck Rogers
+setting. This project distributes neither. It is a conversion tool for
+people who own both.
