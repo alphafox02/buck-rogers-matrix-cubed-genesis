@@ -212,6 +212,19 @@ def main():
     bigpics = "--no-bigpic" not in sys.argv
     portraits = "--no-portrait" not in sys.argv
     music = "--no-music" not in sys.argv
+    # OFF by default. Giving Matrix Cubed's 36 creatures slots of their own
+    # corrupts the combat map: tile-aligned blocks of noise appear on the
+    # floor during a fight. Bisected with tools/play.py by driving the same
+    # encounter on builds with and without them -- garbage with, clean
+    # without -- after a play session reported it and it was twice explained
+    # away as scenery.
+    #
+    # The cause is not yet known. The suspicion is VRAM: 87 figures where the
+    # engine shipped 52, and the combat loader may allocate tiles by figure
+    # index. Until that is read rather than guessed, the roster stays at 54
+    # and rename_monsters gives the ones that stand in for exactly one
+    # creature the right name.
+    creatures = "--creatures" in sys.argv
     expand = "--no-expand" not in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path(argv[0]) if argv else DEFAULT_OUT
@@ -285,10 +298,13 @@ def main():
     # Matrix Cubed's own creatures, each with a slot, a name and a figure of
     # its own. The figure directory grows first: monster id and figure id are
     # the same number, and a monster with no figure takes the miss path.
-    step("expand_figures.py",
+    if creatures:
+        step("expand_figures.py",
          *[f"0x{nid:02X}:0x{src:02X}"
-           for nid, (_name, src) in sorted(monstermap.NEW_CREATURES.items())])
-    step("add_creatures.py")
+               for nid, (_name, src) in sorted(monstermap.NEW_CREATURES.items())])
+        step("add_creatures.py")
+    else:
+        step("rename_monsters.py")
     if music:
         step("inject_music.py",
              *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])
