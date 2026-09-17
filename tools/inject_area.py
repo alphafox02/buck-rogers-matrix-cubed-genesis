@@ -82,6 +82,48 @@ def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
 
 PLANES, SIDE = 4, 16
 
+# Wall graphics Countdown treats as solid, measured over its own maps by
+# cross-referencing each value against plane 3's passability bits:
+#
+#     value 1  1.0% passable    value 11  1.2%
+#     value 5  2.1%             value 13  0.0%
+#
+# and the one it uses for a door:
+#
+#     value 6  92.9% passable
+#
+# A wall nibble picks a graphic from the loaded wall set, and the two games
+# do not agree about what each value looks like. Matrix Cubed's door at the
+# opening is 13, which Countdown draws as a solid wall -- a play session
+# walked up to the closet entrance and reported "there's no door here".
+#
+# Only doors drawn with a graphic Countdown considers solid are repointed.
+# Values it also treats as passable -- 7 is 70% in both games -- are left
+# alone, since those most likely already read as an opening and guessing at
+# them would trade one wrong picture for another.
+SOLID_IN_COUNTDOWN = (1, 5, 11, 13)
+COUNTDOWN_DOOR = 6
+NIBBLES = (("N", 0, True), ("E", 0, False), ("S", 1, True), ("W", 1, False))
+
+
+def door_graphics(body):
+    """Draw doors as doors: a passable square side that looks like a wall."""
+    out = bytearray(body)
+    fixed = 0
+    for sq in range(SIDE * SIDE):
+        flags = out[768 + sq]
+        for i, (_d, plane, high) in enumerate(NIBBLES):
+            if not (flags >> (2 * i)) & 3:
+                continue                   # not passable, so not a door
+            b = out[plane * 256 + sq]
+            v = (b >> 4) if high else (b & 15)
+            if v not in SOLID_IN_COUNTDOWN:
+                continue
+            out[plane * 256 + sq] = ((COUNTDOWN_DOOR << 4) | (b & 15)) if high \
+                else ((b & 0xF0) | COUNTDOWN_DOOR)
+            fixed += 1
+    return bytes(out), fixed
+
 
 def flip_map(body):
     """
@@ -143,7 +185,10 @@ def install_map(geo, area, map_id, maps):
         count += 1
     gslot = geo_ids.index(area)
     # NOT FLIPPED -- see the note on flip_map.
-    body[gslot * 1024:(gslot + 1) * 1024] = maps[map_id][2:]
+    fixed_map, fixed = door_graphics(maps[map_id][2:])
+    if fixed:
+        print(f"  map {map_id}: {fixed} doors redrawn as doors")
+    body[gslot * 1024:(gslot + 1) * 1024] = fixed_map
     return struct.pack(">H", count) + bytes(geo_ids) + bytes(body)
 
 
