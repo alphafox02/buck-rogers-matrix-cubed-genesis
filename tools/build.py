@@ -274,6 +274,9 @@ def main():
                  *[f"0x{p:02X}" for p in BIGPIC_ADDED])
         step("inject_portrait.py", "--bigpic",
              *[f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
+    # Room for both rosters. Harmless on its own -- it widens a stack buffer
+    # and nothing else -- and it is what any creature added later needs.
+    step("monstercap.py")
     # Creature names. The rosters cannot be merged -- different animals,
     # different record layouts -- but monstermap already substitutes by role,
     # and the name is the only part the player reads.
