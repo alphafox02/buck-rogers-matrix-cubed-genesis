@@ -101,7 +101,7 @@ def cram(rgb):
     return (b << 9) | (g << 5) | (r << 1), (r * 36, g * 36, b * 36)
 
 
-def build_palette(images, colours=15, rounds=8):
+def build_palette(images, colours=15, rounds=12):
     """
     One palette for every frame of a picture, at most `colours` used.
 
@@ -135,10 +135,7 @@ def build_palette(images, colours=15, rounds=8):
     for _ in range(rounds):
         buckets = [[] for _ in seeds]
         for c, w in pts:
-            k = min(range(len(seeds)), key=lambda i: (
-                (0.30 * (c[0] - seeds[i][0])) ** 2
-                + (0.59 * (c[1] - seeds[i][1])) ** 2
-                + (0.11 * (c[2] - seeds[i][2])) ** 2))
+            k = min(range(len(seeds)), key=lambda i: distance(c, seeds[i]))
             buckets[k].append((c, w))
         moved = []
         for i, b in enumerate(buckets):
@@ -176,10 +173,31 @@ def _similar(key, order, tolerance):
     return best
 
 
+def distance(a, b):
+    """
+    Perceptual distance between two colours, weighted towards red.
+
+    The luma weights 0.30/0.59/0.11 were used here first, and they are the
+    wrong tool: they under-weight red by design, so clustering spent its
+    fifteen colours on greens and mid-tones and let skin drift towards grey.
+    Faces are the whole point of a portrait.
+
+    This is the "redmean" approximation, which shifts weight between red and
+    blue according to how red the pair already is. On the chancellor it is
+    the difference between a face with tonal range and a flat pink one with
+    hard shadows.
+    """
+    rbar = (a[0] + b[0]) / 2.0
+    dr, dg, db = a[0] - b[0], a[1] - b[1], a[2] - b[2]
+    return ((2 + rbar / 256.0) * dr * dr
+            + 4.0 * dg * dg
+            + (2 + (255 - rbar) / 256.0) * db * db)
+
+
 def nearest(px, rgb):
     best, bd = 0, None
-    for i, (pr, pg, pb) in enumerate(rgb):
-        d = (0.30 * (px[0] - pr)) ** 2 + (0.59 * (px[1] - pg)) ** 2 + (0.11 * (px[2] - pb)) ** 2
+    for i, c in enumerate(rgb):
+        d = distance(px, c)
         if bd is None or d < bd:
             best, bd = i, d
     return best
