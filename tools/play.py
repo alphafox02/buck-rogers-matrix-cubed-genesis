@@ -55,6 +55,14 @@ class Game:
         self.em.configure_data(self.gd)
         self._none = np.zeros(16, dtype=np.uint8)
 
+    def save(self):
+        """Snapshot the machine. One emulator per process, so experiments
+        rewind to a state rather than rebooting."""
+        return self.em.get_state()
+
+    def load(self, state):
+        self.em.set_state(state)
+
     def _mask(self, *names):
         m = self._none.copy()
         for n in names:
@@ -87,6 +95,35 @@ class Game:
         """How much of the screen is not black -- a cheap 'is anything drawn'."""
         return int((np.asarray(self.em.get_screen()).sum(axis=2) > 30).sum())
 
+    MENU_LIT = (21000, 24000)
+
+    def to_menu(self, limit=14):
+        """
+        Boot as far as the main menu and stop there.
+
+        The intro is a fixed sequence -- EA logo, Buck Rogers logo, the
+        Matrix Cubed card, then the menu -- and each screen waits for a
+        button. Pressing one time too many SELECTS the highlighted item and
+        drops into character creation, which is what made the first attempts
+        at this look like the menu was ignoring input. So it presses until
+        the screen matches the menu's brightness and then stops.
+        """
+        self.run(420)
+        for _ in range(limit):
+            if self.MENU_LIT[0] <= self.lit() <= self.MENU_LIT[1]:
+                return True
+            self.tap("C", hold=8, rest=60)
+        return self.MENU_LIT[0] <= self.lit() <= self.MENU_LIT[1]
+
+    # Main menu icons, left to right.
+    MENU = ("create", "drop", "save", "restore", "begin")
+
+    def menu_pick(self, which):
+        self.to_menu()
+        for _ in range(self.MENU.index(which)):
+            self.tap("RIGHT", hold=8, rest=40)
+        self.tap("C", hold=8, rest=120)
+
     def face(self, want):
         """Turn on the spot until facing `want` ('N'/'E'/'S'/'W')."""
         for _ in range(4):
@@ -94,6 +131,36 @@ class Game:
                 return True
             self.tap("RIGHT")
         return self.pos()[2] == want
+
+    def to_party(self):
+        """
+        Boot, load the pregenerated team, and play the opening.
+
+        There is a save in slot 1 called PREGENERATED TEAM -- Flavius,
+        Celeste, Pierre, Nichole, Romare and Janelle, already equipped -- so
+        the party does not have to be created a character at a time.
+
+        This reaches the start square and the whole opening plays: the space
+        cutscene, Buck Rogers in the window with his four speeches, the
+        starting kit handed over as "THE TEAM HAS FOUND 8000 CREDITS", and
+        the character sheet.
+
+        It stops there. The equipment screens nest several deep and exiting
+        them by button search did not come out the other side; getting to
+        free movement is unfinished. What this IS good for is confirming the
+        party lands on the right square facing the right way, which is how
+        the crossed DUNGEON_X/DUNGEON_Y was verified without a person
+        watching: it reads (0, 2, 'E'), exactly what the DOS status line
+        shows at the opening.
+        """
+        self.menu_pick("restore")
+        self.tap("C", hold=8, rest=80)      # slot 1, the pregenerated team
+        self.tap("C", hold=8, rest=80)      # its roster
+        self.tap("RIGHT", hold=8, rest=40)  # restore -> begin adventure
+        self.tap("C", hold=8, rest=120)
+        for _ in range(16):                 # the briefing and the kit
+            self.tap("C", hold=8, rest=70)
+        return self.pos()
 
     def walk(self, direction, steps=1):
         """Face a direction and step. Returns the squares actually moved."""
