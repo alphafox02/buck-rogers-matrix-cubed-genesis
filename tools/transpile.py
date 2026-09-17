@@ -563,11 +563,14 @@ def transpile(block: bytes, flags=None):
                 args.append(("imm", new))
                 continue
             if snd_at == k and arg.type == 0x00:
-                new, moved = soundmap.translate(arg.value)
-                if moved:
+                new, kind = soundmap.translate(arg.value)
+                if kind == "music":
                     report.append((off, "sound",
                                    f"music 0x{arg.value:02X} -> 0x{new:02X} "
                                    f"(slot {soundmap.SLOTS[new]})"))
+                elif kind == "effect":
+                    report.append((off, "effect",
+                                   f"effect {arg.value} -> 0x{new:02X}"))
                 args.append(("imm", new))
                 continue
             if mon_at == k and arg.type == 0x00 and arg.value == 0xFF \

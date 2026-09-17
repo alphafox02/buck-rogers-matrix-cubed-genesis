@@ -49,11 +49,61 @@ MUSIC = {
 SLOTS = {0x2F: 3, 0x30: 9, 0x31: 5, 0x32: 6, 0x33: 7, 0x36: 10}
 SONGS = {3: 1, 9: 2, 5: 3, 6: 4, 7: 5, 10: 6}
 
+# Sound EFFECTS.
+#
+# These were passed through unchanged on the reasoning that a DOS id lands
+# in the driver's range and makes *a* noise. One of them does worse than
+# that: DOS effect 44 arrives as SOUND 0x2C, whose kind byte is 0x80 --
+# music slot 0. A door or a gunshot restarts the soundtrack.
+#
+# There is no name table for either game's effects, so the mapping is made
+# the way the monster one was: by what each sound plays over. Both engines'
+# scripts were read for the line printed immediately after each call.
+#
+#   Countdown            Matrix Cubed
+#   0x1B alarms blare    12 'ALARMS SOUND THROUGH THE PORT'
+#   0x11 laser fire      17 'FIRING HIS LASER RIFLE MADLY'
+#   0x06 engines roar     9 'A ROCKET BLASTS OFF'
+#   0x04 apes shriek     14 'HUNTING VENUSIAN DINOSAURS CRASH TOWARDS YOU'
+#   0x23 acid frogs       4 'BURNED BY THE ACID IN THE LAKE'
+#   0x07 figure firing    6 'THE ASSASSIN', 8 'THE MARTIANS PULL THEIR W...'
+#   0x1F weapons fire     3 'THE BARRICADE BEING BLOWN', 16 'RIPS APART'
+#   0x1C sniper's beam   13 'A BARRAGE OF SONIC STUNNERS'
+#   0x1E ECGs slam        1 'YOU HIT A SOLID FLOOR OF ARMOR PLATE'
+#   0x1D generic, 29 uses 20 'THE COMPUTER COMES TO LIFE', and the rest
+#
+# Where a DOS sound has no clear counterpart it goes to 0x1D, the effect
+# Countdown leans on most and the least likely to be jarring.
+EFFECTS = {
+     1: 0x1E,    # impact
+     2: 0x1D,    # doors
+     3: 0x1F,    # explosion            (40 uses, the most common)
+     4: 0x23,    # acid
+     5: 0x1D,    # general
+     6: 0x07,    # gunfire              (29 uses)
+     7: 0x1D,    # malfunction
+     8: 0x07,    # gunfire
+     9: 0x06,    # rocket engines
+    10: 0x1F,    # blast
+    11: 0x1F,    # thunder
+    12: 0x1B,    # alarm                (17 uses)
+    13: 0x1C,    # sonic stunner
+    14: 0x04,    # big creature
+    16: 0x1F,    # explosion
+    17: 0x11,    # laser
+    20: 0x1D,    # computer             (25 uses)
+    44: 0x1D,    # would otherwise restart music slot 0
+    63: 0x1D,    # computer
+    70: 0x06,    # ship engines
+}
+
 CEILING = 0x4B      # the driver ignores anything above this
 
 
 def translate(sid):
-    """Return (genesis_id, was_remapped)."""
+    """Return (genesis_id, kind) where kind is 'music', 'effect' or None."""
     if sid in MUSIC:
-        return MUSIC[sid], True
-    return sid, False
+        return MUSIC[sid], "music"
+    if sid in EFFECTS:
+        return EFFECTS[sid], "effect"
+    return sid, None
