@@ -1873,3 +1873,66 @@ through `mercurian battle armor` at 88.
 
 This is the only table so far that matched outright. Skills, monsters,
 sounds, walls and art all needed hand-built maps.
+
+---
+
+## Map coordinates: X and Y were crossed, and everything followed from that
+
+The square lookup at `0x14CDC`:
+
+```
+14CDC: move.w  d4, d0
+14CDE: mulu.w  #$10, d0
+14CE2: add.w   d3, d0        ; index = d4 * 16 + d3
+14CE4: lea.l   $b5a4.w, a0   ; walls, plane pair 0
+14CE8: btst.b  #$2, d5       ; the direction picks the plane...
+14CEE: lea.l   $b6a4.w, a0
+14D00: lsr.b   d5, d0        ; ...and the nibble
+14D02: andi.w  #$f, d0
+```
+
+and its caller loads `d3` from `0x9AF7`, `d4` from `0x9AF6`.
+
+**Both games store maps row major.** Countdown's own maps are 100%
+wall-consistent read as `y*16+x` and as low as 36% read as `x*16+y`, where
+consistency means a wall between two squares appears in both of them. So
+`d4` is Y and `d3` is X, and `DUNGEON_X` is `0x9AF7` while `DUNGEON_Y` is
+`0x9AF6` -- the reverse of what this project had.
+
+Read that way the delta table at `0x146E0` gives dx/dy of `(0,-1)`,
+`(+1,0)`, `(0,+1)`, `(-1,0)`: **N, E, S, W, the same order DOS uses.** No
+facing rotation, no vertical flip, no transpose.
+
+Four earlier conclusions were built on the crossed reading and are all
+wrong: the `+1` facing rotation, "y increases northward", the map flip, and
+the explanation that facing south at y=2 looked off the bottom edge.
+
+### Map layout, confirmed against play
+
+- 16x16, row major, `y = 0` is north.
+- Plane 0: north in the high nibble, east in the low.
+- Plane 1: south in the high nibble, west in the low.
+- Plane 2: per-square attributes.
+- Plane 3: two bits per direction, read at `0x14CB4` from `0xB8A4` -- this
+  is passability, separate from the wall graphic.
+- Wall values seen: 1 is a plain wall, 13 is a door.
+
+Checked against a DOS play session at the opening: at `(0,7)` the south wall
+is 1 and the player saw a solid wall; one square east at `(1,7)` it is 13 and
+they saw a door, which opens into `(1,8)` -- walled north, east and south,
+open west, a two-square closet, which is exactly what they found.
+
+## The engine has a built-in ECL debugger
+
+The main menu's "debug ecl" at `0x04C7C` is `bchg.b #$0, $9bb9.w`, and the
+dispatch loop tests that byte before every instruction:
+
+```
+0334A: tst.b  $9bb9.w
+0334E: beq.b  $3354
+03350: bsr.w  $438c
+```
+
+`0x0438C` opens a text window and prints the ECL program counter (`a2-1`)
+followed by the next three bytes -- opcode and operands -- one instruction at
+a time. It is reachable in a normal build from the menu.
