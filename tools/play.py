@@ -173,9 +173,32 @@ class Game:
         """Step in a compass direction. Returns the squares actually moved."""
         before = self.pos()[:2]
         for _ in range(steps):
-            self.tap(self.PAD[direction], hold=10, rest=90)
+            # Generous timing on purpose. At hold=10/rest=90 roughly a third
+            # of steps were silently dropped, which reads exactly like a wall
+            # and made the map look wrong when it was not.
+            self.tap(self.PAD[direction], hold=14, rest=150)
         after = self.pos()[:2]
         return abs(after[0] - before[0]) + abs(after[1] - before[1])
+
+    def clear(self, tries=4):
+        """
+        Dismiss whatever is waiting for a button.
+
+        Walking around fires events: a line of text to page through, a
+        question to answer, sometimes a fight. While one is up the pad does
+        not move the party, which reads exactly like a wall and made the map
+        look wrong when it was not. So a step that fails is followed by a few
+        presses and tried again before it is believed.
+        """
+        for _ in range(tries):
+            self.tap("C", hold=10, rest=70)
+
+    def step(self, direction):
+        """Move one square, pushing through anything that interrupts."""
+        if self.walk(direction):
+            return True
+        self.clear()
+        return bool(self.walk(direction))
 
     def to_dungeon(self):
         """
