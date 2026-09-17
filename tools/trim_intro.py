@@ -100,7 +100,20 @@ def apply(rom: bytes) -> bytes:
     rom[ATTRACT_SET:ATTRACT_SET + 4] = CLR_ATTRACT
     print(f"  0x{ATTRACT_SET:05X}: st.b $ba5a -> clr.b $ba5a (no attract demo)")
 
-    wait_for_button(rom)
+    # NOT APPLIED. wait_for_button turns the title card's fifteen-second
+    # timeout into an unconditional wait, which is what the screen looks like
+    # it should do. It was tried and made things worse: the boot reaches the
+    # title TWICE -- there is a black teardown between them, so it is the
+    # loop at 0x003D0 going back to 0x352 after the first entry into the game
+    # returns instead of staying. With the stock timeout both passes expire
+    # on their own and read as one slow sequence; with the wait they become
+    # two button presses.
+    #
+    # The double entry is the real defect and it is not this patch's doing.
+    # It could not be pinned down: BlastEm's -l logs each address once and
+    # not in execution order, so it cannot count a redraw, and the pad cannot
+    # be driven under logging to reproduce it. Left off until that can be
+    # observed properly rather than guessed at.
     return integrity.repair(bytes(rom))
 
 
