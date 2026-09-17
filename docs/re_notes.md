@@ -1968,3 +1968,42 @@ a value depends on which set is loaded, and the sets do not correspond
 one-to-one either. Not attempted; the passability profiles above overlap too
 much to derive it automatically -- 7 matches at 70% in both, but 6, 12 and
 13 do not.
+
+---
+
+## Creature artwork: what is known, and the one thing that is not
+
+Matrix Cubed's 36 creatures now have roster slots, names and figure records
+of their own, but each still *looks* like the Countdown creature it clones.
+Converting the artwork is the remaining piece. The measurements:
+
+- A Genesis combat figure is the same container as a picture: count word,
+  nametable size, flags, nametable, tile data. Decoded by
+  `tools/genesis_pic.py`.
+- Figure 0 is **117 tiles, 162 cells**, and its directory record's `chunk`
+  byte is **18**, so the sheet is 18 tiles wide by 9 tall.
+- At 24x24 per frame -- 3x3 tiles -- that is **eighteen frames**, six across
+  and three down. Rendering one in false colour shows exactly that: a
+  humanoid in a grid of poses.
+- Matrix Cubed's combat sprites decode at **24x24**, so they drop in without
+  scaling. `CPIC1.DAX` holds 108 and `COMSPR.DAX` 50; consecutive blocks are
+  frames of the same creature, which is visible in a contact sheet -- five
+  soldier poses in a row, then a crab, a scorpion, a dinosaur.
+
+**The open question is the palette.** Figure blobs carry `flags = 0x0000`,
+meaning no embedded palette -- unlike portraits, which set `0x0008` and
+carry sixteen CRAM words. So the engine supplies the palette from somewhere
+and the converted art has to be quantised to it, not to a palette of its
+own choosing.
+
+Ruled out so far: `0xF16AA` is not a palette table. Its words read `000A
+455A`, `000A 4584` and so on, which are 32-bit pointers into the 0xA4xxx
+region, not CRAM entries.
+
+Sampling a rendered combat frame gives 16 distinct colours over the figures,
+but that mixes the sprites with the floor behind them, so it is an upper
+bound rather than the palette.
+
+The next thing to try is the harness rather than the ROM: `tools/play.py`
+can reach combat, so a stock figure whose tile indices are known can be
+located on screen and each index read off against the colour it draws as.
