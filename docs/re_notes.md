@@ -2007,3 +2007,26 @@ bound rather than the palette.
 The next thing to try is the harness rather than the ROM: `tools/play.py`
 can reach combat, so a stock figure whose tile indices are known can be
 located on screen and each index read off against the colour it draws as.
+
+### Reading the figure palette by asking the hardware
+
+Two approaches failed. `0xF16AA` is a pointer table, not palettes. And
+matching a known figure's tile indices against a rendered combat frame
+finds nothing, because the engine composes a figure from hardware sprites
+rather than drawing the sheet's nametable as it is laid out -- so the
+arrangement on screen is not the arrangement in the blob.
+
+What works is `tools/palette_probe.py`: replace a figure's artwork with a
+test pattern, fight the creature under `tools/play.py`, and look. A first
+pattern banded the index by pixel row and only ever revealed two colours,
+because a figure is three tiles tall and the bands repeated inside each
+tile. One flat index per 8x8 tile works: the enemy draws as a three by three
+grid of solid colours.
+
+The palette draws as red, green, navy, white, yellow, black, teal and dark
+red, with the floor showing through wherever the index is transparent.
+
+Still to do: pin which index is which colour. The engine's choice of tiles
+is not the sheet's order, so the mapping cannot be read off directly -- it
+needs either a probe per index, or working out how the sprite composer picks
+tiles.
