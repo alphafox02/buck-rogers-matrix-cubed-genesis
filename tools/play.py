@@ -162,11 +162,41 @@ class Game:
             self.tap("C", hold=8, rest=70)
         return self.pos()
 
+    # The d-pad moves in ABSOLUTE directions -- UP walks north and turns the
+    # party to face north -- rather than forward/turn as the DOS game does.
+    # Getting that wrong is what made the first movement tests look like the
+    # party was frozen: they turned with RIGHT and then pressed UP, which
+    # just walked north every time.
+    PAD = {"N": "UP", "S": "DOWN", "W": "LEFT", "E": "RIGHT"}
+
     def walk(self, direction, steps=1):
-        """Face a direction and step. Returns the squares actually moved."""
+        """Step in a compass direction. Returns the squares actually moved."""
         before = self.pos()[:2]
-        self.face(direction)
         for _ in range(steps):
-            self.tap("UP")
+            self.tap(self.PAD[direction], hold=10, rest=90)
         after = self.pos()[:2]
         return abs(after[0] - before[0]) + abs(after[1] - before[1])
+
+    def to_dungeon(self):
+        """
+        Boot all the way to free movement on the opening dock.
+
+        Load the pregenerated team, begin, sit through the briefing, then get
+        out of the spoils screen -- which is the fiddly part. Its EXIT asks
+        "THERE IS STILL BOOTY LEFT. GO BACK AND CLAIM IT?" and the answer has
+        to be NO, or it puts you straight back in.
+        """
+        self.to_party()
+        for _ in range(3):
+            self.tap("DOWN", hold=8, rest=25)
+        self.tap("RIGHT", hold=8, rest=25)
+        self.tap("C", hold=8, rest=110)         # character sheet
+        self.tap("C", hold=8, rest=110)         # the spoils screen
+        for _ in range(3):
+            self.tap("DOWN", hold=8, rest=30)   # down to EXIT
+        self.tap("START", hold=10, rest=140)    # -> the booty prompt
+        self.tap("RIGHT", hold=10, rest=90)     # -> NO
+        self.tap("C", hold=10, rest=200)
+        for _ in range(6):                      # arrival text, the chancellor
+            self.tap("C", hold=10, rest=140)
+        return self.pos()
