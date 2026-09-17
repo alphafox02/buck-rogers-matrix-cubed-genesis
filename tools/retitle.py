@@ -28,6 +28,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import integrity
 
 DOMESTIC, OVERSEAS, COPYRIGHT, SERIAL = 0x120, 0x150, 0x110, 0x180
+
+# The copyright lines the title card prints, in the engine's string pool.
+# Countdown is a 1991 title and Matrix Cubed a 1992 one -- its own DOS title
+# screen reads "(C)1992 TSR, INC. / (C)1992 THE DILLE FAMILY TRUST / (C)1992
+# STRATEGIC SIMULATIONS, INC." -- so the three that name those holders move
+# on a year. Same length, so they are edited in place.
+#
+# "(c) 1991 Electronic arts" is left alone: it credits the Genesis port
+# itself, which is what this is built on, and is not part of what the DOS
+# game claims.
+COPYRIGHT_LINES = (
+    b"(c) 1991 TSR, Inc.",
+    b"(c) 1991 The Dille Family Trust",
+    b"(c) 1991 Strategic Simulations, Inc.",
+)
 NAME_LEN, COPY_LEN, SERIAL_LEN = 48, 16, 14
 DEFAULT_NAME = "BUCK ROGERS MATRIX CUBED"
 DEFAULT_COPY = "(C)T-50 1992.JAN"
@@ -53,6 +68,15 @@ def apply(rom: bytes, name=DEFAULT_NAME, copyright=DEFAULT_COPY,
     print(f"  copyright -> {copyright!r}")
     print(f"  serial    -> {serial!r} (unchanged: the emulator ROM database "
           f"keyed on it also supplies the SRAM mapping)")
+    moved = 0
+    for line in COPYRIGHT_LINES:
+        at = bytes(rom).find(line)
+        if at < 0:
+            continue
+        rom[at:at + len(line)] = line.replace(b"1991", b"1992")
+        moved += 1
+    if moved:
+        print(f"  copyright  -> {moved} lines moved from 1991 to 1992")
     return integrity.repair(bytes(rom))
 
 
