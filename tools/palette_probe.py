@@ -14,7 +14,10 @@ bands, one per palette index. Fight the creature under tools/play.py and the
 screen shows what each index actually draws as.
 
 Usage:
-    palette_probe.py <in.gen> <out.gen> [figure_id]
+    palette_probe.py <in.gen> <out.gen> [figure_id] [shift]
+
+A figure is three tiles square, so one run shows nine indices. `shift`
+rotates which nine, so two runs cover all sixteen.
 """
 
 import struct
@@ -31,7 +34,7 @@ import lzw_encode
 PROBE_AT = 0x1B6000        # clear of every other relocation
 
 
-def build_sheet(w_tiles=18, h_tiles=9):
+def build_sheet(w_tiles=18, h_tiles=9, shift=0):
     """
     A sheet where every 8x8 tile is one flat palette index.
 
@@ -44,7 +47,7 @@ def build_sheet(w_tiles=18, h_tiles=9):
     tiles, order, nametable = {}, [], []
     for ty in range(h_tiles):
         for tx in range(w_tiles):
-            idx = (ty * w_tiles + tx) % 16
+            idx = (ty * w_tiles + tx + shift) % 16
             key = bytes([(idx << 4) | idx]) * 32
             if key not in tiles:
                 tiles[key] = len(order)
@@ -55,11 +58,11 @@ def build_sheet(w_tiles=18, h_tiles=9):
     return blob
 
 
-def apply(rom: bytes, figure_id=0x0F) -> bytes:
+def apply(rom: bytes, figure_id=0x0F, shift=0) -> bytes:
     rom = bytearray(rom)
     base = struct.unpack_from(">I", rom, expand_figures.OPERANDS[0])[0]
     recs, _term = expand_figures.read(rom, base)
-    blob = build_sheet()
+    blob = build_sheet(shift=shift)
     packed = lzw_encode.compress(blob)
     if bytes(genesis_ecl.decompress(packed, limit=0x20000)) != blob:
         raise SystemExit("probe sheet does not round trip")
@@ -81,6 +84,7 @@ if __name__ == "__main__":
         sys.exit(__doc__)
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
     fid = int(sys.argv[3], 0) if len(sys.argv) > 3 else 0x0F
-    out = apply(src.read_bytes(), fid)
+    shift = int(sys.argv[4], 0) if len(sys.argv) > 4 else 0
+    out = apply(src.read_bytes(), fid, shift)
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'FAILS'}; wrote {dst}")
