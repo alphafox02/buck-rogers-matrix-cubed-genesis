@@ -61,6 +61,30 @@ NAME_MAP = {
     "MENU_HORIZONTAL": "HMENU", "INPUT_YES_NO": "GETYN", "FIND_ITEM": "FINDITEM",
     "PRINT_RETURN": "PRINTRETURN", "NPC_ADD": "ADDNPC",
     "LOAD_AREA_DECO": "LOADPIECES", "LOGBOOK_ENTRY": "JOURNAL",
+    # The two opcode tables are the same engine's, numbered alike -- 0x40 is
+    # DESTROY_ITEM/DESTROY, 0x41 GIVE_EXP/ADDEP, 0x43 SOUND_EVENT/SOUND,
+    # 0x4C PICTURE2/VIEW. So the opcodes the DOS disassembler could not name
+    # are not unknown, they are simply unnamed: the Genesis table has one at
+    # the same number, with the same argument count, and the call sites agree.
+    #
+    #   0x44  before "<name> IS HEALED..." after writing the record  -> SAVECHARACTER
+    #   0x48  around area changes                                    -> HIDEITEMS
+    #   0x4A  after LOAD_MON, before "THE BARTENDER KICKS YOU OUT"   -> DUEL
+    #   0x4B  19 uses, one byte operand                              -> STORE
+    #   0x3E                                                         -> DUMP
+    #   0x45                                                         -> HOWFAR
+    #
+    # That is 59 of the 62 instructions that were doing nothing.
+    "UNKNOWN_44": "SAVECHARACTER", "UNKNOWN_48": "HIDEITEMS",
+    "UNKNOWN_4A": "DUEL", "UNKNOWN_4B": "STORE",
+    "NPC_REMOVE": "DUMP", "RANDOM0": "HOWFAR",
+    # NOT mapped, on argument count. UNKNOWN_49 carries six operands where
+    # the Genesis SKILLDAMAGE table says none, and WRITE_MEM_BASE_OFF three
+    # where SAVETABLE says none. The call sites fit -- 0x49 follows "BONUS #
+    # TO DAMAGE?" -- but if the handler really reads no operands then the
+    # DOS ones would be executed as opcodes, and a wrong guess there is a
+    # wild jump. Three instructions, both in the developer block. They keep
+    # stepping over themselves until the handlers are read.
     "DESTROY_ITEM": "DESTROY", "GIVE_EXP": "ADDEP", "SPELL": "SPELLS",
     "CLEAR_BOX": "CLEARBOX", "COPY_PROTECTION": "PROTECT", "FOR_START": "FOR",
     "FOR_REPEAT": "ENDFOR", "STOP_MOVE": "CONTINUE", "SOUND_EVENT": "SOUND",
