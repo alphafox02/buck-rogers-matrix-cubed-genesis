@@ -1132,6 +1132,35 @@ Verified on screen: the truncated version shows mirrored ape legs with no
 head; the rescaled one is a complete beast at the same scale as the party
 figures.
 
+### Not shipped, and why
+
+A play report pushed back on this: large creatures in Countdown are
+remembered as **tall**, and if one is tall then whatever stands beside it
+has to be placed clear of it. That objection is right, and the engine
+answers it -- `0xC358` lifts a class 2 figure 24px so it stands on the floor
+rather than floating, and the allocator reserves two slots so the next
+creature is not overlapped. None of that machinery exists unless tall
+creatures are drawn tall somewhere. The nine large figures also carry
+shadows at the bottom of their frames, art that only reads correctly whole.
+
+So the rescale is written, verified and **off**. The truncation it fixes was
+measured by substituting a figure record under a monster the engine spawned
+as something else, which is not a real spawn, and three follow-ups failed to
+show a tall draw either way:
+
+- Reading `$B016`/`$B018` during a fight shows **one** combatant, figure
+  `0x1E`, width 1 -- not any of the eight figures on screen.
+- Giving figure `0x1E` a class 2 record changed **zero pixels**: it is
+  tracked but never drawn.
+- Forcing the monster loader to id `0x04` changed the encounter (a different
+  combat UI came up, "ROARKE ATTACKS") without changing the artwork.
+
+Whatever draws the figures on the board is none of the paths examined so
+far. Shrinking three creatures on the strength of a test that does not model
+a real spawn would trade a maybe-bug for a certain one, so `build.py` calls
+it out and leaves it off until a large creature is seen truncated in
+ordinary play.
+
 ### Where 48x48 stands
 
 `tools/bigfigures.py` is still in the build and still inert. What the board

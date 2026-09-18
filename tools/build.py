@@ -325,13 +325,34 @@ def main():
          *[f"0x{nid:02X}:0x{src:02X}"
                for nid, (_name, src) in sorted(monstermap.NEW_CREATURES.items())])
         step("add_creatures.py")
-        # Three of the added creatures clone a large donor and inherit its
-        # size class. The combat board draws nine cells whatever the class
-        # says, so a class 2 or 3 figure appears as a 24x24 crop -- half a
-        # creature. Redraw them at the size the board uses.
-        step("rescale_figure.py",
-             *[f"0x{nid:02X}" for nid, (_n, src) in sorted(monstermap.NEW_CREATURES.items())
-               if src in LARGE_FIGURES])
+        # NOT APPLIED. Three added creatures clone a large donor and inherit
+        # its size class (ASSAULT ROBOT and COMBAT ROBOT from 48x24 donors,
+        # COYODORG from a 24x48 one), and substituting a large figure into
+        # the opening encounter draws a 24x24 crop -- half a creature. So
+        # tools/rescale_figure.py redraws them at 24x24, and running it here
+        # would make them whole.
+        #
+        # It is off because the premise is not proven. Countdown ships nine
+        # large figures whose frames carry shadows at the bottom, art that
+        # only makes sense drawn whole, and the engine has machinery for
+        # exactly that: 0xC358 lifts a class 2 figure 24px so it stands on
+        # the floor, and the allocator reserves two slots so the creature
+        # beside it is not overlapped. None of that exists unless tall
+        # creatures are drawn tall somewhere.
+        #
+        # The substitution tests that showed truncation put a figure record
+        # under a monster the engine spawned as something else, and three
+        # follow-ups failed to reproduce a tall draw either way: giving the
+        # one combatant the engine tracks ($B018, figure 0x1E) a class 2
+        # record changed nothing on screen because it is not drawn at all,
+        # and forcing the monster loader to id 0x04 changed the encounter
+        # without changing the artwork. So the figures on the board come
+        # from a path still not identified, and shrinking three creatures on
+        # the strength of a test that does not model a real spawn would trade
+        # a maybe-bug for a definite one.
+        #
+        # Turn this on once a large creature has been seen truncated in
+        # ordinary play.
     else:
         step("rename_monsters.py")
     if music:
