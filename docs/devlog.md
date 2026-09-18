@@ -1811,3 +1811,45 @@ The engine side needed only three small relocated blocks after all --
 `0x098B0` slots, `0x0ADA6` shape, `0x142C4` and `0x1050C` occupancy, plus
 one `addq.w #1, d5` to stand the creature on its square. Every wrong turn
 before that was chasing an engine bug that was a data bug.
+
+## The shopkeeper's face, and a ROM-layout collision
+
+A play report: walking into the shop showed the default space view in the
+picture window where DOS shows the shopkeeper, and his face only appeared
+once, inside the store.
+
+The reference was fine. Block 17 issues `PICTURE 107` immediately before
+`'WELCOME TO MY SHOP...'`, and `artmap` resolves 107 (0x6B) because
+`expand_pictures` adds it and `inject_portrait` injects `PIC1/107_5` for it.
+
+The artwork was overwritten after it was written. Reading the build's own
+output back as address ranges:
+
+    picture 0x6A     0x1F7E45 + 3403 -> 0x1F8B90
+    title/presents   0x1F8000 + 5894 -> 0x1F9706     written LATER
+    picture 0x6B     0x1F8B92 + 2539 -> 0x1F957D
+
+`inject_title.py` had `TITLE_BASE = 0x1F8000`, with the comment "clear of
+the portraits at 0x1E0000" -- true when it was written, and false once
+enough portraits were added for them to grow past it. It runs after
+`inject_portrait.py`, so the title art lands on top of pictures 0x6A and
+0x6B. Nothing errors. The ROM is valid, the checksum is repaired, the game
+boots, and one portrait is simply gone.
+
+`TITLE_BASE` is now 0x1FA000 and the shop portrait appears.
+
+### And a check so this cannot happen a fourth time
+
+This is the third collision of exactly this kind -- the figure directory
+into the monster stream, the monster stream over live data, and now the
+title over the portraits. Each one was invisible until someone looked at the
+right screen.
+
+`tools/romlayout.py` reads the build transcript, where every injector
+already prints where it wrote and how much, and fails the build if two
+ranges intersect. `build.py` now captures each step's output and runs it
+before publishing:
+
+    romlayout: 88 written regions, 0x0F2004-0x1FDAF6, NO overlaps
+
+Run against the broken build it names both collisions exactly.

@@ -44,7 +44,13 @@ import lzw_encode
 
 from PIL import Image
 
-TITLE_BASE = 0x1F8000        # clear of the portraits at 0x1E0000
+# Above the portraits, which start at 0x1E0000 and now run to about
+# 0x1F9600. This used to be 0x1F8000, chosen when there were fewer of them,
+# and the title art silently overwrote pictures 0x6A and 0x6B -- the second
+# of which is the shopkeeper, so walking into the shop showed the default
+# space view instead of his face. Nothing errors: the portrait is written
+# first and the title lands on top of it.
+TITLE_BASE = 0x1FA000
 
 # operand address, tiles wide, tiles tall, how to build the picture
 SCREENS = (

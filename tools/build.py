@@ -257,18 +257,26 @@ def main():
     # ever sees a finished ROM or the previous one.
     work = out.with_name(out.name + ".building")
 
-    def step(tool, *args):
-        rc = subprocess.call([sys.executable, str(REPO / "tools" / tool),
-                              str(work), str(work), *args])
-        if rc:
-            work.unlink(missing_ok=True)
-            raise SystemExit(rc)
+    # Every step's output is kept as well as printed, so romlayout.py can
+    # read back where each injector wrote and fail the build if two of them
+    # overlap. That has happened three times and never announced itself.
+    transcript = []
 
-    rc = subprocess.call([sys.executable, str(REPO / "tools/inject_area.py"),
-                          str(STOCK), str(work)] + specs())
-    if rc:
-        work.unlink(missing_ok=True)
-        raise SystemExit(rc)
+    def run(cmd):
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        sys.stdout.write(proc.stdout)
+        sys.stderr.write(proc.stderr)
+        transcript.append(proc.stdout)
+        if proc.returncode:
+            work.unlink(missing_ok=True)
+            raise SystemExit(proc.returncode)
+
+    def step(tool, *args):
+        run([sys.executable, str(REPO / "tools" / tool),
+             str(work), str(work), *args])
+
+    run([sys.executable, str(REPO / "tools/inject_area.py"),
+         str(STOCK), str(work)] + specs())
 
     # Both games' area 0x00 is a developer warp menu rather than a boot
     # block, so replace it with a stub that just enters the game.
@@ -366,6 +374,11 @@ def main():
     if music:
         step("inject_music.py",
              *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])
+
+    import romlayout
+    if romlayout.main_from_text("".join(transcript)):
+        work.unlink(missing_ok=True)
+        raise SystemExit("ROM layout check failed: two injectors overlap")
 
     work.replace(out)
     print(f"published {out}")
