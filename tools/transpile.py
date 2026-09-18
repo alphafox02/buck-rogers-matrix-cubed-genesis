@@ -87,8 +87,28 @@ NAME_MAP = {
     # stepping over themselves until the handlers are read.
     "DESTROY_ITEM": "DESTROY", "GIVE_EXP": "ADDEP", "SPELL": "SPELLS",
     "CLEAR_BOX": "CLEARBOX", "COPY_PROTECTION": "PROTECT", "FOR_START": "FOR",
-    "FOR_REPEAT": "ENDFOR", "STOP_MOVE": "CONTINUE", "SOUND_EVENT": "SOUND",
+    "FOR_REPEAT": "ENDFOR", "SOUND_EVENT": "SOUND",
     "CLOCK1": "CLOCK",
+
+    # STOP_MOVE ends the event; it does not wait for a button. It used to be
+    # mapped to CONTINUE, which does the opposite -- it waits and then runs
+    # on -- so every script that said "if the player says no, stop" ran the
+    # yes branch anyway, and every script that ended with STOP_MOVE fell into
+    # whatever routine happened to be next. The first one caught was the
+    # bundle of papers on the opening dock: answer either way and the script
+    # walked on into the teleport tail below it, whose last instruction is a
+    # GOTO back to the question. An unbreakable loop, from one wrong name.
+    #
+    # It is opcode 0x42 in both engines, and the two uses profile the same
+    # way. Counting how often each is the last instruction of a basic block
+    # -- the next offset is a jump target, or nothing decodes there:
+    #
+    #     Matrix Cubed  STOP_MOVE      407 of 532   76%   127 guarded by an IF
+    #     Countdown     ENCEXIT        374 of 431   87%    51 guarded by an IF
+    #     Matrix Cubed  INPUT_RETURN    90 of 1784   5%    51 guarded by an IF
+    #
+    # A terminator, like RETURN (78% / 84%), and nothing like INPUT_RETURN.
+    "STOP_MOVE": "ENCEXIT",
     # Same slot, same role: both halt until the player acknowledges.
     "INPUT_RETURN": "CONTINUE",
 
