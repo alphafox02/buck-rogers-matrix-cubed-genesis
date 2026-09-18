@@ -1409,12 +1409,39 @@ six. Identical shape words, different row count, so the row count is **not**
 coming from -6(a6) alone. Something else keyed on the size byte gates it,
 and size 4 falls into the normal case.
 
-Which narrows the remaining work to one question: what else reads the size
-byte and decides how many rows a creature gets. The candidates are the four
-sites this tool does not yet patch -- 0x0CC9A, 0x1050C, 0x14552, 0x15DD2 --
-though none of them registered a call in the traced fight, so it is more
-likely a fifth that the trace missed because it sits behind a `>= 2` test
-rather than an equality.
+That earlier "identical shape values, different row count" experiment was
+confounded and is withdrawn: the shape was changed without rebuilding the
+sheet, so the engine was reading three cells per row out of a sheet laid out
+six per row and the result says nothing.
+
+What replaced it is a contradiction worth recording, because it is the next
+thing to resolve:
+
+- With the **flat-colour probe** sheet at size 4, changed regions reach 96px
+  tall -- six rows are being drawn.
+- With the **dinosaur** sheet at size 4, rows 0-2 are drawn exactly (cells
+  0..5, 6..11, 12..17, error 0.0 against the sheet) and rows 3-5 are bare
+  floor, with the floor texture intact rather than overdrawn.
+
+Both sheets are 648 cells, both are class 4 with monster size 4. The
+difference between them is content: 16 unique tiles against 60, and
+transparency. Neither should matter -- a stock large figure carries 202
+unique tiles -- so something about how the lower half of a real frame is
+fetched or uploaded differs from the probe.
+
+Ruled out along the way: the tile budget (60 tiles is far under stock's
+202), the frame stride (the index is always even, so the stock nine-cell
+step already lands correctly), the anchor (fixed, the creature stands on its
+square), and overdraw by the next creature (checked on the last creature in
+the line, with nothing drawn after it).
+
+Also mapped, and worth keeping: `0x098AE`-`0x098BA` allocates each distinct
+figure a slot, one for a normal creature and two for a large one, and
+`0x0CBAA` turns that slot into a base frame index -- times four for a small
+figure, times two for a large one. So every figure gets four nine-cell units
+of frame space: four 24x24 frames, or two 48x24, or one 48x48. A 48x48
+creature with more than one frame needs more slots than the two a large
+figure gets, which is what the size 4 case in `slots()` is for.
 
 Everything else is in place and verified: the size byte, the frame shape
 (six cells per row proven on screen), the grid squares, the VRAM slots, the
