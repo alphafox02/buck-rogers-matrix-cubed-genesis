@@ -1240,3 +1240,46 @@ not the class tables. The class machinery belongs to some other view, which
 That is a smaller and better-defined problem than it was two days ago, and
 it is no longer blocking anything: every creature the port adds now draws
 whole.
+
+## A Matrix Cubed creature in Countdown's combat engine, at size
+
+With the monster size byte found, the first DOS creature went in whole.
+`tools/inject_creature.py` takes `CPIC1` block ids, quantises them to the
+sixteen colours the engine gives a combat figure, fits them to a frame shape
+and writes **both** fields that have to agree -- the figure record's class
+nibble and the monster record's byte 0x23.
+
+The dinosaur is `CPIC1` blocks 22 (standing) and 157 (lunging), 48x48 in
+DOS. Fitted to the Genesis wide class it is a 48x24 crouching theropod with
+its jaws open, and on the board it is plainly twice the width of the party
+figures standing next to it. `art_preview/trex_zoom.png`.
+
+Quantising to sixteen colours costs less than expected: the DOS sprite is
+mostly two yellows and two browns with black outlines, and the figure
+palette happens to carry all four.
+
+A DOS block is a single pose, so the poses given are cycled to fill the
+eighteen frames the sheet wants. That is enough to see a creature fight; a
+real walk cycle needs the frame grouping in `docs/art_todo.md` finished.
+
+### What is still missing for 48x48
+
+The engine's model is one grid square, or two -- vertically or
+horizontally. A true 48x48 creature stands on **two squares by two**, and
+five sites decide that from the monster size byte. None has an external
+branch into it, so all five can be rewritten in place:
+
+    0x0CC9A   bounding box        24 bytes   size 4 -> both axes
+    0x1050C   grid occupancy      34 bytes   extra row AND column
+    0x14552   centre offset       26 bytes   24 on both axes
+    0x15DD2   tall/wide flag      34 bytes   needs a third state
+    0x0CB1C   animation tweak      1 byte    bne -> bcs, so 4 reads as 3
+
+The fourth is the awkward one. The flag feeds `0x15F0C`, which for a tall
+creature checks the square one row on and for a wide one the square one
+column on, before letting it move. A 2x2 creature has to check three
+neighbours, and that is pathfinding -- getting it wrong means monsters
+walking through each other rather than merely looking odd.
+
+So 48x48 is worth doing after the art pipeline, not before: ten DOS sprites
+want it, and all ten already look right in the wide class.
