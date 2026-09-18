@@ -94,6 +94,15 @@ SHAPE_END = 0x0ADFC
 SQUARES = 0x142C4
 SQUARES_END = 0x142EC
 
+# Which grid squares a creature is considered to stand on. Stock gives a
+# tall creature an extra row and a wide one an extra column; a 2x2 needs
+# both. Without it the board repaints the floor over the squares it thinks
+# are empty, which wipes the lower half of a 48x48 creature AFTER it has
+# been drawn -- the draw loop really does run six rows, logged live as
+# rows-1 = 5, cols-1 = 5.
+OCCUPY = 0x1050C
+OCCUPY_END = 0x1052E
+
 # The frame index, and where a frame starts in the sheet:
 #
 #     0AE2A: move.b $11(a3), d0   ; animation step
@@ -192,6 +201,22 @@ def squares():
     return a.done() + b"\x4e\xf9" + struct.pack(">I", SQUARES_END)
 
 
+def occupy():
+    """Sizes 2 and 4 take an extra row, sizes 3 and 4 an extra column."""
+    a = Asm()
+    a.raw("102a0023")                       # move.b $23(a2), d0
+    a.raw("b03c0002").br(0x65, "done")      # cmp.b #2,d0 / bcs done
+    a.raw("7400").raw("142b0012")           # moveq #0,d2 / move.b $12(a3),d2
+    a.raw("7600").raw("162b0013")           # moveq #0,d3 / move.b $13(a3),d3
+    a.raw("5700")                           # subq.b #3, d0   2->-1 3->0 4->1
+    a.br(0x67, "wide")                      # beq wide        -- size 3
+    a.raw("5243")                           # addq.w #1, d3   -- sizes 2 and 4
+    a.raw("4a00").br(0x6B, "done")          # tst.b d0 / bmi done   -- size 2
+    a.label("wide").raw("5242")             # addq.w #1, d2
+    a.label("done")
+    return a.done() + b"\x4e\xf9" + struct.pack(">I", OCCUPY_END)
+
+
 def index():
     """Double the frame index for size 4, then the stock offset maths."""
     a = Asm()
@@ -230,7 +255,8 @@ def apply(rom: bytes) -> bytes:
     cursor = NEW
     for name, build, site, end in (("slot count", slots, SLOTS, SLOTS_END),
                                    ("frame shape", shape, SHAPE, SHAPE_END),
-                                   ("grid squares", squares, SQUARES, SQUARES_END)):
+                                   ("grid squares", squares, SQUARES, SQUARES_END),
+                                   ("occupancy", occupy, OCCUPY, OCCUPY_END)):
         cursor += cursor & 1
         code = build()
         if cursor + len(code) > NEW_LIMIT:

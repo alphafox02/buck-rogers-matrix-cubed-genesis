@@ -1414,6 +1414,283 @@ confounded and is withdrawn: the shape was changed without rebuilding the
 sheet, so the engine was reading three cells per row out of a sheet laid out
 six per row and the result says nothing.
 
+### Six rows ARE drawn. They are overwritten.
+
+Logging the draw loop live settles it. `-6(a6)` and `-8(a6)` read back as
+**5 and 5** at draw time, so the loop really does run six passes of six
+cells. And logging the plane address each pass writes to:
+
+    ADDA AE5A AEDA AF5A AFDA B05A     six rows, +0x80 apart
+    A7C2 A842 A8C2 A942 A9C2 AA42     six rows, +0x80 apart
+
+Six consecutive plane rows per creature, exactly right. The 48x48 creature
+is drawn whole and then the lower half is painted over.
+
+A play report worked out why before the log did: "it's possible that the
+very top one doesn't have a bottom half as it would interfere with the top
+half of the one below it just a little." That is it. Creatures are placed
+one grid square apart -- 24px -- and a 48x48 creature is two squares tall,
+so each one's lower half lands where the next one's upper half goes, and the
+next one wins. What looks like a repeated top half is the neighbour, which
+is also why the marker test found no marker: the bottom half is drawn and
+then replaced before the frame is shown.
+
+So the remaining work is not in drawing at all. It is placement: a 48x48
+creature has to be given two squares of clearance. `0x142C4` and `0x1050C`
+both now mark four squares occupied for size 4, and both are verified
+harmless, but neither is what the encounter consults when it first lays
+monsters out.
+
+Ruled out, and worth not re-walking: the tile budget (60 unique tiles
+against stock's 202), the frame stride (the index is always even, so the
+stock nine-cell step lands correctly), the frame shape (six cells per row
+proven on screen at error 0.0 against the sheet), the anchor (fixed), and
+the row count (logged as six).
+
+Also mapped: `0x098AE`-`0x098BA` allocates each distinct figure a slot, one
+for a normal creature and two for a large one, and `0x0CBAA` turns that slot
+into a base frame index -- times four for a small figure, times two for a
+large one. Every figure therefore gets four nine-cell units of frame space:
+four 24x24 frames, or two 48x24, or one 48x48.
+
+### And one more instrumentation trap
+
+`bsr.w` is PC-relative. Copying `6100 D406` from 0x0AE80 into a stub at
+0x0F1F8E retargeted it from `$8288` to `$EF396` and produced a page of
+plausible-looking nonsense before the mistake showed. Relocated code has to
+re-encode every pc-relative branch, or use `jsr <abs>.l` instead. The three
+shipped blocks contain no pc-relative branches, which is why they are fine.
+### And 48x48 is now a defined job
+
+`tools/bigfigures.py` handles the drawing side: the layout table, the cell
+count, the VRAM slots, and the third and fourth display entries. Setting
+figure class 4 and byte 35 = 4 still draws 24x24, because the six sites
+above only know 2 and 3. A 48x48 creature is one that stands on **two
+squares by two**, so each of them needs a case:
+
+    0x0CC9A   size 4 -> both d4 and d5 = 6
+    0x1050C   size 4 -> an extra row AND an extra column
+    0x14552   size 4 -> 24 on both axes
+    0x15DD2   needs a third state, currently a two-state flag
+    0x0CB1C   treat 4 like 3
+    0x11B6E, 0x0CBAA   already correct, both test "> 1"
+
+That is the whole remaining list, and it is short.
+
+### Where 48x48 stood before this
+
+A play report pushed back on this: large creatures in Countdown are
+remembered as **tall**, and if one is tall then whatever stands beside it
+has to be placed clear of it. That objection is right, and the engine
+answers it -- `0xC358` lifts a class 2 figure 24px so it stands on the floor
+rather than floating, and the allocator reserves two slots so the next
+creature is not overlapped. None of that machinery exists unless tall
+creatures are drawn tall somewhere. The nine large figures also carry
+shadows at the bottom of their frames, art that only reads correctly whole.
+
+So the rescale is written, verified and **off**. The truncation it fixes was
+measured by substituting a figure record under a monster the engine spawned
+as something else, which is not a real spawn, and three follow-ups failed to
+show a tall draw either way:
+
+- Reading `$B016`/`$B018` during a fight shows **one** combatant, figure
+  `0x1E`, width 1 -- not any of the eight figures on screen.
+- Giving figure `0x1E` a class 2 record changed **zero pixels**: it is
+  tracked but never drawn.
+- Forcing the monster loader to id `0x04` changed the encounter (a different
+  combat UI came up, "ROARKE ATTACKS") without changing the artwork.
+
+Whatever draws the figures on the board is none of the paths examined so
+far. Shrinking three creatures on the strength of a test that does not model
+a real spawn would trade a maybe-bug for a certain one, so `build.py` calls
+it out and leaves it off until a large creature is seen truncated in
+ordinary play.
+
+### Where 48x48 stands
+
+`tools/bigfigures.py` is still in the build and still inert. What the board
+reads -- nine cells, three to a row -- is not what the class chain feeds it,
+so making a creature bigger on the board means changing the board's read,
+not the class tables. The class machinery belongs to some other view, which
+`0xBFAE` calling `0xB58A` with class 1 hard-coded also points at.
+
+That is a smaller and better-defined problem than it was two days ago, and
+it is no longer blocking anything: every creature the port adds now draws
+whole.
+
+## A Matrix Cubed creature in Countdown's combat engine, at size
+
+With the monster size byte found, the first DOS creature went in whole.
+`tools/inject_creature.py` takes `CPIC1` block ids, quantises them to the
+sixteen colours the engine gives a combat figure, fits them to a frame shape
+and writes **both** fields that have to agree -- the figure record's class
+nibble and the monster record's byte 0x23.
+
+The dinosaur is `CPIC1` blocks 22 (standing) and 157 (lunging), 48x48 in
+DOS. Fitted to the Genesis wide class it is a 48x24 crouching theropod with
+its jaws open, and on the board it is plainly twice the width of the party
+figures standing next to it. `art_preview/trex_zoom.png`.
+
+Quantising to sixteen colours costs less than expected: the DOS sprite is
+mostly two yellows and two browns with black outlines, and the figure
+palette happens to carry all four.
+
+A DOS block is a single pose, so the poses given are cycled to fill the
+eighteen frames the sheet wants. That is enough to see a creature fight; a
+real walk cycle needs the frame grouping in `docs/art_todo.md` finished.
+
+### What is still missing for 48x48
+
+The engine's model is one grid square, or two -- vertically or
+horizontally. A true 48x48 creature stands on **two squares by two**, and
+five sites decide that from the monster size byte. None has an external
+branch into it, so all five can be rewritten in place:
+
+    0x0CC9A   bounding box        24 bytes   size 4 -> both axes
+    0x1050C   grid occupancy      34 bytes   extra row AND column
+    0x14552   centre offset       26 bytes   24 on both axes
+    0x15DD2   tall/wide flag      34 bytes   needs a third state
+    0x0CB1C   animation tweak      1 byte    bne -> bcs, so 4 reads as 3
+
+The fourth is the awkward one. The flag feeds `0x15F0C`, which for a tall
+creature checks the square one row on and for a wide one the square one
+column on, before letting it move. A 2x2 creature has to check three
+neighbours, and that is pathfinding -- getting it wrong means monsters
+walking through each other rather than merely looking odd.
+
+So 48x48 is worth doing after the art pipeline, not before: ten DOS sprites
+want it, and all ten already look right in the wide class.
+
+## Which field really decides the shape, and why 48x48 is still out of reach
+
+Two probes settled the first half. Figure class 0 with monster size 2 draws
+**tall**; figure class 2 with monster size 1 draws **small**. So the monster
+record's byte 0x23 is the field that matters and the figure record's class
+nibble does not drive the board at all. `tools/bigfigures.py` keys on the
+class nibble, which is why setting class 4 changed nothing: it was patching
+a path the board does not use.
+
+The second half is still open. Eight instructions in the ROM read
+`$23(a2)` -- `0x0CB1C`, `0x0CBAA`, `0x0CC9A`, `0x0FA5A`, `0x1050C`,
+`0x11B6E`, `0x14552`, `0x15DD2` -- and every one of them is a clean,
+short, rewritable case statement over the values 1, 2 and 3. Instrumenting
+all eight and fighting a genuinely tall creature gives the same counts as
+fighting a small one: **zero, for all of them**. The creature still draws
+tall.
+
+So the size is read from a *copy* of the record, at some other offset, by
+code not yet found. Searching work RAM at 0xFF9000 for the monster's name to
+locate that copy turned up story text instead. Until the copy is found there
+is no fourth case to add, and a size byte of 4 falls back to 24x24 -- which
+is exactly what `art_preview/big48.png` shows.
+
+### What the engine can do today, and it is not nothing
+
+`art_preview/big_ten.png` puts all ten of Matrix Cubed's 48x48 creatures
+through both native large shapes. Eight read best **tall** at 24x48 -- the
+slime, the jellyfish walker, the dancer, the winged demon -- and the
+dinosaur reads best **wide** at 48x24. Both are double the area of a normal
+creature and both work now, with no engine change:
+
+    inject_creature.py <in.gen> <out.gen> 0x0F:3:22,157
+
+The DOS sprites do not fill their 48x48 square anyway -- most are a tall
+figure or a long one inside it -- so the loss from the missing square class
+is smaller than the numbers suggest.
+
+## 48x48: nearly, and exactly what is left
+
+`tools/bigcreature.py` extends the three routines a live fight showed taking
+the monster size byte, each relocated whole into free ROM with a size 4 case
+added, each rejoining the stock code where it left off:
+
+    0x098B0   slot count     large claims one extra VRAM slot; 2x2 claims three
+    0x0ADA6   frame shape    rows-1, cols-1, row stride; 48x48 is (5, 5, 12)
+    0x142C4   grid squares   visits every square the creature stands on
+
+The shape values were read straight out of the stock cases -- `(2,5,12)` for
+48x24, `(5,2,6)` for 24x48, `(2,2,6)` for 24x24 -- so -6(a6) is rows-1,
+-8(a6) cols-1, and -4(a6) the row stride in bytes, `(cols+1)*2`, which the
+mirrored row writer at `0x0AEAE` confirms by adding it to `a1` per row.
+
+**No fourth patch was needed.** A long detour went into changing the frame
+stride at `0x0AE6A`, on the reasoning that a 36-cell frame has to step four
+nine-cell units where an 18-cell one steps two. It does -- but the index is
+already `4*anim + 2*facing`, which is **always even**, so the stock nine-cell
+step lands on a 36-cell boundary by itself. Every attempt to "fix" the stride
+made it worse, and the version with no stride patch at all is the one that
+works.
+
+**Verified harmless.** With the patch in and no 48x48 creature anywhere, a
+fight on the opening dock is pixel-identical to the same fight before it --
+zero pixels differ, twice measured.
+
+### The splice was my data, not the engine
+
+A play report caught it: "it looks like you are mixing two monsters together
+in the 4 square." Exactly right, and literally so. The dinosaur was injected
+as `CPIC1` blocks **22 and 157**, and 157 is not the dinosaur's second pose
+-- it is the dancer. The two poses of the dinosaur are **22 and 150**. The
+engine had been compositing a dinosaur and a dancer into one creature and
+doing it correctly.
+
+With `0x0F:4:22,150` the sheet is right: rendering it back out of the ROM
+gives six clean frames of a standing theropod, head, jaws, body, legs, tail
+and shadow, 48x48 each.
+
+### What is still wrong: the lower half repeats the upper half
+
+A second play report caught it -- "half his body bottom is below the floor
+level". Two things were wrong and one is fixed.
+
+**Fixed: the anchor.** The block at 0x0ADFC computes the drawing origin as
+`gridX - d4`, `gridY - d5`, and a creature is drawn down and to the right of
+it. A 2x2 creature therefore has to start one square higher or its feet hang
+below the square it stands on. The size 4 case now does `addq.w #1, d5`
+before rejoining, and the creature sits on the floor with the party.
+
+**Not fixed: the rows.** Cropping one creature off the screen and putting it
+next to the sheet frame it should be shows the board drawing the top half
+twice -- head and shoulders, then head and shoulders again -- instead of top
+then bottom. Reading the drawn tiles back as cell numbers agrees: rows 0-2
+come from cells B, B+6, B+12 and rows 3-5 from B+28, B+34, B+40, when six
+contiguous rows would be B through B+30.
+
+The draw loop looks like it should already work:
+
+    0AE7A: move.w -$6(a6), d2    ; rows-1 = 5, so six passes
+    0AE84: jsr    (a2)           ; one row of cols+1 cells from a1
+    0AE86: addi.w #$80, d3       ; next plane row
+    0AE8A: dbra   d2, $ae7e
+
+and every row writer advances `a1` by exactly `cols+1` cells -- `(a1)+` in
+the plain one, `adda.w -$4(a6), a1` in the mirrored one, and -4(a6) is 12
+bytes for six cells. So six rows from one base should be contiguous.
+
+They are not. Matching each drawn tile row against the sheet answers it
+precisely:
+
+    screen row 0  <-  sheet cells  0.. 5   error 0.0
+    screen row 1  <-  sheet cells  6..11   error 0.0
+    screen row 2  <-  sheet cells 12..17   error 0.0
+    screen rows 3-5                        nothing -- bare floor
+
+Rows 0 to 2 are drawn **exactly**, six cells wide, from the right cells.
+Rows 3 to 5 are not drawn at all; the floor shows through. So the six-cell
+row width works and the six-row height does not.
+
+And the deciding experiment: give size 4 the size 2 shape values --
+`(5, 2, 6)`, byte for byte what the tall class uses -- and it still draws
+only three rows, 24x26 px. The stock tall class with the same values draws
+six. Identical shape words, different row count, so the row count is **not**
+coming from -6(a6) alone. Something else keyed on the size byte gates it,
+and size 4 falls into the normal case.
+
+That earlier "identical shape values, different row count" experiment was
+confounded and is withdrawn: the shape was changed without rebuilding the
+sheet, so the engine was reading three cells per row out of a sheet laid out
+six per row and the result says nothing.
+
 What replaced it is a contradiction worth recording, because it is the next
 thing to resolve:
 
