@@ -308,6 +308,11 @@ def main():
     # Room for both rosters. Harmless on its own -- it widens a stack buffer
     # and nothing else -- and it is what any creature added later needs.
     step("monstercap.py")
+    # A 48x48 size class. Stock Countdown draws 24x24, 24x48 and 48x24;
+    # Matrix Cubed has ten creatures at 48x48, the dinosaur among them, and
+    # they have nowhere to go without this. Classes 0-3 keep their stock
+    # behaviour byte for byte.
+    step("bigfigures.py")
     # Matrix Cubed's own creatures, each with a slot, a name and a figure of
     # its own. The figure directory grows first: monster id and figure id are
     # the same number, and a monster with no figure takes the miss path.

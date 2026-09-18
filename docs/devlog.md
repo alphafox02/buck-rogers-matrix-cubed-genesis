@@ -863,3 +863,141 @@ Four fixes, in the order they mattered:
 The third and fourth were only found because play reports kept contradicting
 what the code appeared to say. Reading the error's callers first, rather
 than last, would have saved most of an evening.
+
+---
+
+## Creature size: how a combat figure is actually built
+
+A play report started this: the T-Rex in DOS "looked way bigger than other
+things", and did the port scale it right. Answering it meant taking the
+combat figure apart, and most of what this project believed about it was
+wrong.
+
+### Wrong turn one: the sheet width is not the frame shape
+
+A figure record is eight bytes at `0x9A14` -- pointer, figure id at `+4`,
+a width in tiles at `+5`, an animation index at `+6`, and a packed byte at
+`+7`. Byte `+5` is only ever 18 or 36, and 43 figures have 18 while nine
+have 36. That looked like the answer: two sizes, the big one twice as wide.
+
+Rendering a 36-wide sheet as a 36-wide image gives scrambled body parts. It
+is an atlas shape for the decompressor, nothing more. The frames are a flat
+run of cells reshaped by the drawing code, and DESERT APE came out clean at
+3 tiles wide by 6 tall -- so the conclusion flipped to "the large class is
+24x48, taller not wider", which was reported and was also wrong. SAND SQUID
+and ACID FROG were rendered the same way, looked like noise, and that should
+have been the tell.
+
+### The layout tables settle it
+
+The size class is the **high nibble of byte 7**, and it picks a table of
+byte offsets read one per cell:
+
+    0xB742   00 06 0C 02 08 0E 04 0A 10 | 12 18 1E 14 1A 20 16 1C 22
+    0xB754   00 0C 18 02 0E 1A 04 10 1C | 06 12 1E 08 14 20 0A 16 22
+
+Halved, those are cell numbers, each group of nine in column-major order --
+which is how a Genesis sprite reads its tiles. 0xB742's two groups are the
+top and bottom halves of a 3x6 frame; 0xB754's are the left and right halves
+of a 6x3 one. Only two routines in the entire ROM name either table,
+`0xB58A` and `0xB5FA`, and they are byte-identical:
+
+    cmp.b #2, d0 -> 18 cells, 0xB742      class 2   24 x 48
+    cmp.b #3, d0 -> 18 cells, 0xB754      class 3   48 x 24
+    else         ->  9 cells, 0xB742      class 0   24 x 24
+
+Three classes, not two:
+
+| class | frame | figures |
+|---|---|---|
+| 0 | 24 x 24 | 43 |
+| 2 | 24 x 48 | 1 -- DESERT APE |
+| 3 | 48 x 24 | 8 -- HEXADILLO, SAND SQUID, LG. E.C. GENNIE, RAM G.D. GENNIE, RAM ASSAULT BOT, RAM COMBAT BOT, ACID FROG, one unnamed |
+
+Re-rendered at 6x3, ACID FROG is a fat green frog with a tongue that lashes
+out in one frame. It had been sitting there the whole time.
+
+### And DOS lines up better than expected
+
+`CPIC1.DAX` carries its size in each block header:
+
+| frame | count |
+|---|---|
+| 24 x 24 | 82 |
+| 48 x 24 | 16 |
+| 48 x 48 | 10 |
+
+So 98 of 108 Matrix Cubed sprites land on an existing Genesis class with no
+engine change at all. Only the ten 48x48 ones -- blocks 18, 21, 22, 29, 32,
+146, 149, 150, 157 and 160, the dinosaur being 22 standing and 157 lunging
+-- have nowhere to go. The port does *not* currently scale them right,
+because there is no class that can hold them.
+
+### What a figure really is on screen
+
+    0C5BC: move.w  #$a00, d4      ; sprite size nibble 0xA = 3 wide, 3 tall
+    0C5C4: move.w  d4, (a5)
+    0C5D2: mulu.w  #$9, d1        ; nine VRAM tiles per display entry
+
+Every combat figure is ONE hardware sprite, three tiles square. A bigger
+creature is not a bigger sprite -- it is several entries in the display list
+at `0xB0B4`, each its own 3x3 sprite, each drawing its own group of nine
+tiles. The class decides how many and where:
+
+- `0xC268` writes a slot width: 1 for class 0-1, 2 otherwise.
+- `0xC2DA` advances the slot counter by that much, bounded by `$B1C4`
+  (15 slots of 9 tiles from `$B1C6`, base 0x33A).
+- `0xC358` lifts the first entry 24px for class 2, so a tall creature still
+  stands on the floor.
+- `0xC30E` builds the second entry, and `0xC32A` puts it 24px right for the
+  wide class or leaves it below for the tall one -- swapping which group
+  each entry draws when the figure is mirrored, so a flipped creature still
+  reads left to right.
+
+### Adding class 4
+
+`tools/bigfigures.py` adds a 48x48 class: four entries, 36 cells, a new
+quadrant-ordered table, and the slot accounting to match. Classes 0-3 keep
+their stock behaviour -- the two stock bounds tests in the allocator do not
+agree with each other (`beq` on the count for one slot, `bge` on count-1 for
+two), so they were moved out whole and copied rather than rewritten.
+
+Every instruction was hand-assembled and read back with capstone before
+anything was believed.
+
+### It is not proven yet, and here is exactly where it stands
+
+`tools/bigprobe.py` gives a creature a sheet of flat colour tiles and fights
+it, so the drawn shape can be measured off the screen instead of reasoned
+about. RAM ASSASSIN drew as a 3x3 block of test colours -- the new sheet
+loaded, the shape did not change.
+
+Three control experiments, each a one-line patch:
+
+1. Force `0xC3CA` to return class 3 for **every** figure. Nothing changed,
+   including the party members.
+2. Force both chains to 36 cells and the 6x6 table unconditionally. Nothing
+   changed.
+3. Class 2 and class 3 probes drew identically to class 0.
+
+Which rules out the patch being subtly wrong and says something simpler: the
+board these fights draw on does not go through `0xB58A`/`0xC20E` at all.
+There is a second figure renderer around `0xF9C0`-`0xFBD8` that reads the
+**low** nibble of byte 7 into an eight-entry table at `0x0FBF8`, four words
+each, via `0x0FBA4`; `0xFA52` reads `$42(a2)` and `$23(a2)` and walks the
+same `$B0B4` display list. That is the next thread.
+
+Worth recording: `0x0C3D2`, `0x0CB48` and `0x0FBAE` have no callers anywhere
+in the ROM under any call form. Their real entry points are a few
+instructions earlier -- `0x0C3CA`, `0x0CB3E`, `0x0FBA4` -- each preceded by
+an error string that made the `lea` look like the start of the routine.
+Scanning for callers of the address you happen to be looking at will find
+nothing and teach you nothing.
+
+### Also worth not repeating
+
+Capstone decodes past the end of the buffer you hand it. Disassembling
+`0xC080` for 0x40 bytes printed `bsr.w $6b6a` for the instruction at
+`0xC0BE` -- into the middle of a sine table -- because its displacement word
+was one byte past the slice. The real target was `$B58A`. Always pass a few
+extra bytes and filter by address.
