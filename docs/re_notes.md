@@ -2109,3 +2109,48 @@ Logged from a real build, every `LOAD_AREA_DECO` the scenario issues:
 Thirty-one loads, ten distinct decos, **every one of them listed in
 `tools/wallmap.py`**. `WALLDEF1.DAX` holds an eleventh, deco 1, which the
 scenario never loads -- so the missing entry costs nothing.
+
+## The sprite table, and the blank tile that sits one byte past it — CONFIRMED
+
+Read out of a GENPLUS-GX savestate. The blob is flat: work RAM at offset
+0x10 (byte-swapped within each word), the core's own sprite-table copy at
+0x12024, VRAM at 0x12424, and the VDP register file at 0x22525. The
+registers give the VRAM map:
+
+    reg  2 = 0x28   plane A          0xA000
+    reg  4 = 0x06   plane B          0xC000
+    reg  3 = 0x3C   window plane     0xF000
+    reg  5 = 0x76   sprite table     0xEC00
+    reg 13 = 0x38   hscroll table    0xE000
+
+The game draws its whole UI -- the 3D view frame, the right-hand panel and
+the text box -- on the **window plane**, not on plane A.
+
+Empty cells are filled with nametable entry `0x8774`: priority set,
+palette 0, tile 0x774. The constant is at `0x1347A`, kept in `$b514`, and
+streamed by the character filler at `0x95BE`. Tile 0x774 is at
+`0x774 * 0x20 = 0xEE80`.
+
+The sprite attribute table is 80 entries of 8 bytes at 0xEC00, so it ends at
+0xEE80 — **tile 0x774 begins on the first byte after the last sprite.** An
+81st sprite overwrites the blank tile, and nothing in the engine writes that
+tile again, so the damage is permanent for the session: every empty cell on
+every screen draws as coloured noise until the machine is reset.
+
+The ordinary town screen uses 73 sprites. `PICTURE 255` draws the area's
+default picture (chosen by the table at `0x82EC`), which is animated and
+wants nine more. `VIEW` resets the sprite table on its way through
+(`0x0AF22` -> `0x0860E` -> `0x09222`), which is why stock Countdown always
+writes `VIEW / PICTURE / PRINTCLEAR / CONTINUE` in that order and never the
+other way round.
+
+### Reading VRAM out of a savestate
+
+`Game.save()` returns the blob, so a probe is:
+
+    V   = 0x12424                 # VRAM base in the savestate
+    SAT = V + 0xEC00              # 80 entries, 8 bytes each
+    tile774 = state[SAT + 80 * 8 : SAT + 80 * 8 + 32]
+
+A clean tile 0x774 reads `00` then 31 bytes of `0x22`. Anything else is an
+overflowed sprite table.

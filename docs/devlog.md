@@ -2018,7 +2018,7 @@ square (3,6) instead of (3,4).
 `load_opcodes` now has a `HANDLER_SAYS` override for exactly this case,
 where the generated table is LOW confidence and the handler settles it.
 
-### Four attempts at the box itself, all reverted
+### Seven attempts at the box itself, all reverted
 
     CLEARBOX with an argument   desynced; wrong exit square
     CLEARBOX with none          correct arity, but the script re-entered
@@ -2027,9 +2027,79 @@ where the generated table is LOW confidence and the handler settles it.
     redraw CALL                 no effect
     empty PRINTCLEAR after
     STORE (19 sites, not 150)   no effect
+    PRINTCLEAR " " after VIEW   no effect
+    REMOVEFIGURE before the
+    redraw                      no effect
+    ENCEXIT beside the redraw   no effect
 
-None is in the tree. What is known: the party position and the script are
-correct throughout, `VIEW 0, 0xFF` restores the layout, and only the window
-tiles are stale. The clinic repairs them, so the next step is to find what
-the clinic's first screen does that the store's exit does not -- measured,
-not guessed.
+Every one of them was a guess about which opcode repaints the box. None is
+in the tree, and none could have worked, because the box was never the
+thing that was wrong.
+
+### What it actually was: the 81st sprite
+
+Two things finally made it legible. The first was reading the damage as a
+tile rather than as a screen: the whole bottom strip and the right-hand
+column are the same 8x8 tile repeated, so the nametable was right and the
+tile's PIXELS were wrong. The second was locating VRAM inside the
+GENPLUS-GX savestate so that tile could be read directly.
+
+The savestate is a flat blob. Work RAM is at offset 0x10, byte-swapped
+within each word. The VDP register file turned up at 0x22525 and settled the
+memory map:
+
+    reg 2 = 0x28    plane A       0xA000
+    reg 4 = 0x06    plane B       0xC000
+    reg 3 = 0x3C    window        0xF000
+    reg 5 = 0x76    sprite table  0xEC00
+    reg 13 = 0x38   hscroll       0xE000
+
+and VRAM itself begins at savestate offset 0x12424, which was pinned by
+finding the core's own copy of the sprite table and matching it byte for
+byte against VRAM 0xEC00.
+
+The fill tile is `0x8774` -- the constant at `0x1347A`, written into `$b514`
+and streamed into the box by the character filler at `0x95BE`. Tile 0x774
+lives at VRAM `0x774 * 0x20 = 0xEE80`. The sprite attribute table is 80
+entries of 8 bytes starting at `0xEC00`, so it ends at `0xEE80` exactly.
+**The blank tile is the byte after the last sprite.**
+
+Leaving the shop the engine wrote 82 sprites. Entries 80 and 81 landed on
+tile 0x774, and from then on every empty cell on the screen drew as coloured
+noise, for the rest of the session, because nothing ever writes that tile
+again. That is why no opcode repaired it.
+
+### Which opcode wrote the 81st sprite
+
+Patching the block in place and rebuilding just the ECL stream made it cheap
+to try the exit one opcode at a time -- `tools/rebuild_ecl.py` already
+recompresses, and the replacement is the same length, so nothing after it
+moves:
+
+    PICTURE 255 / VIEW 0,255 / CONTINUE    73 sprites -> 80, tile clobbered
+    nothing at all                         73 sprites, tile clean
+    VIEW 0,255 only                        73 sprites, tile clean
+    PICTURE 255 only                       80 sprites, tile clobbered
+
+`PICTURE`. The party's own screen already uses 73 of the 80 sprites; the
+area's default picture -- which is what `PICTURE 255` draws, via the default
+table at `0x82EC` -- is animated and wants nine more. 73 + 9 = 82.
+
+The reason it fits everywhere else is ordering. `VIEW` resets the sprite
+table on its way through (`0x0AF22` -> `0x0860E` -> `0x09222`), and stock
+Countdown's idiom is always `VIEW / PICTURE / PRINTCLEAR / CONTINUE` -- the
+reset first, then the nine. Matrix Cubed's DOS script says `PICTURE 255`
+then `CALL 0x2DCB`, which reads perfectly well as "blank the window, then
+redraw", and transpiles to the one order the Genesis engine cannot run.
+
+### The fix
+
+`transpile` now hoists the redraw in front of the `PICTURE` when a DOS
+`PICTURE` is immediately followed by a `CALL` that expands to a `VIEW`, so
+the pair comes out in stock Countdown's own order. It declines to do so if
+anything branches to the `CALL`, since reordering would move where that
+branch lands. Two sites, both in area 0x11, and the build log says so.
+
+Verified by driving it: shop door, in, out, then on to the clinic and the
+autodoc. Tile 0x774 reads `00 22 22 22 ...` at every step and the sprite
+count never leaves 73.

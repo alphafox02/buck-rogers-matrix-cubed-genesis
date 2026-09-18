@@ -69,10 +69,12 @@ def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
     stubs = sum(1 for _, _, why in report if "counterpart" in why)
     unmapped = sum(1 for _, _, why in report if why.startswith("no Genesis mapping"))
     jumps = sum(1 for _, _, why in report if "not in layout" in why)
+    hoists = sum(1 for _, what, _ in report if what == "redraw")
     old = blocks[ids.index(area)]
     print(f"  code {len(old[1])}->{len(code)}, text {len(old[2])}->{len(text)}; "
           f"{stubs} opcodes stubbed, {unmapped} variables unmapped, "
-          f"{jumps} jump targets outside the decoded region")
+          f"{jumps} jump targets outside the decoded region"
+          + (f", {hoists} redraws hoisted before their PICTURE" if hoists else ""))
     blocks[ids.index(area)] = (area, code, text)
 
     if map_id is None:

@@ -564,6 +564,40 @@ def transpile(block: bytes, flags=None):
         _active = False
 
     order = sorted(set(found) | set(data))
+
+    # `PICTURE 255` followed by `CALL 0x2DCB` has to come out the other way
+    # round. DOS reads "blank the picture window, then redraw the view"; the
+    # Genesis engine cannot run it in that order, because the redraw is also
+    # what RESETS the sprite attribute table (VIEW -> 0x0860E -> 0x09222),
+    # and PICTURE appends to it. Leaving the shop the party is already using
+    # 73 of the hardware's 80 sprites, the default picture's animation wants
+    # nine more, and the last two land past the end of the table -- which is
+    # the blank UI tile at VRAM 0xEE80. Every empty cell on the screen then
+    # drew as coloured noise: the text box, and the right-hand column, for
+    # the rest of the session, because nothing ever writes that tile again.
+    #
+    # Hoisting the redraw in front of the PICTURE is exactly stock
+    # Countdown's own idiom -- VIEW, PICTURE, PRINTCLEAR, CONTINUE -- and the
+    # sprite table is back at the start when the picture asks for its nine.
+    redraw_first = {}
+    for _off, _ins in found.items():
+        if _ins.name != "PICTURE":
+            continue
+        _next_off = _off + _ins.size
+        _next = found.get(_next_off)
+        if _next is None or _next.name != "CALL" or not _next.args:
+            continue
+        _exp = CALL_EXPANSION.get(_next.args[0].value)
+        if not _exp or _exp[0][0] != "VIEW":
+            continue
+        if _next_off in jump_targets:
+            # Something branches between the two, so the pair is not an
+            # idiom and reordering it would change where that branch lands.
+            continue
+        redraw_first[_off] = (_next_off, _exp)
+    hoisted = {call_off for call_off, _ in redraw_first.values()}
+    redraw_pos = {}
+
     # Pass 1: lay out, learning each instruction's new offset.
     layout, pos = {}, 0
     pieces = []
@@ -588,6 +622,24 @@ def transpile(block: bytes, flags=None):
             if brk == "drop":
                 continue
         ins = found[off]
+        if off in hoisted:
+            # Already emitted, in front of the PICTURE just before it.
+            layout.setdefault(off, pos)
+            continue
+        if off in redraw_first:
+            redraw_pos[off] = pos
+            for sub, subargs in redraw_first[off][1]:
+                opcode, argc = gen[sub]
+                if argc != len(subargs):
+                    raise SystemExit(
+                        f"CALL_EXPANSION gives {sub} {len(subargs)} arguments "
+                        f"but the Genesis opcode takes {argc}")
+                size = 1 + sum(len(_encode_arg(k, v)) for k, v in subargs)
+                pieces.append((off, opcode, list(subargs), size))
+                pos += size
+            report.append((off, "redraw",
+                           f"{sub} hoisted in front of PICTURE so the redraw "
+                           f"resets the sprite table first"))
         # CALL becomes one or more Genesis opcodes depending on which native
         # routine it targets, so it is handled before the ordinary name map.
         if ins.name == "CALL" and ins.args and ins.args[0].value in CALL_EXPANSION:
@@ -804,7 +856,7 @@ def transpile(block: bytes, flags=None):
         else:
             size = 1 + sum(len(_encode_arg(k, 0 if k in ("code", "var") else v))
                            for k, v in args)
-        layout[off] = pos
+        layout[off] = redraw_pos.get(off, pos)
         pieces.append((off, opcode, args, size))
         pos += size
         # Continued screens follow, each behind a wait so the player reads
