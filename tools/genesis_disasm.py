@@ -50,6 +50,18 @@ CONDITIONAL = ("IFEQ", "IFNE", "IFLT", "IFGT", "IFLE", "IFGE")
 DOC = Path(__file__).resolve().parent.parent / "docs" / "opcode_args.md"
 
 
+# Where the generated table is marked LOW confidence and the two methods
+# disagree, the handler itself is the tie-breaker and wins.
+#
+#   0x3D CLEARBOX -- static 0, inferred 1, "LOW -- methods disagree". The
+#   handler is `bsr.w $8710 / rts`, and 0x8710 is a screen-drawing routine
+#   (VDP register writes at (a4)), not an argument fetcher. Taking the
+#   inferred 1 made the interpreter read the following instruction as an
+#   argument: emitted after the shop's redraw it desynced the script, and
+#   the party came out of the store on the wrong square.
+HANDLER_SAYS = {0x3D: 0}
+
+
 def load_opcodes(doc=None):
     """Parse the generated opcode table into {op: (name, argc)}."""
     doc = DOC if doc is None else doc
@@ -60,6 +72,9 @@ def load_opcodes(doc=None):
     table = {}
     for op_hex, name, static, inferred, conf in rows:
         op = int(op_hex, 16)
+        if op in HANDLER_SAYS:
+            table[op] = (name, HANDLER_SAYS[op])
+            continue
         # Trust the static count where inference cannot apply, or where the
         # two disagree and inference had no clear majority.
         if op in DYNAMIC_FIXED:

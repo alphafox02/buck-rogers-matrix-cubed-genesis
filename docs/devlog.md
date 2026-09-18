@@ -1988,3 +1988,48 @@ The handler code said what each opcode *does*. It could not say which one
 the script *needed*, and four rounds of reasoning from it produced four
 wrong answers and a lot of the player's time. The bug was solved in one pass
 the moment it could be reproduced and probed. Ask for the repro first.
+
+## CLEARBOX takes no argument, and the shop's stale text box is still open
+
+The shop works end to end, but walking out leaves the text window full of
+stale store graphics. It is cosmetic and persistent -- walking does not
+clear it -- and walking into the clinic **does**, which says a redraw is all
+that is wanted. Measured as the standard deviation of the box interior:
+
+    before any shop        35
+    after leaving the shop 74
+    at the clinic          17
+
+### One real fix came out of it
+
+`docs/opcode_args.md` marks `0x3D CLEARBOX` as "static 0, inferred 1,
+LOW -- methods disagree", and `load_opcodes` preferred the inferred count,
+so the transpiler believed it took one argument. It does not. The handler is
+
+    03B80: bsr.w $8710
+    03B84: rts
+
+and `0x8710` is a screen-drawing routine -- VDP register writes through
+(a4) -- with no call to the argument fetcher at `0x404A`. Emitting CLEARBOX
+with an argument made the interpreter read the following instruction as that
+argument, which desynced the script: the party came out of the store on
+square (3,6) instead of (3,4).
+
+`load_opcodes` now has a `HANDLER_SAYS` override for exactly this case,
+where the generated table is LOW confidence and the handler settles it.
+
+### Four attempts at the box itself, all reverted
+
+    CLEARBOX with an argument   desynced; wrong exit square
+    CLEARBOX with none          correct arity, but the script re-entered
+                                the store
+    empty PRINTCLEAR after the
+    redraw CALL                 no effect
+    empty PRINTCLEAR after
+    STORE (19 sites, not 150)   no effect
+
+None is in the tree. What is known: the party position and the script are
+correct throughout, `VIEW 0, 0xFF` restores the layout, and only the window
+tiles are stale. The clinic repairs them, so the next step is to find what
+the clinic's first screen does that the store's exit does not -- measured,
+not guessed.
