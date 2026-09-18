@@ -22,8 +22,16 @@ the poses given are cycled to fill it. That is enough to see a creature
 standing and fighting; a real animation needs the frame grouping in
 `docs/art_todo.md` finished first.
 
+`--auto` works the mapping out instead of being told it. A DOS monster
+record names its artwork at byte 185 -- `CARNIFERN` -> block 18, the plant
+thing; `VENUS DINOSAUR` -> 22, the dinosaur; `AMALTH SEC BOT` -> 21, the
+walker -- and a creature's two poses are blocks N and N+128, which holds for
+every oversized block in the file. Matching each creature this port adds to
+the DOS monster of the same name resolves 27 of 36.
+
 Usage:
     inject_creature.py <in.gen> <out.gen> <figure_id>:<class>:<block>[,<block>...]
+    inject_creature.py <in.gen> <out.gen> --auto
 """
 
 import collections
@@ -41,7 +49,11 @@ import integrity
 import lzw_encode
 
 ART = 0x1BA000               # clear of the monster stream, directory and probes
-ART_LIMIT = 0x1C8000
+ART_LIMIT = 0x1F0000
+
+PICTURE = 185                # the DOS monster record's artwork byte
+POSE = 128                   # a creature's second pose is block N + 128
+SIZE_CLASS = {(24, 24): 0, (48, 24): 3, (48, 48): 4}
 STREAM = 0x1B1000
 FRAMES = 18
 
@@ -196,10 +208,43 @@ def apply(rom: bytes, specs) -> bytes:
     return integrity.repair(bytes(rom))
 
 
+def auto():
+    """Work out a spec for every added creature whose DOS artwork resolves."""
+    import gbimage
+    import monstermap
+    here = Path(__file__).resolve().parent.parent / "dos_game" / "matrix"
+    mon = dax.load(str(here / "MON0CHA.DAX"))
+    cpic = dax.load(str(here / "CPIC1.DAX"))
+    size = {k: (gbimage.header(b)["width"], gbimage.header(b)["height"])
+            for k, b in cpic.items() if len(b) >= 10}
+
+    def name(b):
+        return "".join(chr(c) for c in b[1:1 + b[0]] if 32 <= c < 127).strip()
+
+    by_name = {}
+    for k, b in mon.items():
+        by_name.setdefault(name(b), k)
+
+    specs = []
+    for nid, (label, _src) in sorted(monstermap.NEW_CREATURES.items()):
+        dos = by_name.get(label.strip())
+        if dos is None:
+            continue
+        block = mon[dos][PICTURE]
+        if block not in size or block + POSE not in size:
+            continue
+        klass = SIZE_CLASS.get(size[block])
+        if klass is None:
+            continue
+        specs.append(f"0x{nid:02X}:{klass}:{block},{block + POSE}")
+    return specs
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 4:
         sys.exit(__doc__)
-    out = apply(Path(sys.argv[1]).read_bytes(), sys.argv[3:])
+    args = auto() if sys.argv[3] == "--auto" else sys.argv[3:]
+    out = apply(Path(sys.argv[1]).read_bytes(), args)
     Path(sys.argv[2]).write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'FAILS'}; "
           f"wrote {sys.argv[2]}")

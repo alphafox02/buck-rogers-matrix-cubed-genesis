@@ -328,6 +328,11 @@ def main():
          *[f"0x{nid:02X}:0x{src:02X}"
                for nid, (_name, src) in sorted(monstermap.NEW_CREATURES.items())])
         step("add_creatures.py")
+        # Real Matrix Cubed artwork for the creatures just added, at the size
+        # each one is drawn in DOS. --auto reads the DOS monster records to
+        # find which CPIC1 block belongs to which creature rather than being
+        # told; see inject_creature.py.
+        step("inject_creature.py", "--auto")
         # NOT APPLIED. Three added creatures clone a large donor and inherit
         # its size class (ASSAULT ROBOT and COMBAT ROBOT from 48x24 donors,
         # COYODORG from a 24x48 one), and substituting a large figure into
