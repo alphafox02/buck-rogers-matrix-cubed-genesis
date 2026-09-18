@@ -2199,3 +2199,33 @@ A DOS sprite block holds two poses and neither is a corpse, so a creature
 built from one alone stays standing after it dies. `tools/inject_creature.py`
 fills 15 and 16 with the standing pose turned a quarter turn — exact for a
 24x24 creature, a squash for the oblong classes.
+
+## Countdown's scripts and its engine share the flag region — CONFIRMED
+
+`flagmap` allocated Matrix Cubed's story flags into "addresses Countdown's
+own scripts use", on the reasoning that its campaign is being replaced so
+its flags are free. That is true of most of them and false of some, because
+the engine reads a few of the same addresses.
+
+`0x97DC` is the one that showed it. Countdown's scripts write it, so it
+looked free — but the `VIEW` handler writes 0xA8 or 0xA2 into it at
+`0x03DFA`, and `0x082C6` reads it to choose which screen layout to draw:
+
+```
+082C4  move.b $97DC.w, d0
+082C8  cmp.b  #$A2, d0     -> layout 1
+082D2  cmp.b  #$A8, d0     -> layout 2
+082DC  moveq  #3, d0       -> layout 3
+```
+
+It was handed to Matrix Cubed's `0x4C08`, the Rising Sun's day counter, so
+leaving the hotel ran `ADD 1, [0x97DC], [0x97DC]` and incremented the layout
+selector. The 3D view came back as garbage tiles under a spaceship control
+panel.
+
+`flagmap.engine_addresses` now reads every aligned word of the engine's own
+code (`0x200-0x20000`) and treats any value in `0x9000-0x9FFF` as spoken
+for, and `flagmap.mapped_targets` adds everything the transpiler assigns by
+name. That over-counts — a constant in the same numeric range is not an
+address — but the pool holds 3,587 slots for 385 flags, so the cost is
+nothing and the alternative corrupts live engine state.

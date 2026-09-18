@@ -31,6 +31,7 @@ flag placed there would be silently scattered across the party.
 
 import collections
 import re
+import struct
 from pathlib import Path
 
 import dax
@@ -74,6 +75,44 @@ DOS_ENGINE_EXTRA = (
     set(range(0x7D00, 0x7D1A)) |      # selected-character status
     set(range(0xC04B, 0xC050))        # dungeon position and current square
 )
+
+
+# The engine's own code, for the scan below. 0x200 is past the vector table
+# and the header; everything above 0x20000 is compressed resources.
+CODE = (0x200, 0x20000)
+
+
+def engine_addresses(rom: bytes):
+    """Every address in the region the engine's own 68000 code names.
+
+    Countdown's scripts and its engine share this region, so "an address
+    Countdown's scripts use" is NOT the same as "an address free for a story
+    flag". 0x97DC is both: scripts write it, and the engine reads it at
+    0x082C6 to choose which screen layout to draw, while the VIEW handler
+    writes 0xA8 or 0xA2 into it at 0x03DFA. Handed out as a flag it became
+    Matrix Cubed's hotel day counter, so leaving the Rising Sun incremented
+    the layout selector and the view came back as garbage tiles under a
+    spaceship control panel.
+
+    This reads every aligned word of the engine's code and takes any value
+    in the region as spoken for. That over-counts -- a constant or a piece
+    of table data in the same numeric range is not an address -- but the
+    pool has 3,587 slots for 385 flags, so being wrong in this direction
+    costs nothing and being wrong in the other corrupts live engine state.
+    """
+    lo, hi = CODE
+    return {v for v in (struct.unpack_from(">H", rom, pos)[0]
+                        for pos in range(lo, hi, 2))
+            if v in REGION}
+
+
+def mapped_targets():
+    """Genesis addresses the transpiler already assigns by name."""
+    import transpile
+    out = set(transpile.VARIABLE_MAP.values()) | set(transpile.PROBABLE_MAP.values())
+    for lo, hi, base in transpile.WINDOW_MAP:
+        out.update(range(base, base + (hi - lo)))
+    return out
 
 
 def countdown_flags(rom: bytes):
@@ -135,10 +174,14 @@ def matrix_flags(path=None):
     return [a for a, _ in counts.most_common() if a not in excluded], named
 
 
-def build(rom: bytes, engine_used=()):
+def build(rom: bytes, engine_used=None):
     """Return {dos_address: genesis_address} for every script-only flag."""
+    if engine_used is None:
+        engine_used = engine_addresses(rom)
+    engine_used = set(engine_used) | mapped_targets()
     wanted, _named = matrix_flags()
-    pool = countdown_flags(rom) + region_gaps(rom, engine_used)
+    pool = ([a for a in countdown_flags(rom) if a not in engine_used]
+            + region_gaps(rom, engine_used))
     if len(pool) < len(wanted):
         raise SystemExit(f"need {len(wanted)} flag slots, found {len(pool)}")
     # Busiest flags first, into the addresses Countdown itself used -- those

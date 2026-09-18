@@ -47,6 +47,7 @@ import gbimage
 import genesis_ecl
 import integrity
 import lzw_encode
+import monstermap
 
 # Creature art sits between the figure directory and the relocated pictures.
 #
@@ -158,16 +159,68 @@ DYING, DEAD = 15, 16
 
 
 def lie_down(grid, w, h):
-    """A standing pose turned on its side, to stand in for a corpse.
+    """Last resort: the standing pose turned a quarter turn.
 
-    Rotated a quarter turn and refitted to the frame, which is exact for a
-    24x24 creature and a squash for the oblong classes. Not the art SSI
-    would have drawn, but it reads as a body on the floor rather than as a
-    creature that shrugged off being killed.
+    Only used where the creature's Countdown stand-in cannot be read. A
+    rotated sprite reads as a pole rather than as a body, which is why
+    borrow_death below is tried first.
     """
     sh, sw = len(grid), len(grid[0])
     turned = [[grid[sh - 1 - x][y] for x in range(sh)] for y in range(sw)]
     return fit(turned, w, h)
+
+
+def read_sheet(rom, fid):
+    """Decode one Genesis figure's frames into grids of palette indices."""
+    at = struct.unpack_from(">I", rom, expand_figures.OPERANDS[0])[0]
+    recs, _ = expand_figures.read(bytes(rom), at)
+    rec = next((r for r in recs if r[4] == fid), None)
+    if rec is None:
+        return []
+    ptr = struct.unpack_from(">I", rec, 0)[0]
+    blob = genesis_ecl.decompress(bytes(rom[ptr:ptr + 0x8000]), limit=0x8000)
+    ntiles, ntlen, _ = struct.unpack_from(">HHH", blob, 0)
+    nt, tiles = blob[6:6 + ntlen], blob[6 + ntlen:]
+    cells = [struct.unpack_from(">H", nt, i * 2)[0] for i in range(ntlen // 2)]
+    fw, fh = SHAPE.get(rec[7] >> 4, (3, 3))
+    per = fw * fh
+    out = []
+    for f in range(len(cells) // per):
+        grid = [[0] * (fw * 8) for _ in range(fh * 8)]
+        for c in range(per):
+            raw = tiles[cells[f * per + c] * 32:cells[f * per + c] * 32 + 32]
+            if len(raw) < 32:
+                continue
+            cy, cx = divmod(c, fw)
+            for r in range(8):
+                for b in range(4):
+                    v = raw[r * 4 + b]
+                    grid[cy * 8 + r][cx * 8 + b * 2] = v >> 4
+                    grid[cy * 8 + r][cx * 8 + b * 2 + 1] = v & 15
+        out.append(grid)
+    return out
+
+
+def borrow_death(rom, fid, w, h):
+    """The dying and dead frames of the Countdown creature this one clones.
+
+    Every added creature was substituted for a Countdown monster BY ROLE --
+    SECURITY ROBOT for RAM H.S. ROBOT, LOWLANDER for LL. WARRIOR -- and
+    those figures carry the frames SSI drew for going down and lying dead.
+    Borrowing them gives a real corpse in the engine's own idiom, which a
+    quarter-turned standing pose does not: rotating a 24x24 sprite reads as
+    a pole lying on the floor, as a play session put it.
+
+    The colours are the stand-in's, not the creature's. At 24x24 in the
+    middle of a fight that reads far better than the alternative.
+    """
+    src = monstermap.NEW_CREATURES.get(fid)
+    if src is None:
+        return None
+    frames = read_sheet(rom, src[1])
+    if len(frames) <= DEAD:
+        return None
+    return [fit(frames[n], w, h) for n in (DYING, DEAD)]
 
 
 def sheet(frames, fw, fh):
@@ -233,8 +286,10 @@ def apply(rom: bytes, specs) -> bytes:
             # reads them.
             poses = [p[fh * 4:] + p[:fh * 4] for p in poses]
         frames = [poses[n % len(poses)] for n in range(FRAMES)]
-        corpse = lie_down(poses[0], fw * 8, fh * 8)
-        frames[DYING] = frames[DEAD] = corpse
+        death = borrow_death(rom, fid, fw * 8, fh * 8)
+        if death is None:
+            death = [lie_down(poses[0], fw * 8, fh * 8)] * 2
+        frames[DYING], frames[DEAD] = death
         packed = lzw_encode.compress(sheet(frames, fw, fh))
         if cursor + len(packed) > ART_LIMIT:
             raise SystemExit("creature art does not fit")
