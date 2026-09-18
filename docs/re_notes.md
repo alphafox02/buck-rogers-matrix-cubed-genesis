@@ -2265,3 +2265,47 @@ savestate and note every non-zero byte. Re-measure after any engine change.
 
 With all three exclusions applied, 385 flags allocate with zero of them
 landing on dirty RAM.
+
+## `0xC04E` / `0x97AD` is computed from the map, and ours reads 0 — OPEN
+
+This is the reason the opening dock stops advancing.
+
+Matrix Cubed's scripts read DOS `0xC04E` in **80 places across the game**,
+always comparing it against a small number, and write it in exactly one:
+`INPUTNUMBER 3, [0xC04E]` in SSI's developer block. It is not a story flag
+the scripts maintain — it is engine state they interrogate.
+
+The mapping to Genesis `0x97AD` is sound: Countdown's own scripts read
+`0x97AD` the same way (13 COMPAREs, an ONGOTO, an ONGOSUB) and both sides
+top out at 12. The engine writes it at `0x0CCEA`:
+
+```
+0CCD2  moveq #0, d7
+0CCD4  bsr.w $CCF4        ; sample the square
+0CCD8  addq.w #1, d2      ; and its three neighbours,
+0CCDA  bsr.w $CCF4        ; accumulating into d7
+...
+0CCEA  move.b d7, $97AD.w
+```
+
+`0x0CCF4` reads the drawn nametable at `0xA000`, so `0x97AD` is derived
+from **what the map looks like around the party** — which walls and floor
+types are there. Countdown's own areas produce 0-12. Driving the whole
+opening dock and reading it at every step, our transplanted maps produce
+**0, everywhere**.
+
+Every gate on it therefore fails. On the dock:
+
+```
+00A3  COMPARE [0x97AD], 8 / IFEQ / GOTO   -> the coronation summons
+00AE  COMPARE [0x97AD], 6 / IFNE / EXIT   -> a second 8-way square dispatch
+```
+
+So Dr Romney fires, the tannoy pages the party and sets its own flag, and
+then nothing: "THE COMPUTER COMES TO LIFE. 'THE CORONATION IS ABOUT TO
+BEGIN…'" is unreachable, and so is everything behind it.
+
+This is the wall-graphics problem wearing a different hat — the transplanted
+geometry does not draw the tile types the sampler counts — and fixing the
+wall sets should fix this with it. Until then, 80 script gates across the
+game are stuck on zero.
