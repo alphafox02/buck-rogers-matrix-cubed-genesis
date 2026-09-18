@@ -1738,3 +1738,43 @@ machine on a black screen.
 the animation step by four, so doubling can reach 0x80, which the following
 `ext.w` reads as -128 and sends the sheet pointer backwards. Widen first,
 then double. (This patch is gone now, but the lesson stands.)
+
+### The last unknown, narrowed to one sentence
+
+Live logging settles every step of the draw, and the answer is not where any
+of my guesses put it.
+
+    rows-1 / cols-1 at draw time        5 and 5        six rows of six cells
+    plane address per row               +0x80 each     six consecutive rows
+    sheet pointer per row               4CCA 4CD6 4CE2 4CEE 4CFA 4D06
+                                        +0x0C each     cells 0,6,12,18,24,30
+
+So the engine reads the whole 36-cell frame and writes six consecutive plane
+rows. Drawing is correct. And yet:
+
+- A sheet where **every** cell is one flat colour draws as three clean 48x48
+  blocks -- outline verified tile by tile.
+- A sheet with the dinosaur on top and a marker colour on the bottom half
+  shows the dinosaur's head **twice** and **zero** marker pixels anywhere on
+  the board.
+
+Both cannot be true unless cells 18-35 resolve to the same VRAM tiles as
+cells 0-17. The cell values are read correctly; the tiles they name are not
+the tiles the sheet holds.
+
+Which points at the remap in `0x09C3E`-`0x09C7A`, where the decoder rewrites
+the sheet's nametable from packed tile numbers to real VRAM ids and counts
+how many entries to rewrite as `d4 * d3 / 2` -- `d3` being the sheet width.
+If that count does not cover a 648-cell sheet, the tail keeps raw ids that
+happen to land on the figure's own earlier tiles, which is exactly a second
+head.
+
+That is the whole remaining question: what sets `d4`, and does it scale with
+a sheet twice the usual size.
+
+A play report got there first, twice over: "it looks like you are just
+putting both animations of the top half together on top and bottom", and
+before that "one with mouth more open than the other". Both correct. The
+sheet holds exactly two distinct poses, cycled, so the two heads being
+slightly different is the tell that they are two different frames -- which
+is what raw, unremapped tile ids would give.
