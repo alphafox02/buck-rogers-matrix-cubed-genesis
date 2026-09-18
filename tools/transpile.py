@@ -115,19 +115,24 @@ NAME_MAP = {
 # portrait never drew, the program counter desynced, and leaving the shop
 # ended in the engine's own "Bad ECL address". 150 sites called it.
 #
-# It was there on the assumption that redrawing needed both. It does not --
-# `REMOVEFIGURE` is the whole of it:
+# Dropping `UPDATEFRAME` instead of fixing it was tried and is worse: the
+# shop's exit path is `PICTURE 255` (clear the window), `CALL 0x2DCB`
+# (redraw), `CONTINUE`, and with only `REMOVEFIGURE` the redraw is
+# incomplete and the screen goes black. Both opcodes are needed; the
+# argument is what was missing.
 #
-#     0C134: clr.w $b0b2.w     ; display entries = 0
-#     0C138: clr.w $b016.w     ; combatants = 0
-#     0C13C: bsr.w $c3f0       ; redraw the board
+#     0C134: clr.w $b0b2.w     ; REMOVEFIGURE: display entries = 0
+#     0C138: clr.w $b016.w     ;               combatants = 0
+#     0C13C: bsr.w $c3f0       ;               redraw the board
+#     0C142: ...               ; UPDATEFRAME: flip flags in the top two bits
+#                              ;              of its argument, frame index in
+#                              ;              the low six
 #
-# which is exactly "redraw the view and clear the current sprite".
-# `UPDATEFRAME` at 0xC142 is a different operation: it takes flip flags and
-# a frame index and updates the last display entry.
+# Zero is the argument that matches what the DOS call means -- no flip,
+# frame 0.
 CALL_EXPANSION = {
-    0x2DCB: ("REMOVEFIGURE",),
-    0xC01E: ("STEPFORWARD",),
+    0x2DCB: (("REMOVEFIGURE", ()), ("UPDATEFRAME", (("imm", 0),))),
+    0xC01E: (("STEPFORWARD", ()),),
 }
 
 
@@ -562,16 +567,17 @@ def transpile(block: bytes, flags=None):
         # CALL becomes one or more Genesis opcodes depending on which native
         # routine it targets, so it is handled before the ordinary name map.
         if ins.name == "CALL" and ins.args and ins.args[0].value in CALL_EXPANSION:
-            for sub in CALL_EXPANSION[ins.args[0].value]:
+            for sub, subargs in CALL_EXPANSION[ins.args[0].value]:
                 opcode, argc = gen[sub]
-                if argc:
+                if argc != len(subargs):
                     raise SystemExit(
-                        f"CALL_EXPANSION emits {sub} with no arguments but the "
-                        f"Genesis opcode takes {argc}; the interpreter would "
-                        f"read the next instruction as its argument")
+                        f"CALL_EXPANSION gives {sub} {len(subargs)} arguments "
+                        f"but the Genesis opcode takes {argc}; the interpreter "
+                        f"would read the next instruction as its argument")
+                size = 1 + sum(len(_encode_arg(k, v)) for k, v in subargs)
                 layout.setdefault(off, pos)
-                pieces.append((off, opcode, [], 1))
-                pos += 1
+                pieces.append((off, opcode, list(subargs), size))
+                pos += size
             continue
 
         name = NAME_MAP.get(ins.name, ins.name)
