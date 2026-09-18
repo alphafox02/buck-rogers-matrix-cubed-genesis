@@ -206,53 +206,20 @@ is expected rather than a decode failure.
 
 ## Creature sizes: what each engine draws
 
-Measured, not inferred. Both numbers are the frame a creature occupies on
-screen during combat, and both engines store 18 frames per creature.
+Superseded -- see `docs/devlog.md`, "Creature size: how a combat figure is
+actually built", for the measured version. The short form:
 
-**Genesis (Countdown).** The figure directory record at `0x9A14` is eight
-bytes: a longword pointer, the figure id at `+4`, the sheet width in tiles
-at `+5`, an animation-table index at `+6`, and a packed byte at `+7` whose
-high nibble is the size class.
+| Genesis class | frame | figures |
+|---|---|---|
+| 0 | 24 x 24 | 43 |
+| 2 | 24 x 48 | 1 |
+| 3 | 48 x 24 | 8 |
 
-| class | sheet | frame | unique tiles | figures |
-|---|---|---|---|---|
-| 0 | 18 tiles wide | **24 x 24 px** | 81-146 | 43 |
-| 2, 3 | 36 tiles wide | **24 x 48 px** | 161-219 | 9 |
-
-The nine large ones are DESERT APE, HEXADILLO, SAND SQUID, LG. E.C. GENNIE,
-RAM G.D. GENNIE, RAM ASSAULT BOT, RAM COMBAT BOT, ACID FROG and one unnamed
-slot. So the engine's "big monster" is twice as **tall**, never wider.
-
-Frames are read as a flat run of nametable cells, 9 cells for a small figure
-and 18 for a large one, laid out row-major at 3 tiles wide. The sheet width
-byte is only the atlas shape for the decompressor -- it is not the frame
-shape. Rendering a sheet as if the two were the same is what made the first
-previews look like scrambled body parts.
-
-**DOS (Matrix Cubed).** `CPIC1.DAX` carries its size in the block header
-(`byte 0` height, `byte 1` width in cells of 8):
-
-| frame | count |
+| DOS `CPIC1` | count |
 |---|---|
-| 24 x 24 px | 82 |
-| **48 x 24 px** | 16 |
-| **48 x 48 px** | 10 |
+| 24 x 24 | 82 |
+| 48 x 24 | 16 |
+| 48 x 48 | 10 |
 
-DOS grows creatures **wider**, and its top class grows both ways. The ten
-48 x 48 blocks are 18, 21, 22, 29, 32, 146, 149, 150, 157 and 160 --
-blocks 22 and 157 are the dinosaur, in a standing and a lunging pose.
-
-**So the classes do not line up.** A DOS 48 x 24 creature has no Genesis
-class at all, and a DOS 48 x 48 creature is four times the area of the
-Genesis standard against the large class's two. Converting the dinosaur
-into the stock large class costs half its width.
-
-Widening the Genesis class is a ROM change, not an art change: the width
-byte at `+5` is a whole byte, so a 72-tile atlas encodes fine, but the code
-that turns cells into a frame has a fixed 3-tile stride that has not been
-found yet. Three routines read the record's `+6` and `+7` fields
-(`0x0C3D2` class, `0x0CB48` animation, `0x0FBAE` geometry) and **none of
-them has a caller anywhere in the ROM** -- no `bsr`, `jsr`, pc-relative
-call or stored pointer. Whatever picks the frame stride is somewhere else.
-That is the next thing to find, and until it is found the honest answer is
-that the port supports 24 x 48 and no larger.
+98 of 108 land on an existing class. The ten 48 x 48 -- the dinosaur among
+them -- need the class `tools/bigfigures.py` adds.
