@@ -1075,3 +1075,71 @@ seen on screen would be a guess dressed as a result.
 Next: find what builds the script `0xC9B0` consumes. That is where a token's
 tile footprint is decided, and it is the thing that has to grow for a
 creature to be bigger on the board.
+
+## The board draws nine cells, and three added creatures were losing half a body
+
+Following the class-4 work with counters instead of guesses turned up a bug
+that had nothing to do with 48x48 and everything to do with what the port
+already ships.
+
+### What the board actually reads
+
+`tools/bigprobe.py` gives a figure a sheet of flat colour tiles numbered in
+cell order, so whatever the engine draws can be read straight off the screen.
+The drawn 3x3 came out as colours 11, 10, 9 / 14, 13, 12 / 1, -, 15 --
+descending, which is cells 9, 10, 11 / 12, 13, 14 / 15, 16, 17 drawn
+horizontally flipped.
+
+So a board token is **nine consecutive cells, three to a row**, and the frame
+index picks which nine. Not the column-major order the layout tables use,
+and not anything the size class influences.
+
+Substituting a stock DESERT APE (class 2) and ACID FROG (class 3) into the
+opening encounter confirmed it: both draw as a 24x24 crop of their own
+artwork. Rendering the ape's sheet as 24x24 frames shows why -- its real
+frame is 3x6, so every nine-cell read is a top half or a bottom half.
+
+### Which mattered here
+
+`expand_figures` clones a donor figure's record whole, size class included,
+and three of the thirty-six creatures this port adds clone a large donor:
+
+    ASSAULT ROBOT  <- RAM ASSAULT BOT   class 3   48x24
+    COMBAT ROBOT   <- RAM COMBAT BOT    class 3   48x24
+    COYODORG       <- DESERT APE        class 2   24x48
+
+All three were going to appear in combat as half a creature. Nobody had seen
+it because none of them turn up in the opening encounter.
+
+### The fix
+
+`tools/rescale_figure.py` decodes each frame at its true shape, scales it to
+24x24, and writes the figure back as a class 0 sheet -- eighteen frames of
+nine cells, an atlas eighteen tiles wide.
+
+Scaling is done on palette indices, not colours. The figure palette is
+sixteen unrelated hues with no ramps, so averaging two pixels lands on
+whatever index sits numerically between them. Each output pixel takes the
+commonest non-transparent index in the box it covers.
+
+Aspect-preserving scaling was tried first, centred and sat on the bottom
+edge. It looks worse: a 48x24 robot becomes a half-height blob in the middle
+of an empty token. Stretching to fill is what every stock 24x24 creature
+does, and it is what reads correctly next to the party. The option is still
+in the tool.
+
+Verified on screen: the truncated version shows mirrored ape legs with no
+head; the rescaled one is a complete beast at the same scale as the party
+figures.
+
+### Where 48x48 stands
+
+`tools/bigfigures.py` is still in the build and still inert. What the board
+reads -- nine cells, three to a row -- is not what the class chain feeds it,
+so making a creature bigger on the board means changing the board's read,
+not the class tables. The class machinery belongs to some other view, which
+`0xBFAE` calling `0xB58A` with class 1 hard-coded also points at.
+
+That is a smaller and better-defined problem than it was two days ago, and
+it is no longer blocking anything: every creature the port adds now draws
+whole.

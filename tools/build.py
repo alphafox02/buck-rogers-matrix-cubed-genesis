@@ -70,6 +70,10 @@ import soundmap
 # reason is geometry rather than art: the delta table has y increasing
 # northward, so south from y=2 looks off the bottom edge of a 16x16 map
 # and there is nothing out there to draw but the backdrop.
+# Figure ids whose artwork is drawn at 24x48 or 48x24 rather than 24x24.
+# From the size class in byte 7 of each figure record at 0x9A14.
+LARGE_FIGURES = (0x04, 0x05, 0x06, 0x0B, 0x10, 0x17, 0x18, 0x23, 0x28)
+
 START = ("0x11", "4", "0", "2", "0x11", "1")
 
 STOCK = REPO / "roms/countdown.gen"
@@ -321,6 +325,13 @@ def main():
          *[f"0x{nid:02X}:0x{src:02X}"
                for nid, (_name, src) in sorted(monstermap.NEW_CREATURES.items())])
         step("add_creatures.py")
+        # Three of the added creatures clone a large donor and inherit its
+        # size class. The combat board draws nine cells whatever the class
+        # says, so a class 2 or 3 figure appears as a 24x24 crop -- half a
+        # creature. Redraw them at the size the board uses.
+        step("rescale_figure.py",
+             *[f"0x{nid:02X}" for nid, (_n, src) in sorted(monstermap.NEW_CREATURES.items())
+               if src in LARGE_FIGURES])
     else:
         step("rename_monsters.py")
     if music:
