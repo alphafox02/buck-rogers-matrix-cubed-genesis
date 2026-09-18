@@ -2030,3 +2030,41 @@ Still to do: pin which index is which colour. The engine's choice of tiles
 is not the sheet's order, so the mapping cannot be read off directly -- it
 needs either a probe per index, or working out how the sprite composer picks
 tiles.
+
+### The figure palette, index by index
+
+Measured with `tools/palette_probe.py`, one probe per index: replace a
+figure's artwork with a sheet that is entirely index N, fight the creature
+under `tools/play.py`, and read the colour it draws as. Patterned probes
+cannot give this, because the engine's choice of tiles is not the sheet's
+order.
+
+```
+ 0 transparent        4 (136,0,0)    dark red     8 (64,68,64)    dark grey    12 (232,68,64)  salmon
+ 1 (232,236,0) yellow 5 (136,0,136)  purple       9 (64,68,232)   blue         13 (0,136,0)    green
+ 2 (0,0,0)    black   6 (136,68,0)   brown       10 (64,236,64)   light green  14 (0,0,136)    navy
+ 3 (0,136,136) teal   7 (136,136,136) grey       11 (64,236,232)  cyan         15 (232,236,232) white
+```
+
+Saved index-ordered as `tools/figure_palette.json`.
+
+### Matrix Cubed's combat sprites are already animation frames
+
+`CPIC1.DAX` holds 108 sprites of 24x24. Consecutive blocks are poses of the
+same creature, and the mean per-channel difference shows where one creature
+ends and the next begins:
+
+```
+block 1 vs 2   10.3        block 4 vs 5   44.6   <- a new pose or creature
+block 2 vs 3    9.8        block 5 vs 8   41.4
+block 3 vs 4    7.9
+```
+
+The set also comes in two halves: block N and block N+54 are the same
+creature in a variant, differing by 18 to 54 -- far more than neighbouring
+frames and far less than unrelated creatures.
+
+So there are frames to animate with. A Genesis figure sheet holds eighteen,
+six across by three down, where Matrix Cubed offers roughly two to five per
+creature, so the conversion has to place what exists into the slots the
+engine animates and repeat to fill the rest.

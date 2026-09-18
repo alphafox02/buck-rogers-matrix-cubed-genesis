@@ -34,6 +34,16 @@ import lzw_encode
 PROBE_AT = 0x1B6000        # clear of every other relocation
 
 
+def build_flat(index, w_tiles=18, h_tiles=9):
+    """A sheet that is entirely one palette index -- so whatever the engine
+    draws, and however it picks its tiles, the figure renders as that one
+    colour and the index is identified beyond doubt."""
+    import struct as _s
+    tile = bytes([(index << 4) | index]) * 32
+    nt = b"".join(_s.pack(">H", 0) for _ in range(w_tiles * h_tiles))
+    return _s.pack(">HHH", 1, len(nt), 0) + nt + tile
+
+
 def build_sheet(w_tiles=18, h_tiles=9, shift=0):
     """
     A sheet where every 8x8 tile is one flat palette index.
@@ -58,11 +68,11 @@ def build_sheet(w_tiles=18, h_tiles=9, shift=0):
     return blob
 
 
-def apply(rom: bytes, figure_id=0x0F, shift=0) -> bytes:
+def apply(rom: bytes, figure_id=0x0F, shift=0, flat=None) -> bytes:
     rom = bytearray(rom)
     base = struct.unpack_from(">I", rom, expand_figures.OPERANDS[0])[0]
     recs, _term = expand_figures.read(rom, base)
-    blob = build_sheet(shift=shift)
+    blob = build_flat(flat) if flat is not None else build_sheet(shift=shift)
     packed = lzw_encode.compress(blob)
     if bytes(genesis_ecl.decompress(packed, limit=0x20000)) != blob:
         raise SystemExit("probe sheet does not round trip")

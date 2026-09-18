@@ -25,8 +25,13 @@ import dax
 import inject_portrait as ip
 from PIL import Image
 
-PALETTE = [tuple(c) for c in
-           json.load(open(Path(__file__).resolve().parent / "figure_palette.json"))]
+# Index-ordered: entry N is what palette index N draws as, and 0 is
+# transparent. Measured by tools/palette_probe.py, one flat-colour probe per
+# index, because the engine's choice of tiles is not the sheet's order and
+# the mapping cannot be deduced from a patterned probe.
+_RAW = json.load(open(Path(__file__).resolve().parent / "figure_palette.json"))
+PALETTE = [tuple(c) if c else None for c in _RAW]
+OPAQUE = [c for c in PALETTE if c]
 ZOOM = 5
 
 
@@ -35,7 +40,7 @@ def convert(img):
     src, dst = img.convert("RGB").load(), out.load()
     for y in range(img.height):
         for x in range(img.width):
-            dst[x, y] = min(PALETTE, key=lambda c: ip.distance(src[x, y], c))
+            dst[x, y] = min(OPAQUE, key=lambda c: ip.distance(src[x, y], c))
     return out
 
 
