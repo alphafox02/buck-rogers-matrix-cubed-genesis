@@ -2229,3 +2229,39 @@ for, and `flagmap.mapped_targets` adds everything the transpiler assigns by
 name. That over-counts — a constant in the same numeric range is not an
 address — but the pool holds 3,587 slots for 385 flags, so the cost is
 nothing and the alternative corrupts live engine state.
+
+## A story flag must start at zero — CONFIRMED, the hard way
+
+Every Gold Box story guard is "if this is not zero, I have already
+happened":
+
+```
+COMPARE [flag], 0
+IF_NOT_EQUALS
+EXIT
+WRITE_MEM 1, [flag]
+... the scene ...
+```
+
+So a flag placed on RAM that does not power up at zero does not merely lose
+state — the scene it guards **silently never fires**. Dr Romney on the
+opening dock, square (4,2), event 20, was lost exactly this way: its flag
+landed on `0x991A`, and `0x991A` reads 2 at the main menu before any script
+has run.
+
+The usable region is `0x96F6-0x9EF5`, and both ends are load-bearing:
+
+* below `0x96F6` is the ECL code buffer (`0x6AF6-0x96F6`, the bounds the
+  interpreter checks at `0x03308`) — work RAM there reads back as the
+  running script's own text
+* above `0x9EF5` is past the engine's start-up clear at `0x0115A`, so it
+  holds whatever the machine powered on with: 266 non-zero bytes in
+  `0x9EF6-0x9FFF`
+
+Inside that region, 45 further addresses are still non-zero at the menu and
+are listed in `flagmap.NOT_ZEROED`. That list is measured, not reasoned
+about: boot the build, stop at the menu, read `0x96F6-0x9EF5` out of the
+savestate and note every non-zero byte. Re-measure after any engine change.
+
+With all three exclusions applied, 385 flags allocate with zero of them
+landing on dirty RAM.

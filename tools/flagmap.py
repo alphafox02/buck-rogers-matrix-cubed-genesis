@@ -58,7 +58,40 @@ WINDOWS = set(range(0x9AFC, 0x9B50)) | set(range(0x9BF6, 0x9C10))
 # The much larger clear at 0x0115A covers 0x96F6-0x9EF5 but runs once at
 # start-up, so it is harmless -- flags should begin at zero anyway.
 VOLATILE = set(range(0x97F6, 0x9816)) | set(range(0x9E6F, 0x9E79))
-REGION = range(0x9000, 0xA000)
+# The region is 0x96F6-0x9EF5, not 0x9000-0x9FFF. Both ends matter.
+#
+# Below 0x96F6 is the buffer the ECL loader decompresses a script into --
+# the bounds the interpreter itself checks at 0x03308 -- so a flag there is
+# a byte of the running script. Work RAM after boot shows it plainly: 0x9000
+# onward reads 87, 73, 73, 71, 78, 84, ... the ASCII of the block's own text.
+#
+# Above 0x9EF5 is past the engine's start-up clear at 0x0115A, so it holds
+# whatever the machine powered on with. Reading the region at the main menu,
+# before any script has run, finds 266 non-zero bytes in 0x9EF6-0x9FFF and
+# none at all between 0x9B9F and 0x9EF5.
+#
+# A flag that does not start at zero is worse than a flag that does not
+# persist: every story guard in a Gold Box script is "if this is not zero,
+# I have already happened". The Romney encounter on the opening dock reads
+# `COMPARE [flag], 0 / IF_NOT_EQUALS / EXIT`, its flag landed on 0x991A,
+# and 0x991A is 2 before the title screen -- so the scene silently never
+# fired.
+REGION = range(0x96F6, 0x9EF6)
+
+# Addresses inside the region that are STILL not zero at the main menu, with
+# no script yet run. Measured, not reasoned about: boot the build, stop at
+# the menu, and read 0x96F6-0x9EF5 out of the savestate. Most are engine
+# state the start-up clear runs before rather than after.
+#
+# To re-measure after an engine change, dump work RAM at the menu and list
+# every non-zero byte in the region; anything new belongs here.
+NOT_ZEROED = (
+    {0x97F2, 0x9AFB} |
+    set(range(0x98F6, 0x9923)) |      # 0x98F6-0x9922, in six broken runs
+    set(range(0x9BBD, 0x9BBF)) |
+    set(range(0x9BC7, 0x9BCB)) |
+    set(range(0x9BD2, 0x9BD5))
+)
 
 # Engine-shared Genesis addresses established so far; never reassign these.
 CONFIRMED = {0x9E6F, 0x9E70, 0x9E71, 0x97E8, 0x9AFA, 0x9AF6, 0x9AF7}
@@ -127,7 +160,8 @@ def countdown_flags(rom: bytes):
                 if a.kind == "mem" and a.value in REGION:
                     seen[a.value] += 1
     return sorted(a for a in seen
-                  if a not in CONFIRMED and a not in WINDOWS and a not in VOLATILE)
+                  if a not in CONFIRMED and a not in WINDOWS
+                  and a not in VOLATILE and a not in NOT_ZEROED)
 
 
 def region_gaps(rom: bytes, engine_used):
@@ -139,7 +173,7 @@ def region_gaps(rom: bytes, engine_used):
             for a in ins.args:
                 if a.kind == "mem":
                     script.add(a.value)
-    taken = script | set(engine_used) | WINDOWS | CONFIRMED | VOLATILE
+    taken = script | set(engine_used) | WINDOWS | CONFIRMED | VOLATILE | NOT_ZEROED
     return [a for a in REGION if a not in taken]
 
 
