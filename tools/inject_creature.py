@@ -52,13 +52,28 @@ ART = 0x1BA000               # clear of the monster stream, directory and probes
 ART_LIMIT = 0x1F0000
 
 PICTURE = 185                # the DOS monster record's artwork byte
-# The artwork id spans two archives. `CPIC1` holds the combat pictures --
-# 108 of them, including every oversized creature -- and `CHARS` holds 72
-# humanoids at 24x24. Nine of the creatures this port adds name a block
-# `CPIC1` does not have (0, 16, 20, 28) and every one of those is in
-# `CHARS`, so the lookup falls back to it. Both use the same N/N+128 pose
-# pairing.
-ARCHIVES = ("CPIC1.DAX", "CHARS.DAX")
+# `CPIC1` is the creature archive: 108 blocks, including every oversized
+# creature, in N/N+128 pose pairs.
+#
+# It is the ONLY archive this reads, and that is a correction. Nine of the
+# added creatures name a block CPIC1 does not have -- 0, 16, 20 and 28 --
+# and the lookup used to fall back to `CHARS`, which does have all four.
+# But CHARS is not a creature archive at all: its 36 blocks are the PLAYER
+# character sprites, one per race/career/gender combination, which is why
+# SECURITY ROBOT came out as a human with a sword. A monster picture id
+# resolved there means nothing.
+#
+# A creature whose artwork does not resolve keeps the figure it cloned from
+# Countdown instead, and those were picked by role, so the substitutes are
+# close: SECURITY ROBOT clones RAM H.S. ROBOT, TECHNICIAN clones RAM
+# TECHNICIAN, LOWLANDER clones LL. WARRIOR, DESERT RUNNER clones D.R.
+# WARRIOR. Countdown's own art is simply better here than anything DOS
+# offers, because the DOS art is not there.
+#
+# The five that name block 0 -- DESERT RUNNER, GANG RECRUIT, LOWLANDER,
+# TECHNICIAN, WARRIOR -- are almost certainly "no picture of its own"
+# rather than a missing file.
+ARCHIVES = ("CPIC1.DAX",)
 POSE = 128                   # a creature's second pose is block N + 128
 SIZE_CLASS = {(24, 24): 0, (48, 24): 3, (48, 48): 4}
 STREAM = 0x1B1000
@@ -144,7 +159,7 @@ def sheet(frames, fw, fh):
 
 
 def sprite_blocks():
-    """Every sprite block, CPIC1 taking precedence over CHARS."""
+    """Every creature sprite block. See ARCHIVES for why that is CPIC1 only."""
     here = Path(__file__).resolve().parent.parent / "dos_game" / "matrix"
     out = {}
     for name in reversed(ARCHIVES):

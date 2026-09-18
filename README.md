@@ -73,10 +73,13 @@ the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
   awarded
 - **Matrix Cubed's own 36 creatures** have roster slots and names, with the
   engine's 64-monster ceiling raised to 128
-- **All 36 wear their own DOS artwork**, quantised to the sixteen
+- **27 of the 36 wear their own DOS artwork**, quantised to the sixteen
   colours the engine gives a combat figure and resolved automatically: a DOS
-  monster record names its sprite at byte 185, a creature's two poses are
-  blocks N and N+128, and the id spans `CPIC1` with `CHARS` as the fallback
+  monster record names its sprite at byte 185 and a creature's two poses are
+  blocks `N` and `N+128` of `CPIC1`. The other nine name a block `CPIC1` does
+  not have, and keep the Countdown figure they were substituted for, which
+  was picked by role and is usually close -- SECURITY ROBOT keeps RAM H.S.
+  ROBOT, LOWLANDER keeps LL. WARRIOR
 - **A 48x48 creature size**, which the Genesis engine did not have. Stock
   Countdown draws 24x24, 24x48 and 48x24; Matrix Cubed has five creatures
   at 48x48, the Venus Dinosaur among them, and they now draw at full size
