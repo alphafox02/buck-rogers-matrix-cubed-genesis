@@ -2068,3 +2068,44 @@ So there are frames to animate with. A Genesis figure sheet holds eighteen,
 six across by three down, where Matrix Cubed offers roughly two to five per
 creature, so the conversion has to place what exists into the slots the
 engine animates and repeat to fill the rest.
+
+## The wall-set tables, decoded
+
+`LOADPIECES` divides its argument by three and indexes word offsets at
+`0x51836`. Following them gives ten tables of **32 bytes** each, `0x20`
+apart, and each one maps a **wall code 0-31 to a piece index 0-7**, with
+`0xFF` meaning nothing is drawn:
+
+    set 0: FF 01 02 03 04 05 05 00 06 06 07 07 FF FF 02 00 FF 00 02 01 ...
+    set 1: FF 01 02 02 01 01 03 04 05 06 02 07 07 01 03 00 FF 00 01 01 ...
+    ...
+    set 8: FF 01 02 03 04 05 06 07 00 00 00 00 00 00 02 00 FF 00 02 00 ...
+    set 9: FF 01 02 03 04 05 06 07 00 00 00 00 00 00 02 00 FF 00 02 00 ...
+
+Sets 8 and 9 are identical and are the plain identity mapping. So a set owns
+eight wall pieces and a table saying which code draws which.
+
+Only five codes mean the same thing in every set -- 0 and 16 draw nothing,
+1 is always piece 1, and 15 and 31 are always piece 0. The other
+twenty-seven are set-dependent, which is what makes a transplanted map's
+walls wrong: the code survives the transplant intact and then means
+something else.
+
+**That table is data we control.** Rather than rewriting Matrix Cubed's map
+codes to suit Countdown's sets, the sets themselves can be rewritten so the
+codes mean what the DOS game meant. Doing that needs `WALLDEF1.DAX` decoded
+-- 2340 bytes per deco, eleven decos, same block ids as the deco arguments.
+That is the next piece of work on walls and it is a data job, not an engine
+one.
+
+### Which decos the transplant actually uses
+
+Logged from a real build, every `LOAD_AREA_DECO` the scenario issues:
+
+    deco  5 x5    deco  7 x4    deco  3 x4    deco 11 x4
+    deco 22 x3    deco 17 x3    deco  9 x2    deco 19 x2
+    deco 15 x2    deco 13 x2
+
+Thirty-one loads, ten distinct decos, **every one of them listed in
+`tools/wallmap.py`**. `WALLDEF1.DAX` holds an eleventh, deco 1, which the
+scenario never loads -- so the missing entry costs nothing.
