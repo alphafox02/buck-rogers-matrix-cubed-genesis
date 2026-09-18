@@ -115,23 +115,38 @@ NAME_MAP = {
 # portrait never drew, the program counter desynced, and leaving the shop
 # ended in the engine's own "Bad ECL address". 150 sites called it.
 #
-# Dropping `UPDATEFRAME` instead of fixing it was tried and is worse: the
-# shop's exit path is `PICTURE 255` (clear the window), `CALL 0x2DCB`
-# (redraw), `CONTINUE`, and with only `REMOVEFIGURE` the redraw is
-# incomplete and the screen goes black. Both opcodes are needed; the
-# argument is what was missing.
+# `UPDATEFRAME` alone. Three arrangements were tried against the shop, whose
+# exit path is `PICTURE 255` (clear the window), `CALL 0x2DCB` (redraw),
+# `CONTINUE`:
+#
+#   REMOVEFIGURE + UPDATEFRAME, no argument -- the interpreter reads the
+#     NEXT instruction as the argument. At the shop door that was the
+#     shopkeeper's `PICTURE`, so no portrait drew and the program counter
+#     desynced into "Bad ECL address".
+#   REMOVEFIGURE alone -- portrait fixed, screen black on exit.
+#   REMOVEFIGURE + UPDATEFRAME with an argument -- still black.
+#
+# `REMOVEFIGURE` is the problem. It wipes the whole display list, and then
+# `UPDATEFRAME` indexes `$b0b2 - 1`, which is -1:
 #
 #     0C134: clr.w $b0b2.w     ; REMOVEFIGURE: display entries = 0
 #     0C138: clr.w $b016.w     ;               combatants = 0
 #     0C13C: bsr.w $c3f0       ;               redraw the board
-#     0C142: ...               ; UPDATEFRAME: flip flags in the top two bits
-#                              ;              of its argument, frame index in
-#                              ;              the low six
 #
-# Zero is the argument that matches what the DOS call means -- no flip,
-# frame 0.
+#     0C14C: move.w $b0b2.w, d0   ; UPDATEFRAME: the LAST display entry
+#     0C150: subq.w #$1, d0
+#     0C152: mulu.w #$12, d0
+#     0C176: clr.b  $8(a2)        ; clears the sprite
+#
+# And `UPDATEFRAME` on its own is already what the DOS call describes --
+# "redraw the view and clear the current sprite" -- because `clr.b $8(a2)`
+# is that clear. Zero is the argument: no flip, frame 0.
+#   (4) nothing at all -- 0x2DCB left out, so it falls through to the stub
+#       path and becomes a GOTO to the next instruction: a real opcode the
+#       engine understands, which steps over and executes nothing. Stock
+#       Countdown never puts REMOVEFIGURE or UPDATEFRAME next to a PICTURE
+#       anyway; its idiom is plain `VIEW / PICTURE / PRINTCLEAR / CONTINUE`.
 CALL_EXPANSION = {
-    0x2DCB: (("REMOVEFIGURE", ()), ("UPDATEFRAME", (("imm", 0),))),
     0xC01E: (("STEPFORWARD", ()),),
 }
 
@@ -580,6 +595,16 @@ def transpile(block: bytes, flags=None):
                 pos += size
             continue
 
+        # Set BEFORE the lookup, so the stub branch below can override them.
+        # These two lines used to sit AFTER it and unconditionally undid
+        # `stub = True`, so `if stub:` at the emit site was never once taken
+        # and every stubbed opcode became a GOTO carrying the original
+        # instruction's arguments -- `CALL 0x2DCB` became `GOTO 0x2DCB`, a
+        # wild jump into nothing. That is the very failure the comment below
+        # says was fixed; the fix had been dead code.
+        stub = False
+        is_jump = ins.name in ecl._JUMPS
+
         name = NAME_MAP.get(ins.name, ins.name)
         if brk == "clear":
             name = "PRINTCLEAR"             # start the new screen empty
@@ -613,8 +638,6 @@ def transpile(block: bytes, flags=None):
             opcode = gen["GOTO"][0]
             is_jump = False
             stub = True
-        stub = False
-        is_jump = ins.name in ecl._JUMPS
         # The two engines number skills completely differently: DOS uses the
         # full 84-skill tabletop list 1-based, the Genesis 19 of its own.
         # The engine prints the name as string 0x54 + id, so an untranslated

@@ -1914,3 +1914,39 @@ It has no business here.
 `CALL_EXPANSION` now emits `REMOVEFIGURE` alone, and the loop refuses to
 build if any opcode it names takes arguments, so the same mistake cannot be
 made silently again.
+
+## The stub fix that had been dead code since it was written
+
+Chasing the shop's black screen, `CALL 0x2DCB` was taken out of
+`CALL_EXPANSION` so it would fall through to the stub path and become a
+harmless no-op. Entering the store then failed instantly with "Bad ECL
+address" -- a symptom that had never appeared there before, which is what
+made it worth looking at rather than shrugging off.
+
+The stub path was broken:
+
+    627:            report.append((off, ins.name, "no Genesis counterpart"))
+    628:            opcode = gen["GOTO"][0]
+    629:            is_jump = False
+    630:            stub = True
+    631:        stub = False               <- outside the else, unconditional
+    ...
+    782:        if stub:                   <- therefore never taken
+
+`stub = False` and `is_jump = ...` sat one indent level out, immediately
+after the branch that sets `stub = True`, so the flag was destroyed on every
+pass. `if stub:` at the emit site never fired once. Every untranslatable
+opcode became a `GOTO` carrying **the original instruction's own operand**
+instead of a skip to the next instruction -- so `CALL 0x2DCB` became
+`GOTO 0x2DCB`, a jump into nothing.
+
+That is precisely the failure the comment above it describes and claims to
+have fixed. The reasoning in the comment is right; the code never ran.
+
+**153 instructions across all 33 blocks** were affected. They only bite when
+a branch actually reaches one, which is why the game was playable and why
+this went unseen: the shop is simply the first place the transplant walks
+into one on a path a player takes early.
+
+The two lines now sit before the lookup, where the stub branch can override
+them.
