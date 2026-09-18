@@ -136,7 +136,7 @@ def shape():
     """
     a = Asm()
 
-    def case(rows, cols, quarter, large):
+    def case(rows, cols, quarter, large, lift=False):
         a.raw("3d7c") .raw(f"{rows:04x}").raw("fffa")   # move.w #r, -$6(a6)
         a.raw("3d7c").raw(f"{cols:04x}").raw("fff8")    # move.w #c, -$8(a6)
         a.raw("3d7c").raw(f"{quarter:04x}").raw("fffc")  # move.w #q, -$4(a6)
@@ -146,11 +146,17 @@ def shape():
             a.raw("1d7c").raw(f"00{large:02x}").raw("fffe")  # move.b #n, -$2(a6)
         else:
             a.raw("422efffe")                           # clr.b  -$2(a6)
+        if lift:
+            # The block this jumps to computes the drawing origin as
+            # gridX - d4, gridY - d5, and a creature is drawn down and to the
+            # right of it. A 2x2 creature therefore has to start one square
+            # up so its feet land on the square it occupies.
+            a.raw("5245")                               # addq.w #1, d5
         a.jmp(SHAPE_END)
 
     a.raw("10290023")                                   # move.b $23(a1), d0
     a.raw("b03c").raw(f"{BIG:04x}").br(0x66, "n4")
-    case(5, 5, 0x0C, 0xFF)                              # 48 x 48
+    case(5, 5, 0x0C, 0xFF, lift=True)                   # 48 x 48
     a.label("n4").raw("b03c0003").br(0x66, "n3")
     case(2, 5, 0x0C, 0xFF)                              # 48 x 24
     a.label("n3").raw("b03c0002").br(0x66, "n2")

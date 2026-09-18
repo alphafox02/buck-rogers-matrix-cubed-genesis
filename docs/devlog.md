@@ -1321,7 +1321,7 @@ The DOS sprites do not fill their 48x48 square anyway -- most are a tall
 figure or a long one inside it -- so the loss from the missing square class
 is smaller than the numbers suggest.
 
-## 48x48 works
+## 48x48: nearly, and exactly what is left
 
 `tools/bigcreature.py` extends the three routines a live fight showed taking
 the monster size byte, each relocated whole into free ROM with a size 4 case
@@ -1357,9 +1357,44 @@ as `CPIC1` blocks **22 and 157**, and 157 is not the dinosaur's second pose
 engine had been compositing a dinosaur and a dancer into one creature and
 doing it correctly.
 
-With `0x0F:4:22,150` the board shows a 48x48 golden theropod, jaws open,
-twice the size of the party member beside it in both directions.
-`art_preview/trex_48x48_zoom.png`.
+With `0x0F:4:22,150` the sheet is right: rendering it back out of the ROM
+gives six clean frames of a standing theropod, head, jaws, body, legs, tail
+and shadow, 48x48 each.
+
+### What is still wrong: the lower half repeats the upper half
+
+A second play report caught it -- "half his body bottom is below the floor
+level". Two things were wrong and one is fixed.
+
+**Fixed: the anchor.** The block at 0x0ADFC computes the drawing origin as
+`gridX - d4`, `gridY - d5`, and a creature is drawn down and to the right of
+it. A 2x2 creature therefore has to start one square higher or its feet hang
+below the square it stands on. The size 4 case now does `addq.w #1, d5`
+before rejoining, and the creature sits on the floor with the party.
+
+**Not fixed: the rows.** Cropping one creature off the screen and putting it
+next to the sheet frame it should be shows the board drawing the top half
+twice -- head and shoulders, then head and shoulders again -- instead of top
+then bottom. Reading the drawn tiles back as cell numbers agrees: rows 0-2
+come from cells B, B+6, B+12 and rows 3-5 from B+28, B+34, B+40, when six
+contiguous rows would be B through B+30.
+
+The draw loop looks like it should already work:
+
+    0AE7A: move.w -$6(a6), d2    ; rows-1 = 5, so six passes
+    0AE84: jsr    (a2)           ; one row of cols+1 cells from a1
+    0AE86: addi.w #$80, d3       ; next plane row
+    0AE8A: dbra   d2, $ae7e
+
+and every row writer advances `a1` by exactly `cols+1` cells -- `(a1)+` in
+the plain one, `adda.w -$4(a6), a1` in the mirrored one, and -4(a6) is 12
+bytes for six cells. So six rows from one base should be contiguous.
+
+They are not, which means the creature is drawn by two passes of three rows
+rather than one pass of six, and the second pass recomputes its base instead
+of continuing. That is the last thing to find. Everything else -- the size
+byte, the shape, the grid squares, the VRAM slots, the anchor, the art
+pipeline -- is in place and verified.
 
 Two hours went into rewriting engine code because a creature looked wrong,
 when the creature looked wrong because it was two creatures. Check the
