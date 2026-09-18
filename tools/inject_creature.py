@@ -48,8 +48,15 @@ import genesis_ecl
 import integrity
 import lzw_encode
 
-ART = 0x1BA000               # clear of the monster stream, directory and probes
-ART_LIMIT = 0x1F0000
+# Creature art sits between the figure directory and the relocated pictures.
+#
+# It used to start at 0x1BA000, which left 24 KB before inject_pic's own base
+# at 0x1C0000, and adding a corpse frame to every creature pushed the last
+# one 1,284 bytes past it -- straight over picture 0x70. tools/romlayout.py
+# caught it and failed the build, which is what it is for. 0x1B5000 is clear
+# of the 88-record figure directory at 0x1B4000 and gives 44 KB.
+ART = 0x1B5000
+ART_LIMIT = 0x1C0000         # inject_pic.ART_BASE
 
 PICTURE = 185                # the DOS monster record's artwork byte
 # `CPIC1` is the creature archive: 108 blocks, including every oversized
@@ -137,6 +144,32 @@ def fit(grid, w, h):
     return out
 
 
+# Where the engine keeps the death animation inside the 18-frame sheet.
+#
+# Rendering stock Countdown figures frame by frame -- 0x00 D.R. WARRIOR,
+# 0x0C PIRATE WARRIOR, 0x1C RAM H.S. ROBOT -- gives the same shape every
+# time: 0-8 stand and attack, 9-11 blank, 12-14 stand again, 15 is going
+# down, 16 is flat on the floor, 17 stands. A creature killed in combat is
+# drawn at 16 and stays there.
+#
+# A DOS block carries two poses and neither of them is a corpse, so filling
+# all eighteen frames from those two left every dead creature standing up.
+DYING, DEAD = 15, 16
+
+
+def lie_down(grid, w, h):
+    """A standing pose turned on its side, to stand in for a corpse.
+
+    Rotated a quarter turn and refitted to the frame, which is exact for a
+    24x24 creature and a squash for the oblong classes. Not the art SSI
+    would have drawn, but it reads as a body on the floor rather than as a
+    creature that shrugged off being killed.
+    """
+    sh, sw = len(grid), len(grid[0])
+    turned = [[grid[sh - 1 - x][y] for x in range(sh)] for y in range(sw)]
+    return fit(turned, w, h)
+
+
 def sheet(frames, fw, fh):
     """Frames of fw x fh tiles, cells row-major, into one sheet blob."""
     tiles, order, cells = {}, [], []
@@ -200,6 +233,8 @@ def apply(rom: bytes, specs) -> bytes:
             # reads them.
             poses = [p[fh * 4:] + p[:fh * 4] for p in poses]
         frames = [poses[n % len(poses)] for n in range(FRAMES)]
+        corpse = lie_down(poses[0], fw * 8, fh * 8)
+        frames[DYING] = frames[DEAD] = corpse
         packed = lzw_encode.compress(sheet(frames, fw, fh))
         if cursor + len(packed) > ART_LIMIT:
             raise SystemExit("creature art does not fit")

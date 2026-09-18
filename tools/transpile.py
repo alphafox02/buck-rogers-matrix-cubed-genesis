@@ -618,6 +618,37 @@ def transpile(block: bytes, flags=None):
     hoisted = {call_off for call_off, _ in redraw_first.values()}
     redraw_pos = {}
 
+    # COMBAT leaves the display DISABLED and the script has to switch it back
+    # on. The engine blanks through 0x085D6 -- `move.w #$8124,(a4)`, VDP
+    # register 1 with the display bit clear -- and only 0x0860E turns it on
+    # again, which VIEW reaches and nothing else the scripts use does. Read
+    # out of a savestate across the spoils screen:
+    #
+    #     at the shop door   reg1=64  display on
+    #     spoils screen      reg1=64  display on
+    #     one button later   reg1=24  display OFF, and it stays off
+    #
+    # Stock Countdown never notices because its scripts follow COMBAT with
+    # EXIT (15 sites) or ENCEXIT (6), both of which end the event and let the
+    # walk loop rebuild the screen. Matrix Cubed's carry straight on --
+    # `COMBAT / COMPARE / IFLT / GOTO` is its commonest shape, 29 sites --
+    # because the DOS engine restored the view by itself. Winning the fight
+    # for Romney on the opening dock left a black screen with the music still
+    # playing, and the script running behind it.
+    #
+    # So COMBAT gets a redraw unless the next instruction is already one.
+    restore_after = set()
+    for _off, _ins in found.items():
+        if _ins.name != "COMBAT":
+            continue
+        _next = found.get(_off + _ins.size)
+        if _next is None or _next.name in ("EXIT", "STOP_MOVE"):
+            continue
+        if _next.name == "CALL" and _next.args \
+                and _next.args[0].value in CALL_EXPANSION:
+            continue
+        restore_after.add(_off)
+
     # Pass 1: lay out, learning each instruction's new offset.
     layout, pos = {}, 0
     pieces = []
@@ -891,6 +922,14 @@ def transpile(block: bytes, flags=None):
             msize = 1 + sum(len(_encode_arg(k, v)) for k, v in more)
             pieces.append((off, opcode, more, msize))
             pos += msize
+        if off in restore_after:
+            view, _ = gen["VIEW"]
+            varg = [("imm", 0), ("imm", 0xFF)]
+            vsize = 1 + sum(len(_encode_arg(k, v)) for k, v in varg)
+            pieces.append((off, view, varg, vsize))
+            pos += vsize
+            report.append((off, "combat", "VIEW 0,255 after COMBAT, which "
+                                          "leaves the display disabled"))
 
     # Pass 2: emit, rebasing jump targets through the new layout.
     out = bytearray()

@@ -2154,3 +2154,48 @@ other way round.
 
 A clean tile 0x774 reads `00` then 31 bytes of `0x22`. Anything else is an
 overflowed sprite table.
+
+## COMBAT leaves the display disabled — CONFIRMED
+
+The engine blanks the screen on its way out of a fight and does not turn it
+back on. `0x085D6` writes `move.w #$8124,(a4)` — VDP register 1 with the
+display bit clear — and only `0x0860E` (through `0x08608`, `move.w #$8164`)
+sets it again. `VIEW` reaches `0x0860E`; `PRINTCLEAR`, `CONTINUE` and
+`PICTURE` do not.
+
+Read out of a savestate (VDP register file at offset `0x22525`) across the
+spoils screen after a fight:
+
+```
+at the shop door    reg1=64   display on
+spoils screen       reg1=64   display on
+one button later    reg1=24   display OFF — and it stays off
+```
+
+Stock Countdown never notices, because its scripts end the event right after
+a fight — `COMBAT -> EXIT` 15 times, `COMBAT -> ENCEXIT` 6 — and the walk
+loop rebuilds the screen from scratch. Matrix Cubed's scripts carry straight
+on, because the DOS engine restored the view by itself; `COMBAT / COMPARE /
+IFLT / GOTO` is its commonest shape at 29 sites.
+
+`tools/transpile.py` therefore emits `VIEW 0, 255` after every transplanted
+`COMBAT` whose next instruction is not already one that ends the event.
+
+## The 18 frames of a combat figure — CONFIRMED
+
+Rendering stock figures frame by frame (`0x00` D.R. WARRIOR, `0x0C` PIRATE
+WARRIOR, `0x1C` RAM H.S. ROBOT) gives the same layout every time:
+
+```
+ 0-8    stand, aim, fire
+ 9-11   blank
+12-14   stand again
+15      going down
+16      flat on the floor      <- what a killed creature is drawn as
+17      stand
+```
+
+A DOS sprite block holds two poses and neither is a corpse, so a creature
+built from one alone stays standing after it dies. `tools/inject_creature.py`
+fills 15 and 16 with the standing pose turned a quarter turn — exact for a
+24x24 creature, a squash for the oblong classes.
