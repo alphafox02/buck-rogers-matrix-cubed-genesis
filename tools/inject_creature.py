@@ -201,7 +201,41 @@ def read_sheet(rom, fid):
     return out
 
 
-def borrow_death(rom, fid, w, h):
+def recolour(grid, src_stand, dst_stand):
+    """Put the creature's own colours on a borrowed frame.
+
+    Both figures are drawn from the same sixteen engine colours, so the two
+    palettes can be matched by how much of each frame they cover: the
+    commonest opaque colour of the stand-in STANDING becomes the commonest
+    of the creature standing, the second becomes the second, and so on.
+    Applied to the borrowed corpse it keeps SSI's silhouette and carries the
+    creature's colouring onto it, so a PURGE WARRIOR stops dying in RAM MAR
+    CGENNIE's colours. Index 0 is transparent in both and is left alone.
+    """
+    # The outline is structure, not identity: it covers more of a 24x24
+    # figure than any body colour, so leaving it in the ranking would pair
+    # one figure's outline with the other's and drag every colour along by
+    # one. It maps to itself instead.
+    pal = palette()
+    dark = {n for n, c in enumerate(pal) if c and sum(c) <= 64}
+
+    def rank(g):
+        return [c for c, _ in collections.Counter(
+            px for row in g for px in row if px and px not in dark).most_common()]
+    # Ranked over the CORPSE, not over the stand-in standing. A body on the
+    # floor shows different shades from the same figure upright, so matching
+    # the standing frames left the corpse's own dominant colour unranked and
+    # it kept the stand-in's brown. Ranking the frame being recoloured makes
+    # its largest area take the creature's largest area -- the body colour
+    # becomes the body colour, which is the whole point.
+    src, dst = rank(grid), rank(dst_stand)
+    if not src or not dst:
+        return grid
+    swap = {c: dst[min(i, len(dst) - 1)] for i, c in enumerate(src)}
+    return [[swap.get(px, px) if px else 0 for px in row] for row in grid]
+
+
+def borrow_death(rom, fid, w, h, stand):
     """The dying and dead frames of the Countdown creature this one clones.
 
     Every added creature was substituted for a Countdown monster BY ROLE --
@@ -211,8 +245,8 @@ def borrow_death(rom, fid, w, h):
     quarter-turned standing pose does not: rotating a 24x24 sprite reads as
     a pole lying on the floor, as a play session put it.
 
-    The colours are the stand-in's, not the creature's. At 24x24 in the
-    middle of a fight that reads far better than the alternative.
+    The silhouette is the stand-in's; the colours are recoloured to the
+    creature's own, matched by coverage against the two standing poses.
     """
     src = monstermap.NEW_CREATURES.get(fid)
     if src is None:
@@ -220,7 +254,8 @@ def borrow_death(rom, fid, w, h):
     frames = read_sheet(rom, src[1])
     if len(frames) <= DEAD:
         return None
-    return [fit(frames[n], w, h) for n in (DYING, DEAD)]
+    return [recolour(fit(frames[n], w, h), frames[0], stand)
+            for n in (DYING, DEAD)]
 
 
 def sheet(frames, fw, fh):
@@ -286,7 +321,7 @@ def apply(rom: bytes, specs) -> bytes:
             # reads them.
             poses = [p[fh * 4:] + p[:fh * 4] for p in poses]
         frames = [poses[n % len(poses)] for n in range(FRAMES)]
-        death = borrow_death(rom, fid, fw * 8, fh * 8)
+        death = borrow_death(rom, fid, fw * 8, fh * 8, poses[0])
         if death is None:
             death = [lie_down(poses[0], fw * 8, fh * 8)] * 2
         frames[DYING], frames[DEAD] = death
