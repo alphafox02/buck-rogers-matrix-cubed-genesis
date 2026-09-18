@@ -1950,3 +1950,41 @@ into one on a path a player takes early.
 
 The two lines now sit before the lookup, where the stub branch can override
 them.
+
+## `CALL 0x2DCB` is `VIEW 0, 0xFF`, found by driving the shop instead of guessing
+
+Four mappings were tried by reasoning from handler code, and all four failed:
+`REMOVEFIGURE` + bare `UPDATEFRAME` (no portrait, then "Bad ECL address"),
+`REMOVEFIGURE` alone (black on exit), both with a proper argument (black),
+and nothing at all (a wild jump, which is how the dead stub flag was found).
+
+What ended it was a play report offering the exact route, which made the bug
+reproducible under `tools/play.py` in about two minutes:
+
+    to_dungeon(); step S,S,E,E,E,S    -> the shop door
+    LEFT, C                           -> YES, the store opens
+    DOWN x8, C                        -> EXIT
+
+Then the failure could be examined rather than inferred:
+
+- The party position **updates correctly** on exit, (3,5) to (3,4). The
+  script runs fine.
+- The screen is **not black**. Pressing A revealed a full-width text window
+  with the default space picture -- the wrong **layout**, not a missing
+  redraw.
+
+`VIEW` is the opcode that picks the layout, and `VIEW 0, 0xFF` -- the
+ordinary game screen, no picture -- is the idiom both stock Countdown and
+`tools/bootstub.py` already use to come back from a scene. `CALL 0x2DCB`
+maps to that, which also reads correctly as what the DOS native routine
+did: restore the view.
+
+Verified end to end: the shopkeeper's portrait shows at the greeting, the
+store opens, and EXIT returns to the dock with the dungeon view intact.
+
+### The lesson, stated plainly
+
+The handler code said what each opcode *does*. It could not say which one
+the script *needed*, and four rounds of reasoning from it produced four
+wrong answers and a lot of the player's time. The bug was solved in one pass
+the moment it could be reproduced and probed. Ask for the repro first.

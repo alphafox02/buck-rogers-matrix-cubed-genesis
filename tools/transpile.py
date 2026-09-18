@@ -146,7 +146,16 @@ NAME_MAP = {
 #       engine understands, which steps over and executes nothing. Stock
 #       Countdown never puts REMOVEFIGURE or UPDATEFRAME next to a PICTURE
 #       anyway; its idiom is plain `VIEW / PICTURE / PRINTCLEAR / CONTINUE`.
+#   (5) `VIEW 0, 0xFF` -- back to the ordinary game screen with no picture.
+#       Driving the shop under tools/play.py and probing the failure showed
+#       the screen is not black at all: it is a full-width text window with
+#       the default space picture, i.e. the wrong LAYOUT. The party position
+#       updates correctly on exit -- (3,5) to (3,4) -- so the script runs
+#       fine and only the view is wrong. VIEW is what picks the layout, and
+#       `VIEW 0, 0xFF` is the idiom stock Countdown and tools/bootstub.py
+#       both use to get back to the ordinary screen.
 CALL_EXPANSION = {
+    0x2DCB: (("VIEW", (("imm", 0), ("imm", 0xFF))),),
     0xC01E: (("STEPFORWARD", ()),),
 }
 
