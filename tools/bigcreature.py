@@ -216,8 +216,7 @@ def index():
 
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
-    for at, name, stock in ((SLOTS, "slot count", SLOTS_STOCK),
-                            (INDEX, "frame index", INDEX_STOCK)):
+    for at, name, stock in ((SLOTS, "slot count", SLOTS_STOCK),):
         if bytes(rom[at:at + len(stock)]) != stock:
             raise SystemExit(f"0x{at:05X} is not the {name}: "
                              f"{bytes(rom[at:at + len(stock)]).hex()}")
@@ -225,8 +224,7 @@ def apply(rom: bytes) -> bytes:
     cursor = NEW
     for name, build, site, end in (("slot count", slots, SLOTS, SLOTS_END),
                                    ("frame shape", shape, SHAPE, SHAPE_END),
-                                   ("grid squares", squares, SQUARES, SQUARES_END),
-                                   ("frame index", index, INDEX, INDEX_END)):
+                                   ("grid squares", squares, SQUARES, SQUARES_END)):
         cursor += cursor & 1
         code = build()
         if cursor + len(code) > NEW_LIMIT:

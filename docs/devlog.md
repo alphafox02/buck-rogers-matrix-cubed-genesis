@@ -1321,50 +1321,49 @@ The DOS sprites do not fill their 48x48 square anyway -- most are a tall
 figure or a long one inside it -- so the loss from the missing square class
 is smaller than the numbers suggest.
 
-## 48x48: the footprint works, the sheet layout does not yet
+## 48x48 works
 
-`tools/bigcreature.py` extends the four routines that a live fight showed
-taking the size byte, each relocated whole into free ROM with a size 4 case
+`tools/bigcreature.py` extends the three routines a live fight showed taking
+the monster size byte, each relocated whole into free ROM with a size 4 case
 added, each rejoining the stock code where it left off:
 
     0x098B0   slot count     large claims one extra VRAM slot; 2x2 claims three
     0x0ADA6   frame shape    rows-1, cols-1, row stride; 48x48 is (5, 5, 12)
     0x142C4   grid squares   visits every square the creature stands on
-    0x0AE6A   frame index    doubles the step, because a 48x48 frame is four
-                             nine-cell units rather than two
 
-The shape values were read straight out of the stock cases: `(2,5,12)` for
-48x24, `(5,2,6)` for 24x48, `(2,2,6)` for 24x24. So -6(a6) is rows-1,
+The shape values were read straight out of the stock cases -- `(2,5,12)` for
+48x24, `(5,2,6)` for 24x48, `(2,2,6)` for 24x24 -- so -6(a6) is rows-1,
 -8(a6) cols-1, and -4(a6) the row stride in bytes, `(cols+1)*2`, which the
 mirrored row writer at `0x0AEAE` confirms by adding it to `a1` per row.
 
+**No fourth patch was needed.** A long detour went into changing the frame
+stride at `0x0AE6A`, on the reasoning that a 36-cell frame has to step four
+nine-cell units where an 18-cell one steps two. It does -- but the index is
+already `4*anim + 2*facing`, which is **always even**, so the stock nine-cell
+step lands on a 36-cell boundary by itself. Every attempt to "fix" the stride
+made it worse, and the version with no stride patch at all is the one that
+works.
+
 **Verified harmless.** With the patch in and no 48x48 creature anywhere, a
 fight on the opening dock is pixel-identical to the same fight before it --
-zero pixels differ. Every existing creature is untouched.
+zero pixels differ, twice measured.
 
-**And the footprint is right.** Give a creature size 4 and the board draws a
-six-by-six tile box and reserves two grid squares by two.
+### The splice was my data, not the engine
 
-**What is still wrong is where the art comes from.** A play report spotted
-it first -- "it looks like you are mixing two monsters together in the 4
-square" -- and a numbered test sheet says exactly that. Reading the drawn
-tiles back as cell numbers:
+A play report caught it: "it looks like you are mixing two monsters together
+in the 4 square." Exactly right, and literally so. The dinosaur was injected
+as `CPIC1` blocks **22 and 157**, and 157 is not the dinosaur's second pose
+-- it is the dancer. The two poses of the dinosaur are **22 and 150**. The
+engine had been compositing a dinosaur and a dancer into one creature and
+doing it correctly.
 
-    rows 0-2   cells B, B+6, B+12      (six per row, contiguous)
-    rows 3-5   cells B+28, B+34, B+40
+With `0x0F:4:22,150` the board shows a 48x48 golden theropod, jaws open,
+twice the size of the party member beside it in both directions.
+`art_preview/trex_48x48_zoom.png`.
 
-The top half and the bottom half are fetched from runs ten cells apart, so
-the lower half of the creature is somebody else. Six cells per row is right
-and matches what `inject_creature.py` writes; the gap is not.
-
-That gap cannot be closed by laying the art out to match: with an 18-cell
-frame stride the next frame's top half would land inside this frame's
-bottom half, and with 36 it overruns the frame. So the two halves are being
-fetched by two display entries with independent indices, the way the tall
-class uses two -- and the second one's index is what needs adjusting.
-
-That is the remaining piece. Everything else is in place and inert until it
-lands, which is why the patch stays in the build.
+Two hours went into rewriting engine code because a creature looked wrong,
+when the creature looked wrong because it was two creatures. Check the
+inputs before patching the machine.
 
 ### Two mistakes worth not repeating
 
@@ -1372,7 +1371,7 @@ lands, which is why the patch stays in the build.
 Emitting one byte shifted every instruction after it by one and hung the
 machine on a black screen.
 
-`add.b d0, d0` on the frame index overflows: `asl.b #2` has already
-multiplied the animation step by four, so doubling can reach 0x80, which the
-following `ext.w` reads as -128 and sends the sheet pointer backwards into
-whatever precedes it. Widen first, then double.
+`add.b d0, d0` on a frame index overflows: `asl.b #2` has already multiplied
+the animation step by four, so doubling can reach 0x80, which the following
+`ext.w` reads as -128 and sends the sheet pointer backwards. Widen first,
+then double. (This patch is gone now, but the lesson stands.)
