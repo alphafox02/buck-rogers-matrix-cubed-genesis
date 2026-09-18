@@ -1283,3 +1283,40 @@ walking through each other rather than merely looking odd.
 
 So 48x48 is worth doing after the art pipeline, not before: ten DOS sprites
 want it, and all ten already look right in the wide class.
+
+## Which field really decides the shape, and why 48x48 is still out of reach
+
+Two probes settled the first half. Figure class 0 with monster size 2 draws
+**tall**; figure class 2 with monster size 1 draws **small**. So the monster
+record's byte 0x23 is the field that matters and the figure record's class
+nibble does not drive the board at all. `tools/bigfigures.py` keys on the
+class nibble, which is why setting class 4 changed nothing: it was patching
+a path the board does not use.
+
+The second half is still open. Eight instructions in the ROM read
+`$23(a2)` -- `0x0CB1C`, `0x0CBAA`, `0x0CC9A`, `0x0FA5A`, `0x1050C`,
+`0x11B6E`, `0x14552`, `0x15DD2` -- and every one of them is a clean,
+short, rewritable case statement over the values 1, 2 and 3. Instrumenting
+all eight and fighting a genuinely tall creature gives the same counts as
+fighting a small one: **zero, for all of them**. The creature still draws
+tall.
+
+So the size is read from a *copy* of the record, at some other offset, by
+code not yet found. Searching work RAM at 0xFF9000 for the monster's name to
+locate that copy turned up story text instead. Until the copy is found there
+is no fourth case to add, and a size byte of 4 falls back to 24x24 -- which
+is exactly what `art_preview/big48.png` shows.
+
+### What the engine can do today, and it is not nothing
+
+`art_preview/big_ten.png` puts all ten of Matrix Cubed's 48x48 creatures
+through both native large shapes. Eight read best **tall** at 24x48 -- the
+slime, the jellyfish walker, the dancer, the winged demon -- and the
+dinosaur reads best **wide** at 48x24. Both are double the area of a normal
+creature and both work now, with no engine change:
+
+    inject_creature.py <in.gen> <out.gen> 0x0F:3:22,157
+
+The DOS sprites do not fill their 48x48 square anyway -- most are a tall
+figure or a long one inside it -- so the loss from the missing square class
+is smaller than the numbers suggest.
