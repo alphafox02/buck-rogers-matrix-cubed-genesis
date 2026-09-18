@@ -1132,7 +1132,75 @@ Verified on screen: the truncated version shows mirrored ape legs with no
 head; the rescaled one is a complete beast at the same scale as the party
 figures.
 
-### Not shipped, and why
+### Not shipped, and why -- and then a screenshot settled it
+
+A play report pushed back: large creatures in Countdown are remembered as
+**tall**, and if one is tall then whatever stands beside it has to be placed
+clear of it. Then a screenshot of the real game turned up: a brown quadruped
+on a desert board, plainly twice the height of the humanoids around it, with
+the party spaced clear of it.
+
+So the board does draw tall creatures, every substitution test above was
+measuring the wrong thing, and the rescale is off for good.
+
+## The size is on the MONSTER, not the figure
+
+Every substitution changed the figure record and nothing else. The figure
+record's class nibble is only half the story:
+
+    monster record byte 0x23 (35):  1 = 24x24, 2 = 24x48, 3 = 48x24
+
+Across all 87 monsters in the stream that pairing is exact -- class 0 goes
+with 1, class 2 with 2, class 3 with 3, no exceptions. Set **both** and a
+creature draws tall: figure 0x0F given DESERT APE's artwork and class 2, and
+monster 0x0F's byte 35 set to 2, renders as full-height apes on the board,
+three tiles wide and six tall, with the party member beside it normal size.
+That is `art_preview/tall_proof.png`, and it matches the real screenshot.
+
+### What byte 35 actually drives
+
+    0x0CC9A   bounding box: size 2 -> d5 = 6, size 3 -> d4 = 6
+    0x1050C   grid occupancy: size 2 takes an extra ROW, size 3 an extra
+              COLUMN -- so a large creature stands on two squares
+    0x14552   centre offset: 12 by default, 24 on the long axis
+    0x15DD2   a tall/wide flag: 0xFF for 2, 0x01 for 3, 0 otherwise
+    0x11B6E   a threshold, anything above 1 counts as large
+    0x0CB1C   animation tweak, wide creatures only
+    0x0CBAA   frame stride, anything above 1 counts as large
+    0x0FA5A   feeds the animation geometry lookup
+
+The engine's model is one grid square, or two -- vertically or horizontally.
+There is no 2x2.
+
+### Which means the port was never broken here
+
+The three added creatures that clone a large donor -- ASSAULT ROBOT and
+COMBAT ROBOT from 48x24 donors, COYODORG from a 24x48 one -- clone the
+monster record too, so their byte 35 already agrees with their figure class.
+Checked against all thirty-six: no mismatches. They draw tall already.
+
+`tools/rescale_figure.py` would have shrunk three creatures that were
+correct. It stays in the tree, off, because the scaling itself is sound and
+something else may want it; it is not a fix for anything.
+
+### And 48x48 is now a defined job
+
+`tools/bigfigures.py` handles the drawing side: the layout table, the cell
+count, the VRAM slots, and the third and fourth display entries. Setting
+figure class 4 and byte 35 = 4 still draws 24x24, because the six sites
+above only know 2 and 3. A 48x48 creature is one that stands on **two
+squares by two**, so each of them needs a case:
+
+    0x0CC9A   size 4 -> both d4 and d5 = 6
+    0x1050C   size 4 -> an extra row AND an extra column
+    0x14552   size 4 -> 24 on both axes
+    0x15DD2   needs a third state, currently a two-state flag
+    0x0CB1C   treat 4 like 3
+    0x11B6E, 0x0CBAA   already correct, both test "> 1"
+
+That is the whole remaining list, and it is short.
+
+### Where 48x48 stood before this
 
 A play report pushed back on this: large creatures in Countdown are
 remembered as **tall**, and if one is tall then whatever stands beside it
