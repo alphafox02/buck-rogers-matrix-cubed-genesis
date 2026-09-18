@@ -108,8 +108,25 @@ NAME_MAP = {
 #
 #   0x2DCB (150 sites) -- redraw the view and clear the current sprite
 #   0xC01E  (11 sites) -- step one square forward in the facing direction
+# Every opcode named here must take ZERO arguments, because the expansion
+# emits the opcode byte alone. `UPDATEFRAME` used to be in the first entry
+# and takes one: the interpreter then read the NEXT instruction as its
+# argument, which at the shop door was the `PICTURE` of the shopkeeper. The
+# portrait never drew, the program counter desynced, and leaving the shop
+# ended in the engine's own "Bad ECL address". 150 sites called it.
+#
+# It was there on the assumption that redrawing needed both. It does not --
+# `REMOVEFIGURE` is the whole of it:
+#
+#     0C134: clr.w $b0b2.w     ; display entries = 0
+#     0C138: clr.w $b016.w     ; combatants = 0
+#     0C13C: bsr.w $c3f0       ; redraw the board
+#
+# which is exactly "redraw the view and clear the current sprite".
+# `UPDATEFRAME` at 0xC142 is a different operation: it takes flip flags and
+# a frame index and updates the last display entry.
 CALL_EXPANSION = {
-    0x2DCB: ("REMOVEFIGURE", "UPDATEFRAME"),
+    0x2DCB: ("REMOVEFIGURE",),
     0xC01E: ("STEPFORWARD",),
 }
 
@@ -546,7 +563,12 @@ def transpile(block: bytes, flags=None):
         # routine it targets, so it is handled before the ordinary name map.
         if ins.name == "CALL" and ins.args and ins.args[0].value in CALL_EXPANSION:
             for sub in CALL_EXPANSION[ins.args[0].value]:
-                opcode, _argc = gen[sub]
+                opcode, argc = gen[sub]
+                if argc:
+                    raise SystemExit(
+                        f"CALL_EXPANSION emits {sub} with no arguments but the "
+                        f"Genesis opcode takes {argc}; the interpreter would "
+                        f"read the next instruction as its argument")
                 layout.setdefault(off, pos)
                 pieces.append((off, opcode, [], 1))
                 pos += 1

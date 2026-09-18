@@ -1853,3 +1853,64 @@ before publishing:
     romlayout: 88 written regions, 0x0F2004-0x1FDAF6, NO overlaps
 
 Run against the broken build it names both collisions exactly.
+
+## "Bad ECL address", and the portrait that would not draw
+
+Two play reports, one cause. Leaving the shop gave the engine's own
+`Bad ECL address`, and at the shop door the greeting text appeared with no
+shopkeeper -- his face only showed once inside the store.
+
+The engine checks the ECL program counter at `0x03308`:
+
+    03308: cmpa.l #$ffff6af6, a2
+    0330E: bcs.b  $3318            ; below the code region -> error
+    03310: cmpa.l #$ffff96f6, a2
+    03316: bcs.b  $3334            ; inside -> carry on
+    03318: lea.l  $3324.l, a0      ; "Bad ECL address"
+
+No transplanted block is anywhere near that 11264-byte region's size, so it
+was a bad program counter, not a bad block. And the sequence at the door is:
+
+    0E3C CALL 11723      ; 0x2DCB -- redraw the view, clear the sprite
+    0E40 PICTURE 107     ; the shopkeeper
+    0E43 PRINT_CLEAR     ; 'WELCOME TO MY SHOP...'
+
+`CALL 0x2DCB` was expanded into **two** Genesis opcodes:
+
+    CALL_EXPANSION = { 0x2DCB: ("REMOVEFIGURE", "UPDATEFRAME"), ... }
+
+and the expansion emits each opcode byte alone, with no arguments:
+
+    pieces.append((off, opcode, [], 1))
+
+`REMOVEFIGURE` takes none, so that part was right. **`UPDATEFRAME` takes
+one** -- `docs/opcode_args.md` says so at HIGH confidence with unanimous
+votes, and the handler proves it:
+
+    03F70: bsr.w $404a      ; the argument fetcher
+    03F74: jmp   $c142.l
+    03F7A: jmp   $c134.l    ; REMOVEFIGURE, no fetch at all
+
+So the interpreter read the **next instruction** as `UPDATEFRAME`'s
+argument. At the shop door the next instruction was `PICTURE 107`. The
+portrait never executed, the program counter desynced, and a few
+instructions later it walked out of the ECL region. One mistake, both
+symptoms, and 150 call sites.
+
+### `REMOVEFIGURE` alone is the whole of it
+
+`UPDATEFRAME` was in there on the assumption that a redraw needed both. It
+does not:
+
+    0C134: clr.w $b0b2.w     ; display entries = 0
+    0C138: clr.w $b016.w     ; combatants = 0
+    0C13C: bsr.w $c3f0       ; redraw the board
+
+That *is* "redraw the view and clear the current sprite". `UPDATEFRAME` at
+`0xC142` is something else entirely -- it takes flip flags in the top two
+bits and a frame index in the low six, and updates the last display entry.
+It has no business here.
+
+`CALL_EXPANSION` now emits `REMOVEFIGURE` alone, and the loop refuses to
+build if any opcode it names takes arguments, so the same mistake cannot be
+made silently again.
