@@ -73,10 +73,10 @@ the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
   awarded
 - **Matrix Cubed's own 36 creatures** have roster slots and names, with the
   engine's 64-monster ceiling raised to 128
-- **27 of them wear their own DOS artwork**, quantised to the sixteen
+- **All 36 wear their own DOS artwork**, quantised to the sixteen
   colours the engine gives a combat figure and resolved automatically: a DOS
-  monster record names its sprite at byte 185, and a creature's two poses
-  are blocks N and N+128
+  monster record names its sprite at byte 185, a creature's two poses are
+  blocks N and N+128, and the id spans `CPIC1` with `CHARS` as the fallback
 - **A 48x48 creature size**, which the Genesis engine did not have. Stock
   Countdown draws 24x24, 24x48 and 48x24; Matrix Cubed has five creatures
   at 48x48, the Venus Dinosaur among them, and they now draw at full size
@@ -84,8 +84,6 @@ the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
 
 ## What does not, yet
 
-- **Nine of the 36 creatures** still wear Countdown's artwork, matched by
-  role, because their DOS monster record does not resolve to a sprite
 - Creatures animate between two poses only, because that is all a DOS block
   holds; a real walk cycle needs the frame grouping in `docs/art_todo.md`
 - Some wall graphics are wrong, because a wall value selects a picture from

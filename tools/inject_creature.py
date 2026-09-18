@@ -52,6 +52,13 @@ ART = 0x1BA000               # clear of the monster stream, directory and probes
 ART_LIMIT = 0x1F0000
 
 PICTURE = 185                # the DOS monster record's artwork byte
+# The artwork id spans two archives. `CPIC1` holds the combat pictures --
+# 108 of them, including every oversized creature -- and `CHARS` holds 72
+# humanoids at 24x24. Nine of the creatures this port adds name a block
+# `CPIC1` does not have (0, 16, 20, 28) and every one of those is in
+# `CHARS`, so the lookup falls back to it. Both use the same N/N+128 pose
+# pairing.
+ARCHIVES = ("CPIC1.DAX", "CHARS.DAX")
 POSE = 128                   # a creature's second pose is block N + 128
 SIZE_CLASS = {(24, 24): 0, (48, 24): 3, (48, 48): 4}
 STREAM = 0x1B1000
@@ -136,11 +143,19 @@ def sheet(frames, fw, fh):
     return struct.pack(">HHH", len(order), len(nt), 0) + nt + b"".join(order)
 
 
+def sprite_blocks():
+    """Every sprite block, CPIC1 taking precedence over CHARS."""
+    here = Path(__file__).resolve().parent.parent / "dos_game" / "matrix"
+    out = {}
+    for name in reversed(ARCHIVES):
+        out.update(dax.load(str(here / name)))
+    return out
+
+
 def apply(rom: bytes, specs) -> bytes:
     rom = bytearray(rom)
     pal = palette()
-    cpic = dax.load(str(Path(__file__).resolve().parent.parent
-                        / "dos_game" / "matrix" / "CPIC1.DAX"))
+    cpic = sprite_blocks()
 
     at = struct.unpack_from(">I", rom, expand_figures.OPERANDS[0])[0]
     recs, _ = expand_figures.read(bytes(rom), at)
@@ -214,7 +229,7 @@ def auto():
     import monstermap
     here = Path(__file__).resolve().parent.parent / "dos_game" / "matrix"
     mon = dax.load(str(here / "MON0CHA.DAX"))
-    cpic = dax.load(str(here / "CPIC1.DAX"))
+    cpic = sprite_blocks()
     size = {k: (gbimage.header(b)["width"], gbimage.header(b)["height"])
             for k, b in cpic.items() if len(b) >= 10}
 
