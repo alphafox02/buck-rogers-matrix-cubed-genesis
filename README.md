@@ -12,31 +12,52 @@ the end of a table and carries on.
 
 ## This repository contains no game data
 
-It is tooling and reverse-engineering notes. Everything it needs is read out
-of copies of the two originals that you already own, and nothing from either
-game is committed here. You supply:
+It is tooling and reverse-engineering notes. Nothing from either game is
+committed here, and `.gitignore` refuses `roms/`, `dos_game/` and every
+`.gen .DAX .XMI .OVR .EXE .ADV .BNK .CAT`.
+
+**You supply two things, both of which you must already own:**
 
 ```
-roms/countdown.gen            a Countdown to Doomsday cartridge dump (1 MB)
-dos_game/matrix/              a Matrix Cubed DOS installation
+roms/countdown.gen     the Genesis Countdown to Doomsday cartridge, 1 MB
+                       -- this is the ENGINE the port runs on
+
+dos_game/matrix/       a Matrix Cubed DOS installation, 51 files
+                       -- this is the CONTENT: art, maps, scripts, music,
+                          monster and item tables
 ```
 
-Run `python3 tools/checkinputs.py` to see exactly which files are wanted and
-whether yours are the dumps every offset in `tools/` was measured against. A
-different revision is a warning, not a refusal — it may well work.
+Both are needed. Matrix Cubed is a DOS program and contains no Genesis code
+at all; Countdown supplies the 68000 engine, the tile renderer and the sound
+driver, and the tools here translate one into the other. Nine of those files
+are read at build time and each is checked by SHA-1 first:
+
+```
+python3 tools/checkinputs.py
+```
+
+It names exactly what is wanted and whether yours are the dumps every offset
+in `tools/` was measured against. A different revision is a warning, not a
+refusal — it may well work.
+
+## Reproducible
+
+The build is a pure function of those inputs. Delete the output, run it
+twice, and the two ROMs are byte-identical; nothing is layered on anything
+previously extracted.
 
 ## Building
 
 ```
-python3 tools/checkinputs.py          # are the inputs there and right?
-python3 tools/build.py roms/out.gen   # write the ROM
-python3 tools/boottest.py roms/out.gen
+python3 tools/checkinputs.py                  # are the inputs there and right?
+python3 tools/build.py                        # -> roms/matrix_play.gen
+python3 tools/boottest.py roms/matrix_play.gen
 ```
 
 `tools/build.py` is the whole recipe: it transplants the areas, replaces the
 boot block, injects artwork, converts the music, maps the ids and repairs
 the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
-`--no-expand`, `--creatures`.
+`--no-expand`, `--no-creatures`, `--no-bigpic`, `--no-portrait`.
 
 ## What works
 
@@ -52,12 +73,21 @@ the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
   awarded
 - **Matrix Cubed's own 36 creatures** have roster slots and names, with the
   engine's 64-monster ceiling raised to 128
+- **27 of them wear their own DOS artwork**, quantised to the sixteen
+  colours the engine gives a combat figure and resolved automatically: a DOS
+  monster record names its sprite at byte 185, and a creature's two poses
+  are blocks N and N+128
+- **A 48x48 creature size**, which the Genesis engine did not have. Stock
+  Countdown draws 24x24, 24x48 and 48x24; Matrix Cubed has five creatures
+  at 48x48, the Venus Dinosaur among them, and they now draw at full size
+  standing on two grid squares by two
 
 ## What does not, yet
 
-- Creature *artwork* is still Countdown's, matched by role: Matrix Cubed's
-  36 creatures have slots and names of their own, but each looks like the
-  one it stands in for until the DOS sprites are converted
+- **Nine of the 36 creatures** still wear Countdown's artwork, matched by
+  role, because their DOS monster record does not resolve to a sprite
+- Creatures animate between two poses only, because that is all a DOS block
+  holds; a real walk cycle needs the frame grouping in `docs/art_todo.md`
 - Some wall graphics are wrong, because a wall value selects a picture from
   the loaded wall set and the two games disagree about what each value looks
   like. Doors that Countdown would draw as solid are corrected; the rest are
@@ -70,7 +100,9 @@ the cartridge checksum. Flags let you bisect — `--no-art`, `--no-music`,
 docs/re_notes.md    the reverse engineering: formats, addresses, what was
                     measured and what is still a guess
 docs/devlog.md      what happened, including what was wrong and why
-tools/              ~30 programs; build.py is the entry point
+tools/              65 programs. build.py is the entry point and the whole
+                    recipe; about fifteen are build steps and the rest are
+                    research instruments that never touch the output ROM
 tests/              unit tests for the codecs
 ```
 
