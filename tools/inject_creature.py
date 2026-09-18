@@ -47,6 +47,7 @@ FRAMES = 18
 
 # frame shape in tiles, and the monster byte that must go with it
 SHAPE = {0: (3, 3), 2: (3, 6), 3: (6, 3), 4: (6, 6)}
+BIG = 4
 MONSTER_SIZE = {0: 1, 2: 2, 3: 3, 4: 4}
 
 
@@ -149,6 +150,13 @@ def apply(rom: bytes, specs) -> bytes:
             raise SystemExit(f"no figure 0x{fid:02X}")
         fw, fh = SHAPE[klass]
         poses = [fit(quantise(cpic[b], pal), fw * 8, fh * 8) for b in blocks]
+        if klass == BIG:
+            # A 2x2 creature is drawn as two three-row halves and the engine
+            # puts the SECOND half on top: matching the halves against the
+            # screen finds top-half art at y+24 and bottom-half art at y,
+            # both pixel-exact, just swapped. Store them in the order it
+            # reads them.
+            poses = [p[fh * 4:] + p[:fh * 4] for p in poses]
         frames = [poses[n % len(poses)] for n in range(FRAMES)]
         packed = lzw_encode.compress(sheet(frames, fw, fh))
         if cursor + len(packed) > ART_LIMIT:
@@ -157,7 +165,17 @@ def apply(rom: bytes, specs) -> bytes:
 
         rec = bytearray(recs[index[fid]])
         struct.pack_into(">I", rec, 0, cursor)
-        rec[5] = 36 if klass else 18
+        # The sheet width matters for more than layout. The decoder remaps
+        # the nametable from packed tile numbers to VRAM ids and computes
+        # how many entries to rewrite as `d4 * width / 2` at 0x09C3E, with
+        # d4 fixed at 18 by the caller's frame list. That equals the total
+        # cell count only while the atlas is NINE rows deep, which every
+        # stock sheet is: 18x9 and 36x9. A 648-cell sheet at 36 wide is
+        # eighteen rows, so half of it keeps raw tile ids and draws whatever
+        # those happen to hit -- which is why a 48x48 creature came out with
+        # its head twice. Keep every atlas nine rows and the whole sheet is
+        # remapped.
+        rec[5] = (fw * fh * FRAMES) // 9
         rec[7] = (klass << 4) | (rec[7] & 0x0F)
         rom[at + index[fid] * 8:at + index[fid] * 8 + 8] = rec
 

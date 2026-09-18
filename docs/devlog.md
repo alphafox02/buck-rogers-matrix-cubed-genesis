@@ -1739,7 +1739,7 @@ the animation step by four, so doubling can reach 0x80, which the following
 `ext.w` reads as -128 and sends the sheet pointer backwards. Widen first,
 then double. (This patch is gone now, but the lesson stands.)
 
-### The last unknown, narrowed to one sentence
+### Solved: two data problems, no more engine patching
 
 Live logging settles every step of the draw, and the answer is not where any
 of my guesses put it.
@@ -1778,3 +1778,36 @@ before that "one with mouth more open than the other". Both correct. The
 sheet holds exactly two distinct poses, cycled, so the two heads being
 slightly different is the tell that they are two different frames -- which
 is what raw, unremapped tile ids would give.
+
+### 48x48 works, pixel-exact
+
+Two things were wrong, both in the **sheet**, not the engine.
+
+**The atlas has to be nine rows deep.** The decoder remaps a sheet's
+nametable from packed tile numbers to real VRAM ids and computes how many
+entries to rewrite as `d4 * width / 2` at `0x09C3E`, with `d4` fixed at 18
+by the caller. That equals the total cell count only while the atlas is nine
+rows -- which every stock sheet is, 18x9 and 36x9. A 648-cell sheet at 36
+wide is eighteen rows, so exactly **half** of it kept raw tile ids and drew
+whatever those happened to hit: the figure's own earlier tiles, which is why
+the creature came out with its head twice. Writing the same 648 cells as
+72x9 fixes it with no code change at all.
+
+**The two halves are stored in the order the engine reads them.** Matching
+each half against the screen found both pixel-exact but swapped: top-half
+art at y+24, bottom-half art at y. A 2x2 creature is drawn as two three-row
+halves and the engine takes the second one first, so `inject_creature.py`
+stores rows 3-5 ahead of rows 0-2.
+
+With both: three whole 48x48 dinosaurs on the board matching the sheet
+**pixel for pixel**, at DOS proportions, twice the size of the party in both
+directions. `art_preview/trex48_ok_zoom.png` and
+`art_preview/trex_side_by_side.png`.
+
+Verified: build boots, checksum verifies, and with no 48x48 creature the
+opening fight is pixel-identical to the pre-patch control.
+
+The engine side needed only three small relocated blocks after all --
+`0x098B0` slots, `0x0ADA6` shape, `0x142C4` and `0x1050C` occupancy, plus
+one `addq.w #1, d5` to stand the creature on its square. Every wrong turn
+before that was chasing an engine bug that was a data bug.
