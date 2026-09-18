@@ -1320,3 +1320,59 @@ creature and both work now, with no engine change:
 The DOS sprites do not fill their 48x48 square anyway -- most are a tall
 figure or a long one inside it -- so the loss from the missing square class
 is smaller than the numbers suggest.
+
+## 48x48: the footprint works, the sheet layout does not yet
+
+`tools/bigcreature.py` extends the four routines that a live fight showed
+taking the size byte, each relocated whole into free ROM with a size 4 case
+added, each rejoining the stock code where it left off:
+
+    0x098B0   slot count     large claims one extra VRAM slot; 2x2 claims three
+    0x0ADA6   frame shape    rows-1, cols-1, row stride; 48x48 is (5, 5, 12)
+    0x142C4   grid squares   visits every square the creature stands on
+    0x0AE6A   frame index    doubles the step, because a 48x48 frame is four
+                             nine-cell units rather than two
+
+The shape values were read straight out of the stock cases: `(2,5,12)` for
+48x24, `(5,2,6)` for 24x48, `(2,2,6)` for 24x24. So -6(a6) is rows-1,
+-8(a6) cols-1, and -4(a6) the row stride in bytes, `(cols+1)*2`, which the
+mirrored row writer at `0x0AEAE` confirms by adding it to `a1` per row.
+
+**Verified harmless.** With the patch in and no 48x48 creature anywhere, a
+fight on the opening dock is pixel-identical to the same fight before it --
+zero pixels differ. Every existing creature is untouched.
+
+**And the footprint is right.** Give a creature size 4 and the board draws a
+six-by-six tile box and reserves two grid squares by two.
+
+**What is still wrong is where the art comes from.** A play report spotted
+it first -- "it looks like you are mixing two monsters together in the 4
+square" -- and a numbered test sheet says exactly that. Reading the drawn
+tiles back as cell numbers:
+
+    rows 0-2   cells B, B+6, B+12      (six per row, contiguous)
+    rows 3-5   cells B+28, B+34, B+40
+
+The top half and the bottom half are fetched from runs ten cells apart, so
+the lower half of the creature is somebody else. Six cells per row is right
+and matches what `inject_creature.py` writes; the gap is not.
+
+That gap cannot be closed by laying the art out to match: with an 18-cell
+frame stride the next frame's top half would land inside this frame's
+bottom half, and with 36 it overruns the frame. So the two halves are being
+fetched by two display entries with independent indices, the way the tall
+class uses two -- and the second one's index is what needs adjusting.
+
+That is the remaining piece. Everything else is in place and inert until it
+lands, which is why the patch stays in the build.
+
+### Two mistakes worth not repeating
+
+`move.b #1, -$2(a6)` needs a full extension **word** for the immediate.
+Emitting one byte shifted every instruction after it by one and hung the
+machine on a black screen.
+
+`add.b d0, d0` on the frame index overflows: `asl.b #2` has already
+multiplied the animation step by four, so doubling can reach 0x80, which the
+following `ext.w` reads as -128 and sends the sheet pointer backwards into
+whatever precedes it. Widen first, then double.

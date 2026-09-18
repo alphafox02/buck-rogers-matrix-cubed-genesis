@@ -46,8 +46,8 @@ STREAM = 0x1B1000
 FRAMES = 18
 
 # frame shape in tiles, and the monster byte that must go with it
-SHAPE = {0: (3, 3), 2: (3, 6), 3: (6, 3)}
-MONSTER_SIZE = {0: 1, 2: 2, 3: 3}
+SHAPE = {0: (3, 3), 2: (3, 6), 3: (6, 3), 4: (6, 6)}
+MONSTER_SIZE = {0: 1, 2: 2, 3: 3, 4: 4}
 
 
 def palette():
@@ -157,7 +157,7 @@ def apply(rom: bytes, specs) -> bytes:
 
         rec = bytearray(recs[index[fid]])
         struct.pack_into(">I", rec, 0, cursor)
-        rec[5] = fw * FRAMES // fh if False else (36 if klass else 18)
+        rec[5] = 36 if klass else 18
         rec[7] = (klass << 4) | (rec[7] & 0x0F)
         rom[at + index[fid] * 8:at + index[fid] * 8 + 8] = rec
 
