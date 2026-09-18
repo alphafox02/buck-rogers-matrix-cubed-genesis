@@ -1001,3 +1001,77 @@ Capstone decodes past the end of the buffer you hand it. Disassembling
 `0xC0BE` -- into the middle of a sine table -- because its displacement word
 was one byte past the slice. The real target was `$B58A`. Always pass a few
 extra bytes and filter by address.
+
+## Chasing the figure renderer with counters instead of guesses
+
+The 48x48 class went in and nothing on screen changed. Reading more code had
+already been wrong three times, so this stopped reading and started
+measuring: `tools/tracecalls.py` replaces a routine's entry with a jump to a
+stub that bumps a counter in work RAM, runs the instructions it displaced,
+and jumps back. `tools/play.py` reads the counters after a fight.
+
+0xFFEF00 upward was checked first -- it stays zero through boot and a fight
+in an untouched build -- so the counters cannot be mistaken for game state.
+The first pass used byte counters and reported `0xC5BA = 1`, which is what
+257 calls looks like after wrapping. Word counters from then on.
+
+### What actually runs during a fight on the opening dock
+
+| routine | calls |
+|---|---|
+| `0xC3FA` board render | 964 |
+| `0xC9B0` figure stamp | 20 |
+| `0xB670` tile blit | 134 |
+| `0x9BB6` sheet decode | 11 |
+| `0xC20E` combatant place | **1** |
+| `0xB58A` figure blit | **1** |
+| `0xC5BA` sprite emit | **1** |
+| `0xC32A` second entry | **0** |
+| `0xC142`, `0xFA52`, `0x108AA` | 0 |
+
+Four RAM ASSASSINs are on the board and `0xC20E` ran once. Logging the class
+it computed showed why: that one call was for figure `0x1E`, class 0 --
+something else entirely. The monsters never go near it.
+
+### So the board is not drawing figures as sprites at all
+
+`0xC5BC` is the **only** `move.w #$0X00, Dn` in the ROM that loads a 3x3
+sprite size, and it fires once per fight while the board renders 964 times.
+The figures are stamped into a plane nametable by `0xC9B0`, which walks a
+run-length script of (dx, dy, count) triples:
+
+    0C9E8: move.b  (a0)+, d0     ; dx, or negative to end
+    0C9F0: add.b   (a0)+, d3     ; dy
+    0C9F2: move.b  (a0)+, d4     ; how many tiles
+    0CA1E: asl.w   #$7, d3       ; address = dy * 128 + dx * 2
+    0CA20: asl.w   #$1, d2       ; a 64-column plane
+
+The shape of a board token lives in that script, not in the size class.
+
+### Three experiments that agree
+
+1. Force `0xC3CA` to return class 3 for every figure: nothing changes, party
+   members included.
+2. Force both chains to 36 cells and the 6x6 table unconditionally: nothing
+   changes.
+3. Substitute a genuine stock large figure -- DESERT APE record whole, class
+   2, and ACID FROG, class 3 -- for the figure the first encounter spawns.
+   Both draw as **24x24 crops of their own artwork**: the ape's head and
+   shoulders, the frog's back. The art is right and the frame is truncated.
+
+So on the ground-combat board every combatant is a 24x24 token regardless of
+class, and the class machinery at `0xB58A`/`0xC20E`/`0xC358` belongs to a
+different view -- `0xBFAE` calls `0xB58A` with class 1 hard-coded, which is
+the shape of a panel portrait rather than a board token.
+
+### Where class 4 stands
+
+`tools/bigfigures.py` is written, every instruction read back with capstone,
+the ROM boots, fights and keeps its checksum. It is correct on the path it
+patches. It is not yet **reachable**, because the board does not use that
+path, and claiming the port supports 48x48 creatures before one has been
+seen on screen would be a guess dressed as a result.
+
+Next: find what builds the script `0xC9B0` consumes. That is where a token's
+tile footprint is decided, and it is the thing that has to grow for a
+creature to be bigger on the board.
