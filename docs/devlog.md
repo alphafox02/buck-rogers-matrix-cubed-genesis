@@ -1390,11 +1390,35 @@ and every row writer advances `a1` by exactly `cols+1` cells -- `(a1)+` in
 the plain one, `adda.w -$4(a6), a1` in the mirrored one, and -4(a6) is 12
 bytes for six cells. So six rows from one base should be contiguous.
 
-They are not, which means the creature is drawn by two passes of three rows
-rather than one pass of six, and the second pass recomputes its base instead
-of continuing. That is the last thing to find. Everything else -- the size
-byte, the shape, the grid squares, the VRAM slots, the anchor, the art
-pipeline -- is in place and verified.
+They are not. Matching each drawn tile row against the sheet answers it
+precisely:
+
+    screen row 0  <-  sheet cells  0.. 5   error 0.0
+    screen row 1  <-  sheet cells  6..11   error 0.0
+    screen row 2  <-  sheet cells 12..17   error 0.0
+    screen rows 3-5                        nothing -- bare floor
+
+Rows 0 to 2 are drawn **exactly**, six cells wide, from the right cells.
+Rows 3 to 5 are not drawn at all; the floor shows through. So the six-cell
+row width works and the six-row height does not.
+
+And the deciding experiment: give size 4 the size 2 shape values --
+`(5, 2, 6)`, byte for byte what the tall class uses -- and it still draws
+only three rows, 24x26 px. The stock tall class with the same values draws
+six. Identical shape words, different row count, so the row count is **not**
+coming from -6(a6) alone. Something else keyed on the size byte gates it,
+and size 4 falls into the normal case.
+
+Which narrows the remaining work to one question: what else reads the size
+byte and decides how many rows a creature gets. The candidates are the four
+sites this tool does not yet patch -- 0x0CC9A, 0x1050C, 0x14552, 0x15DD2 --
+though none of them registered a call in the traced fight, so it is more
+likely a fifth that the trace missed because it sits behind a `>= 2` test
+rather than an equality.
+
+Everything else is in place and verified: the size byte, the frame shape
+(six cells per row proven on screen), the grid squares, the VRAM slots, the
+anchor, and the art pipeline that turns a DOS block into a 48x48 sheet.
 
 Two hours went into rewriting engine code because a creature looked wrong,
 when the creature looked wrong because it was two creatures. Check the
