@@ -2505,3 +2505,45 @@ square. It only LOOKS arbitrary in the port because the wall graphics do not
 yet draw a staircase as a staircase, so the player cannot see what they are
 standing in front of. That is the wall-set work, and this is another reason
 to do it.
+
+### What codes 6 and 8 are on the opening dock
+
+Wall codes are per-deco, so the "8 is a staircase" reading taken from block
+33 does not carry to block 17. The dock's own script says what its codes are.
+Both live in the per-step hook:
+
+```
+80A3  COMPARE [0xC04E], 8 / IF_EQUALS / GOTO   -> the coronation summons
+80AE  COMPARE [0xC04E], 6 / IF_NOT_EQUALS / EXIT
+80B6  AND 63, [0xC04F], [0x7F79]
+80CD  ON_GOTO [0x7F79], 8, {...}               -> a second, 8-way dispatch
+```
+
+and the map says where they are:
+
+```
+code 6, 21 sides: all four sides of (2,2) -- the cargo elevator -- and
+                  (11,4)N and (12,4)N, which are the courtesy consoles
+code 8, 11 sides: (3,0)N (11,0)N (0,4)W (11,5)W (12,7)E (6,9)N
+                  (10,10)S (13,10)S (10,15)S (12,15)S (14,15)S
+```
+
+So **6 is a wall-mounted panel** -- consoles and the elevator, the things
+you face to use -- and **8 is an exit**: almost every one is on the map
+boundary or a division between wings. Most of the dock's other events guard
+on `COMPARE [0xC04E], 0` instead, meaning "approached across an open side",
+which is how the shop, the hotel, the portmaster and the residences work.
+
+That makes the coronation coherent rather than arbitrary. De Sade tells the
+party to get to the coronation hall, and the summons fires the next time
+they face an exit -- eleven of them, spread around the dock, including the
+south edge that leads to the hall. It is "he catches you on your way out",
+not "stand on one hidden square".
+
+It does not LOOK like that in the port, because the wall art is still
+Countdown's: code 8 in set 1 draws Countdown's piece 5, whatever that is,
+rather than a Matrix Cubed airlock. The ten 32-byte tables at 0x51836 map
+code to piece and are ours to rewrite, but the pieces themselves are
+Countdown's eight per set. Injecting Matrix Cubed's own wall art from
+WALLDEF1.DAX -- 2340 bytes per deco, fifteen 156-byte records, one per wall
+code 1-15 -- is the remaining job.
