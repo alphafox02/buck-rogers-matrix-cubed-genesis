@@ -283,6 +283,10 @@ def main():
     step("bootstub.py", *START, "--intro")
     # A resource Countdown does not carry must not be able to end the run.
     step("softfail.py")
+    # 0x9AF8 -- the wall the party faces, which 80 script sites read --
+    # was only recomputed when the party MOVED, so every gate on it was
+    # answered one action late. See tools/wallvalue.py.
+    step("wallvalue.py")
     step("retitle.py")
 
     # Matrix Cubed's own portraits, into the slots the directory ALREADY has.

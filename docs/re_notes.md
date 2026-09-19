@@ -2436,3 +2436,48 @@ allocated onto `0x97AD`. Scripts write that flag constantly -- 0, 1, 2, 3,
 5, 6, 10 -- so `0x97AD` took arbitrary values and occasionally landed on 8,
 firing the coronation at random. Fixing the allocation removed the accident
 and made the real bug visible.
+
+### The value is answered one action late
+
+`0x9AF8` is recomputed at `0x04228`, and the movement path calls it as soon
+as the new position is written:
+
+```
+054CE  move.b -$1B(a6), $9AF7.w     ; X
+054D4  move.b -$19(a6), $9AF6.w     ; Y
+054DE  bsr.w  $4228                 ; recompute
+054E2  bsr.w  $4E00
+```
+
+The TURN path sets the facing and jumps straight past it:
+
+```
+0543C  move.b d0, $9AFA.w
+05448  bra.w  $54E2                 ; skips the recompute
+```
+
+`tools/wallvalue.py` changes that displacement so the turn path lands on
+`0x054DE` instead — two bytes. Turning now refreshes the value.
+
+A lag remains on ARRIVAL: stepping onto a square and coming to face a
+type-8 wall does not fire the gate, but pressing into that wall once more
+does. So the facing must still be settled after the recompute somewhere on
+the movement path. The practical effect is that walking UP to a wall does
+nothing and walking INTO it works, which is at least a normal thing for a
+player to do. Not yet chased down.
+
+### Confirming the mapping against the maps
+
+For every DOS block that compares `0xC04E` against a constant, is that
+constant actually a wall code in that block's own map?
+
+```
+block  17  [0, 6, 8]            block  65  [8]
+block  21  [2]                  block  96  [0, 5]
+block  33  [0, 1, 2, 8, 9, 11]  block  97  [0, 3, 5, 12]  <- 12 not in map
+block  34  [0, 6, 10, 11]       block 113  [3]
+block  35  [0]
+```
+
+22 of 23 occur. That is the mapping confirmed from the data rather than from
+the shape of the two variables' usage.
