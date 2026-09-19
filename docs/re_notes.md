@@ -2547,3 +2547,47 @@ code to piece and are ours to rewrite, but the pieces themselves are
 Countdown's eight per set. Injecting Matrix Cubed's own wall art from
 WALLDEF1.DAX -- 2340 bytes per deco, fifteen 156-byte records, one per wall
 code 1-15 -- is the remaining job.
+
+## The wall system, as far as it is mapped
+
+Three separate things are keyed off an area's decor and they are easy to
+confuse, so this is what each one actually is.
+
+**1. The overland terrain map — NOT walls.**
+`0xB52A` (from the region and `0x97DC`) dispatches through the jump table at
+`0x083D8` into `0x08360`, which loads a big resource into `0xB55A` and a
+table of word pairs into `0xB556`:
+
+```
+set 1 -> graphics 0x0EF2EA, pairs at 0x2F9A
+set 2 -> graphics 0x09CF13, pairs at 0x2FC6
+set 3 -> 0x0918A8 and 0x0EBE89, into 0xB53E/0xB542 -- fills NEITHER
+```
+
+Rendering `0x0EF2EA` gives a 64×64-cell contour map of open country, not
+wall pieces. The pairs are `(threshold, rank)`, and the sampler at `0x0CCF4`
+walks them to classify the four tiles around the party, keeping the lowest
+rank -- which is how `0x97AD` becomes "mountains", "canyon", "a field of
+ash" in Countdown's own scripts. So `0x97AD` is TERRAIN, and that is the
+final confirmation that Matrix Cubed's `0xC04E` is `0x9AF8` instead.
+
+**2. The wall-set palette.**
+`LOADPIECES` divides by three into `0x9AFB`, and `0x087B2` passes that to
+`0x0976C`, which indexes the table at `0x0F16AA` and decompresses a 38-byte
+blob. Those are Genesis CRAM words -- `0A8E 00E0 0000 02CC 002E 0EEE ...` --
+so this call loads the set's sixteen colours and nothing else.
+
+**3. The wall pieces themselves — the open thread.**
+`0x9AFB` is also copied to `0xB4CA` at `0x150B4`, and that is where the
+renderer picks the set up. Following `0xB4CA` is the next step; the tile
+data has not been located yet.
+
+What is already known and usable when it is: the container format is the
+same one the creature sheets use -- `(tiles-1, nametable length, 0)` then
+the nametable then 32-byte tiles -- so `tools/inject_creature.sheet` already
+builds it, and the renderer treats a wall resource as a 64×64 grid of cells
+(`moveq #$40, d4 / moveq #$40, d5` at `0x08428`).
+
+And the code-to-piece tables at `0x51836` are ours to rewrite once there are
+Matrix Cubed pieces to point at: ten tables of 32 bytes, wall code 0-31 to
+piece 0-7, `0xFF` for nothing.
