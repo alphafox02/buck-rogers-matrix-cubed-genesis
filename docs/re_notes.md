@@ -2481,3 +2481,27 @@ block  35  [0]
 
 22 of 23 occur. That is the mapping confirmed from the data rather than from
 the shape of the two variables' usage.
+
+### What the values mean, from the scripts' own text
+
+The strongest confirmation is not statistical, it is the text sitting next to
+each comparison in Matrix Cubed's own scripts:
+
+```
+COMPARE [0xC04E], 0   ->  "A LOCKER ROOM MADE INTO A KITCHEN."   nothing there
+COMPARE [0xC04E], 2   ->  "THIS DOOR IS SEALED SHUT."
+COMPARE [0xC04E], 8   ->  "THE STAIRS LEAD " + up/down + ". DO YOU CONTINUE?"
+COMPARE [0xC04E], 9   ->  "THE DOOR IS ALL BUT SEAMLESS."
+```
+
+So `0xC04E` is what the party is FACING, and the codes are features: 2 and 9
+are kinds of door, 8 is a **staircase**. `0x9AF8` reads exactly that, which
+settles the mapping.
+
+It also explains the coronation. `COMPARE [0x9AF8], 8` means "standing at the
+stairs", so de Sade intercepts the party at the staircase after telling them
+to get to the coronation hall -- which is coherent design, not an arbitrary
+square. It only LOOKS arbitrary in the port because the wall graphics do not
+yet draw a staircase as a staircase, so the player cannot see what they are
+standing in front of. That is the wall-set work, and this is another reason
+to do it.
