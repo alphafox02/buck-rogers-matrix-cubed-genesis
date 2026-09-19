@@ -283,7 +283,22 @@ VARIABLE_MAP = {
     0xC04B: 0x9AF7,    # DUNGEON_X
     0xC04C: 0x9AF6,    # DUNGEON_Y
     0xC04D: 0x9AFA,    # DUNGEON_DIR
-    0xC04E: 0x97AD,    # MAP_WALL_TYPE     -- both top out at exactly 12
+    # MAP_WALL_TYPE. The bank settles this one: 0xC04B/0xC04C/0xC04D/0xC04F
+    # are X, Y, facing and the square's event byte, and all four are already
+    # established against 0x9AF7/0x9AF6/0x9AFA/0x9AF9. 0xC04E is the only
+    # one left and 0x9AF8 is the only slot left.
+    #
+    # It used to point at 0x97AD, on the grounds that Countdown's own scripts
+    # read that the way Matrix Cubed reads 0xC04E and both top out at 12.
+    # They do -- but the two are computed differently and only one of them
+    # can work here. 0x97AD comes from 0x0CCEA, which classifies the DRAWN
+    # tiles against the loaded wall set's piece table; Matrix Cubed's areas
+    # never select a set that has one, so it reads 0 forever and every gate
+    # on it fails. 0x9AF8 comes from 0x04244, which reads the wall nibble in
+    # the facing direction straight out of the map planes at 0xB5A4/0xB6A4 --
+    # our own injected geometry, carrying Matrix Cubed's own wall codes,
+    # which run 0-14 against the 0-12 the scripts compare.
+    0xC04E: 0x9AF8,    # MAP_WALL_TYPE
     0xC04F: 0x9AF9,    # MAP_SQUARE_INFO   -- both dominated by 63 (0x3F mask)
     0x7EC7: 0x9DBD,    # COMBAT_RESULT     -- tested against 128 in both
     0x7EC9: 0x9DBF,    # MOVEMENT_BLOCK    -- 255 in 63/63 and 57/57 uses

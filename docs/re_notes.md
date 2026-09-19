@@ -2266,7 +2266,7 @@ savestate and note every non-zero byte. Re-measure after any engine change.
 With all three exclusions applied, 385 flags allocate with zero of them
 landing on dirty RAM.
 
-## `0xC04E` / `0x97AD` is computed from the map, and ours reads 0 — OPEN
+## `0xC04E` / `0x97AD` is computed from the map, and ours reads 0 — SOLVED, see below
 
 This is the reason the opening dock stops advancing.
 
@@ -2389,3 +2389,50 @@ error. They are unmapped now and take the stub path, which steps over them.
 
 `tools/transpile.py` reconciles the count on every instruction, padding or
 dropping, and reports each one.
+
+## `0xC04E` is `0x9AF8`, not `0x97AD` — CONFIRMED
+
+The bank settles it. `0xC04B`, `0xC04C`, `0xC04D` and `0xC04F` are X, Y,
+facing and the square's event byte, all four established against `0x9AF7`,
+`0x9AF6`, `0x9AFA` and `0x9AF9`. `0xC04E` is the only one left, and
+`0x9AF8` is the only slot left.
+
+The old mapping to `0x97AD` was reasonable on its face -- Countdown's own
+scripts read it the way Matrix Cubed reads `0xC04E`, and both top out at 12
+-- but the two are computed differently and only one of them can work here:
+
+```
+0x97AD   <- 0x0CCEA   classifies the DRAWN tiles against the loaded wall
+                      set's piece table.  Matrix Cubed's areas never select
+                      a set that HAS one, so it reads 0 forever.
+0x9AF8   <- 0x04244   reads the wall nibble in the facing direction out of
+                      the map planes at 0xB5A4/0xB6A4 -- our own injected
+                      geometry, carrying Matrix Cubed's own wall codes.
+```
+
+The dock's wall codes run 0-14 against the 0-12 the scripts compare, and the
+value now varies with position and facing as it should: 6 facing north at
+(11,4), 8 facing west at (0,4).
+
+That last one is the coronation. The summons on the opening dock wants
+
+```
+009F  COMPARE [0x9AF8], 8 / IFEQ / GOTO
+```
+
+and standing at (0,4) facing west, after the tannoy has set its counter,
+prints "THE COMPUTER COMES TO LIFE. 'THE CORONATION IS ABOUT TO BEGIN...'"
+followed by de Sade.
+
+One wrinkle worth knowing: `0x9AF8` is refreshed during the view draw, so
+the step hook can run before it has been updated for the square just
+entered. Walking into the wall re-runs the hook against the current value.
+Whether DOS had the same ordering is not established.
+
+### Why it appeared to work once
+
+Before the flag allocator was corrected, DOS story flag `0x4C02` was being
+allocated onto `0x97AD`. Scripts write that flag constantly -- 0, 1, 2, 3,
+5, 6, 10 -- so `0x97AD` took arbitrary values and occasionally landed on 8,
+firing the coronation at random. Fixing the allocation removed the accident
+and made the real bug visible.
