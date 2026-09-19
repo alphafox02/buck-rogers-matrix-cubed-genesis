@@ -55,7 +55,7 @@ NAME_MAP = {
     "MENU_VERTICAL": "MENU", "IF_EQUALS": "IFEQ", "IF_NOT_EQUALS": "IFNE",
     "IF_LESS": "IFLT", "IF_GREATER": "IFGT", "IF_LESS_EQUALS": "IFLE",
     "IF_GREATER_EQUALS": "IFGE", "CLEAR_MON": "CLEARMONSTERS",
-    "PARTY_CHECK": "CHECKPARTY", "SPACE_COMBAT": "SPACECOMBAT",
+    "SPACE_COMBAT": "SPACECOMBAT",
     "NEW_ECL": "NEWECL", "LOAD_AREA_MAP": "LOADFILES", "SKILL_CHECK": "SKILL",
     "PARTY_SKILL_CHECK": "PRINTSKILL", "ON_GOTO": "ONGOTO", "ON_GOSUB": "ONGOSUB",
     "MENU_HORIZONTAL": "HMENU", "INPUT_YES_NO": "GETYN", "FIND_ITEM": "FINDITEM",
@@ -85,8 +85,14 @@ NAME_MAP = {
     # DOS ones would be executed as opcodes, and a wrong guess there is a
     # wild jump. Three instructions, both in the developer block. They keep
     # stepping over themselves until the handlers are read.
-    "DESTROY_ITEM": "DESTROY", "GIVE_EXP": "ADDEP", "SPELL": "SPELLS",
-    "CLEAR_BOX": "CLEARBOX", "COPY_PROTECTION": "PROTECT", "FOR_START": "FOR",
+    "DESTROY_ITEM": "DESTROY", "GIVE_EXP": "ADDEP",
+    "CLEAR_BOX": "CLEARBOX", "FOR_START": "FOR",
+    # SPELL -> SPELLS, COPY_PROTECTION -> PROTECT and PARTY_CHECK ->
+    # CHECKPARTY are deliberately NOT mapped, though the slots line up. All
+    # three Genesis handlers are `bra.w $4022`, and 0x04022 prints
+    # "command not supported!" and stops. Mapping onto them turns an
+    # instruction that works in DOS into a hard error, where the stub path
+    # merely steps over it.
     "FOR_REPEAT": "ENDFOR", "SOUND_EVENT": "SOUND",
     "CLOCK1": "CLOCK",
 
@@ -662,6 +668,7 @@ def transpile(block: bytes, flags=None):
     #
     # So COMBAT gets a redraw unless the next instruction is already one.
     restore_after = set()
+    wallsel = {}
     for _off, _ins in found.items():
         if _ins.name != "COMBAT":
             continue
@@ -830,6 +837,9 @@ def transpile(block: bytes, flags=None):
                 report.append((off, "wall",
                                f"deco {arg.value} -> LOADPIECES {new} "
                                f"(set {new // 3})" + ("" if known else ", unlisted")))
+                sel = wallmap.selector(arg.value)
+                if sel is not None:
+                    wallsel[off] = sel
                 args.append(("imm", new))
                 continue
             if snd_at == k and arg.type == 0x00:
@@ -923,6 +933,28 @@ def transpile(block: bytes, flags=None):
                     args.append(("var", map_variable(arg.value, flags, report, off)))
             else:
                 args.append(("imm", arg.value))
+        # The two engines do not always agree on how many operands an
+        # instruction takes, and the interpreter cannot notice. A surplus
+        # operand is EXECUTED as the next instruction: DOS LOAD_AREA_DECO
+        # carries three where Genesis LOADPIECES takes one, and the first
+        # spare byte is 0x00, which is EXIT, so every area's onInit stopped
+        # dead at its own wall-set load. A missing operand is as bad the
+        # other way -- the interpreter reads the following instruction as
+        # the operand, which is what UPDATEFRAME did at the shop door. So
+        # the emitted count is made to match the handler.
+        want = gen[name][1] if name in gen else None
+        if not stub and want is not None and not ins.dyn_args \
+                and opcode not in G.DYNAMIC:
+            if len(args) > want:
+                report.append((off, "arity",
+                               f"{ins.name} has {len(args)} operands, {name} takes "
+                               f"{want}; the surplus would have been executed"))
+                args = args[:want]
+            elif len(args) < want:
+                report.append((off, "arity",
+                               f"{ins.name} has {len(args)} operands, {name} takes "
+                               f"{want}; padded, or it would eat what follows"))
+                args = args + [("imm", 0)] * (want - len(args))
         if stub:
             # GOTO plus a 3-byte target, and never smaller than what it
             # replaces -- the surplus is skipped over, not executed.
@@ -946,6 +978,16 @@ def transpile(block: bytes, flags=None):
             msize = 1 + sum(len(_encode_arg(k, v)) for k, v in more)
             pieces.append((off, opcode, more, msize))
             pos += msize
+        if off in wallsel:
+            # LOADPIECES loads the graphics; this is what makes the engine
+            # load the piece TABLES, without which 0x97AD is never computed.
+            view, _ = gen["VIEW"]
+            varg = [("imm", 4), ("imm", wallsel[off])]
+            vsize = 1 + sum(len(_encode_arg(k, v)) for k, v in varg)
+            pieces.append((off, view, varg, vsize))
+            pos += vsize
+            report.append((off, "wall", f"VIEW 4,0x{wallsel[off]:02X} after "
+                                        f"LOADPIECES, to load the piece tables"))
         if off in restore_after:
             view, _ = gen["VIEW"]
             varg = [("imm", 0), ("imm", 0xFF)]

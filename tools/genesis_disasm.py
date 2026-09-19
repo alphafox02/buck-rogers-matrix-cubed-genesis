@@ -59,7 +59,14 @@ DOC = Path(__file__).resolve().parent.parent / "docs" / "opcode_args.md"
 #   inferred 1 made the interpreter read the following instruction as an
 #   argument: emitted after the shop's redraw it desynced the script, and
 #   the party came out of the store on the wrong square.
-HANDLER_SAYS = {0x3D: 0}
+# Counted by hand off the handler, where the generated table is wrong or
+# low confidence. The argument fetcher is 0x0404A, so the count is simply
+# how many times a handler calls it.
+#
+#   0x3D CLEARBOX     bsr $8710 / rts, no fetch at all
+#   0x36 ADDNPC       bra $488C, which fetches twice
+#   0x1F SPACECOMBAT  fetches four times
+HANDLER_SAYS = {0x3D: 0, 0x36: 2, 0x1F: 4}
 
 
 def load_opcodes(doc=None):

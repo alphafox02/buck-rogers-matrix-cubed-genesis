@@ -2354,3 +2354,38 @@ that does not go through a script-selected set -- most likely from the area's
 own `LOAD_AREA_DECO`, which on the Genesis feeds a DIFFERENT loader
 (`0x9AFB` -> `0x0976C`) that does not touch the piece tables. Reconciling
 those two loaders is the next step.
+
+## Operand counts have to match the HANDLER, not the DOS opcode — CONFIRMED
+
+The interpreter reads exactly as many operands as its handler asks the
+fetcher at `0x0404A` for, and cannot notice a disagreement. So where the two
+engines differ, the difference is executed:
+
+```
+DOS                   ops        Genesis           ops
+LOAD_AREA_DECO          3   ->   LOADPIECES          1    +2
+DESTROY_ITEM            1   ->   DESTROY             2    -1
+NPC_ADD                 2   ->   ADDNPC              2 (table said 0)
+SPACE_COMBAT            4   ->   SPACECOMBAT         4 (table said 0)
+COPY_PROTECTION         1   ->   PROTECT             -- unimplemented
+PARTY_CHECK             6   ->   CHECKPARTY          -- unimplemented
+SPELL                   3   ->   SPELLS              -- unimplemented
+```
+
+`LOAD_AREA_DECO` is the one that mattered. Its two spare operands were
+emitted after `LOADPIECES`, and the first spare byte is `0x00` — `EXIT`. So
+**every area's onInit stopped at its own wall-set load**, 33 sites.
+`DESTROY_ITEM` failed the other way, reading the following instruction as
+its second operand, 6 sites.
+
+`ADDNPC` and `SPACECOMBAT` were counted off their handlers: `0x03AD4` is
+`bra.w $488C` which fetches twice, and `0x03782` fetches four times. Both
+are now in `genesis_disasm.HANDLER_SAYS` beside `CLEARBOX`.
+
+The last three are not implemented at all. All three handlers are
+`bra.w $4022`, and `0x04022` prints **"command not supported!"** and stops,
+so mapping onto them turned an instruction that works in DOS into a hard
+error. They are unmapped now and take the stub path, which steps over them.
+
+`tools/transpile.py` reconciles the count on every instruction, padding or
+dropping, and reports each one.
