@@ -2309,3 +2309,48 @@ This is the wall-graphics problem wearing a different hat — the transplanted
 geometry does not draw the tile types the sampler counts — and fixing the
 wall sets should fix this with it. Until then, 80 script gates across the
 game are stuck on zero.
+
+### The chain that has to run before `0x97AD` exists at all
+
+Measured on the dock: `0xB556` and `0xB55A`, the two wall-piece tables, are
+both **null**, and `0x0CCBA` returns without writing `0x97AD` when `0xB55A`
+is zero. So the value is not wrong — it is never computed.
+
+The tables are filled by the wall-set loader at `0x08360`, dispatched
+through the jump table at `0x083D8` on `0xB52A`:
+
+```
+set 0 -> 08516    set 3 -> 08496    set 6 -> 084F8    set 9 -> 08516
+set 1 -> 083F4    set 4 -> 084BC    set 7 -> 083EC
+set 2 -> 08400    set 5 -> 084DA    set 8 -> 0850E
+```
+
+Only some of those populate `0xB556`/`0xB55A`. **Set 3 does not** — it fills
+`0xB53E`/`0xB542` and falls through to the do-nothing tail — and set 3 is
+what the dock gets.
+
+`0xB52A` comes from `0x082AC`, which reads `0x9BBC` (the region) and
+`0x97DC` (the wall selector). `0x9BBC` is set from VIEW's MODE through the
+table at `0x03E22`:
+
+```
+mode   0  1  2  3  4
+region 8  7  6  8  1
+```
+
+and `0x97DC` only ever becomes 0xA8 or 0xA2 from `VIEW 4, 0x71` / `VIEW 4,
+0x72`. Matrix Cubed's block 17 uses neither: every VIEW on the dock is
+`VIEW 0, 255`, so region 8, no selector, set 3, no piece tables, no
+`0x97AD`.
+
+Fixed so far: the mode-4 operands. Matrix Cubed uses 0x70 and 0x74 there
+where Countdown uses 0x71 and 0x72, so the handler at `0x03DEA` fell through
+and drew them as pictures instead of selecting a wall set. `artmap.WALL_SELECT`
+now maps them, which reaches blocks 2, 32 and 48 (20 sites).
+
+Still open: the dock itself, and every other area whose script never selects
+a wall set. Those must be getting `0xC04E` from the DOS engine by some route
+that does not go through a script-selected set -- most likely from the area's
+own `LOAD_AREA_DECO`, which on the Genesis feeds a DIFFERENT loader
+(`0x9AFB` -> `0x0976C`) that does not touch the piece tables. Reconciling
+those two loaders is the next step.

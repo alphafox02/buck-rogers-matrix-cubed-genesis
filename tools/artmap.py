@@ -56,15 +56,41 @@ def picture(pid):
     return NO_PICTURE, True
 
 
+# In mode 4 the operand is not a picture at all -- it selects a wall set.
+# The handler at 0x03DEA tests for exactly two values and writes neither to
+# the picture register:
+#
+#     03DF0  cmp.b #$71, d0  ->  move.b #$A8, $97DC
+#     03DFE  cmp.b #$72, d0  ->  move.b #$A2, $97DC
+#     03E0C  move.b d0, $B525          anything else IS a picture
+#
+# and 0x97DC is what 0x082C6 reads to pick the wall set, which is what
+# loads the piece tables at 0x0B556/0x0B55A, which is what the engine needs
+# before it will compute 0x97AD at all.
+#
+# Matrix Cubed uses exactly two values in mode 4 -- 0x70 eleven times and
+# 0x74 nine -- against Countdown's 0x71 and 0x72. Passed through, both fall
+# out of the bottom of that handler and are drawn as pictures, so the wall
+# set is never selected and every script gate on 0x97AD reads zero forever.
+# Two selectors against two selectors, matched in order; that the counts
+# pair up is a fact, that the order corresponds is the same kind of guess
+# as tools/wallmap.py makes about the sets themselves, and it is one entry
+# to repoint if an area's walls come out wrong.
+WALL_SELECT = {0x70: 0x71, 0x74: 0x72}
+
+
 def view(mode, vid):
     """Return (id_to_emit, was_replaced) for VIEW's resource operand.
 
-    `mode` is accepted and ignored: it picks a case in the jump table at
-    0x083D8, which decides how the picture is drawn, not where it comes
-    from. Restricting it to modes stock Countdown uses was tried and was
-    wrong -- Countdown exercises all five, and an earlier scan missed mode 3
-    only because it appears there with a variable operand.
+    Apart from mode 4 above, `mode` is accepted and ignored: it picks a case
+    in the jump table at 0x083D8, which decides how the picture is drawn,
+    not where it comes from. Restricting it to modes stock Countdown uses
+    was tried and was wrong -- Countdown exercises all five, and an earlier
+    scan missed mode 3 only because it appears there with a variable
+    operand.
     """
+    if mode == 4 and vid in WALL_SELECT:
+        return WALL_SELECT[vid], True
     if vid >= 0x80 or vid in AVAILABLE:
         return vid, False
     return NO_PICTURE, True

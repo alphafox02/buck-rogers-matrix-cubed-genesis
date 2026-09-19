@@ -543,18 +543,42 @@ def transpile(block: bytes, flags=None):
     # A string operand of unknown length -- type 0x81, "print what is at this
     # address", almost always a character or place name -- is budgeted at
     # VARIABLE_TEXT characters.
+    #
+    # Except that it is often not unknown at all. The engine's idiom for
+    # "<name>, followed by a fixed phrase" is to stash the phrase in a string
+    # variable and print the two in turn:
+    #
+    #     PRINT_CLEAR  "A DISEMBODIED VOICE ECHOES THROUGH THE HALL, '"
+    #     WRITE_MEM    ", PLEASE REPORT TO THE NEAREST COURTESY CONSOLE.", [s]
+    #     PRINT        [the character's name]
+    #     PRINT        [s]
+    #
+    # Budgeting that 48-character phrase at twelve under-counted the run by
+    # three lines, so no page break went in and the tannoy on the opening
+    # dock printed over its own PRESS C prompt. Where the phrase is written
+    # as a literal its real length is known, so it is remembered against the
+    # variable and used when that variable is printed. A WRITE_MEM of this
+    # shape also no longer ENDS the run, which it used to, cutting the
+    # simulation off before the two PRINTs it exists to set up.
     breaks = {}
     _line = _col = 0
     _active = False
+    _known = {}
     for _off in sorted(found):
         _ins = found[_off]
         _n = _ins.name
+        _args = list(_ins.args)
+        if _n == "WRITE_MEM" and len(_args) == 2 \
+                and getattr(_args[0], "type", None) == 0x80 \
+                and getattr(_args[1], "type", None) in (0x01, 0x81):
+            _known[_args[1].value] = len(str(_args[0].value))
+            continue                       # sets a phrase up; prints nothing
         _t = None
-        for _a in _ins.args:
+        for _a in _args:
             if getattr(_a, "type", None) == 0x80:
                 _t = str(_a.value)
             elif getattr(_a, "type", None) == 0x81:
-                _t = "x" * VARIABLE_TEXT
+                _t = "x" * _known.get(_a.value, VARIABLE_TEXT)
         if _n == "PRINT_CLEAR":
             _active, _line, _col = True, 0, 0
             if _t is not None:
