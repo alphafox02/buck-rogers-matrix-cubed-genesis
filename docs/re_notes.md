@@ -2577,10 +2577,54 @@ final confirmation that Matrix Cubed's `0xC04E` is `0x9AF8` instead.
 blob. Those are Genesis CRAM words -- `0A8E 00E0 0000 02CC 002E 0EEE ...` --
 so this call loads the set's sixteen colours and nothing else.
 
-**3. The wall pieces themselves — the open thread.**
-`0x9AFB` is also copied to `0xB4CA` at `0x150B4`, and that is where the
-renderer picks the set up. Following `0xB4CA` is the next step; the tile
-data has not been located yet.
+**3. The wall pieces themselves — LOCATED.**
+
+`0xB4CA` was a dead end: `0x14DEA` only calls the palette loader again. The
+pieces come from the SAME jump table as the terrain, through different
+slots. Disassembling every case of `0x083D8` gives the whole map:
+
+```
+set 0  0x08516   nothing, the tail
+set 1  0x083F4   terrain  pairs 0x2F9A   map 0x0EF2EA   -> 0xB556/0xB55A
+set 2  0x08400   terrain  pairs 0x2FC6   map 0x09CF13   -> 0xB556/0xB55A
+set 3  0x08496   WALLS    0x0918A8 -> 0xB53E   0x0EBE89 -> 0xB542
+set 4  0x084BC   WALLS    0x06B888 -> 0xB536   0x0ECFCE -> 0xB53A
+set 5  0x084DA   WALLS    0x06B888 -> 0xB536   0x09B47A -> 0xB53A
+set 6  0x084F8   WALLS    0x06B888 -> 0xB536   then jsr 0x15436
+set 7  0x083EC   terrain  map 0x0EA350 (falls into 0x0840A with a1 stale)
+set 8  0x0850E   WALLS    same pair as set 3
+set 9  0x08516   nothing
+```
+
+Rendering `0x0918A8` confirms it: 56 tiles, 480 cells, and it draws as
+panels, pipes, railings and ladders -- dungeon wall pieces. So there are two
+wall slots, `0xB536`/`0xB53A` and `0xB53E`/`0xB542`, and the dock's set 3 was
+right all along. Forcing it onto set 1 or 2, as an experiment earlier did,
+swapped it onto an OVERLAND terrain set, which is why `0x97AD` came out a
+constant.
+
+`0x06B888` is shared by sets 4, 5 and 6 and is tiny -- 20 tiles, 18 cells --
+so the pattern is a small common piece plus one set-specific resource.
+
+### What the injection job now looks like
+
+Countdown has effectively four distinct dungeon wall sets. Matrix Cubed
+loads ten distinct decos. That mismatch is the whole reason
+`tools/wallmap.py` has to guess, and the fix is to stop sharing Countdown's
+four and give Matrix Cubed its own ten:
+
+* build each set as the `(tiles-1, nametable length, 0)` + nametable +
+  32-byte tiles container -- the same one `tools/inject_creature.sheet`
+  already produces
+* place them in free ROM the way the creature art is placed
+* repoint the `lea` addresses in the cases above, or add cases, so each set
+  loads its own
+* then rewrite the code-to-piece tables at `0x51836` so Matrix Cubed's wall
+  codes select the right one of its own pieces
+
+The art itself comes from `WALLDEF1.DAX`: 2340 bytes per deco, fifteen
+156-byte records, one per wall code 1-15, eleven decos, ids matching the
+`LOAD_AREA_DECO` arguments.
 
 What is already known and usable when it is: the container format is the
 same one the creature sheets use -- `(tiles-1, nametable length, 0)` then
