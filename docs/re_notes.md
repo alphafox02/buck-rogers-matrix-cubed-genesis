@@ -2845,3 +2845,32 @@ produces, which is what proves the port faithful there rather than broken.
 Afterwards de Sade holds power and asks for the party in his office to the
 southeast, at 3,15 or 5,14, where he pays for the services rendered. The
 dock then releases the party to its ship and NEW_ECL 18 follows.
+
+## Reading the Genesis screen
+
+The port is driven the way the DOS original is -- answer what is on screen
+rather than press buttons and hope -- but pixel OCR is the wrong tool for a
+machine whose text is already a grid of tile indices. `tools/genread.py`
+reads the tilemap:
+
+```
+tile = 0x06 + (ord(c) - 0x20)        space 0x06, '0' 0x16, 'A' 0x27
+```
+
+Dialogue and prompts are on the WINDOW plane; plane A carries only scenery.
+A savestate holds both -- VRAM at 0x12424, the VDP register file at 0x22525.
+
+Two details decide whether the reading is usable:
+
+ * A second copy of the font at 0x700 draws the leading letter of each menu
+   option. Without folding it back the choices read LINIC, EPOT, RAINING.
+ * That leading letter is palette 0 while the rest of an option is palette
+   2 or 3. Splitting on spaces turns "BUY DRINKS TALK WAIT EXIT" into five
+   options where there are four, and every cursor move after that lands one
+   place out. Splitting where the palette drops to 0 gives the right four,
+   and palette 3 says which one the cursor is on. A row drawn *entirely* in
+   palette 0 is prose, not a menu -- otherwise a sentence splits at every
+   letter.
+
+`play.Game` gains `text()`, `options()` and `pick(word)` on top of that, and
+`tools/tour.py` uses them to make an area introduce itself.
