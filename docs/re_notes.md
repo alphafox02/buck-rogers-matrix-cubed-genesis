@@ -2765,3 +2765,29 @@ what each one is. What remains is the Genesis side -- quantising 24x24
 pieces into the engine's tile-and-nametable container, placing them in free
 ROM, and repointing the `lea` addresses listed above so each set loads its
 own art instead of Countdown's four.
+
+## The opening dock, walked in both games
+
+Driven end to end in the port under `tools/play.py` and in DOS under
+`tools/dosdrive.py`, square for square:
+
+```
+                          DOS            the port
+start                     0,2 E          (0,2,'E')
+Dr Romney                 4,2 E          (4,2,'E')
+the three-way menu        HELP ROMNEY / CALL SECURITY / AID TERRANS
+the tannoy                11,4 S         (11,4,'S')
+the courtesy console      11,5 W         (11,5,'W')   press into it
+de Sade                   yes            yes
+honor guards              3,13 W         (3,13,'W')
+the hall approach         RAM ASSASSINS ambush -- BOTH games
+```
+
+The ambush at the hall matters: the port breaking into a fight on the way
+to the coronation looked like a transplant fault and is not one, DOS does
+the same. The DOS combat map for it draws a staircase, which is the piece
+the port cannot show yet.
+
+`tools/dostank.py` writes characters with enough hit points to survive that
+walk -- two at 999 were not enough against a dozen assassins, so the number
+wants to be in the tens of thousands, and the field is a u16.
