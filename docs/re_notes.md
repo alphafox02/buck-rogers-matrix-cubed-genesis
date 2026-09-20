@@ -2791,3 +2791,57 @@ the port cannot show yet.
 `tools/dostank.py` writes characters with enough hit points to survive that
 walk -- two at 999 were not enough against a dozen assassins, so the number
 wants to be in the tens of thousands, and the field is a u16.
+
+## Driving the DOS original without the box it came in
+
+Three pieces had to exist before the original could be walked square for
+square alongside the port.
+
+**The copy protection.** BEGIN ADVENTURING asks a log book lookup. All 26
+questions and answers sit in START.EXE at 0x0E200, each record being
+`slot key key text`, the text reversed with the key added, and the key
+stored twice so records can be found without following the allocator chain
+they hang on. Headings and answers alternate; a heading's slot is the page,
+its answer's slot is the ordinal. `tools/dosprotect.py` prints the lot.
+
+**Reading the screen.** `tools/dosocr.py`. The 8x8 font is block 201 of
+8X8D1.DAX, stored rotated so index 0 is `@`, and DOSBox doubles the 320x200
+mode, so a cell is 16x16 on screen and halves back exactly. It reads the
+position line too -- "4,2 E 00:18" -- so the DOS party's square and facing
+can be compared with the port's rather than counted in keystrokes.
+
+**Answering the prompts.** DOS has two resting states, and only one of them
+moves anybody: `MOVE AREA VIEW LOOK CHANGE SAVE` is camp, and one Return
+drops into movement, whose entire prompt is the word `EXIT`. The position
+line is no test of readiness -- it stays on screen under an unread
+paragraph. Nor is pressing Return safe: on the spoils screen it toggles a
+character's spacesuit on and off forever. So the prompt line is read and
+answered as what it is, and `QUICK` hands combat to the computer.
+
+## What is supposed to come next
+
+`tools/levelmap.py` reads NEW_ECL out of every DOS block and prints the
+level graph. The opening dock, 17, has exactly one exit: **18, Salvation**,
+"BUCK IS WAITING FOR YOU". From there 19 is the hub -- Salvation's star map
+-- reaching ten other places. Ten blocks are not reached from the dock by
+NEW_ECL alone (1, 2, 16, 24, 49, 50, 65, 66, 80, 84); those are entered
+another way, such as the character generator and the bootstrap.
+
+All 34 blocks are transplanted and every one of them walks at 100% flow
+coverage (`tools/areacheck.py`), so the later levels are present in the
+port. Only the dock has been checked against DOS square by square so far.
+
+### The dock, played through to its exit
+
+Both games, same squares, same order: Romney at 4,2, the tannoy at 11,4,
+the courtesy console bumped westward from 12,5, de Sade sending the party
+to "the coronation hall in the southwest corner", the honor guards at 3,12
+and 3,13, and the coronation itself off the hall squares at 2,12/2,13.
+The Sun King's speech runs, Martians reach into their robes, and the party
+is offered WAIT / ATTACK / KNOCK DOWN THE SUN KING. Take too long and
+Berkeley dies; either way RAM assassins attack -- the same ambush the port
+produces, which is what proves the port faithful there rather than broken.
+
+Afterwards de Sade holds power and asks for the party in his office to the
+southeast, at 3,15 or 5,14, where he pays for the services rendered. The
+dock then releases the party to its ship and NEW_ECL 18 follows.
