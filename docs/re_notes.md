@@ -2927,3 +2927,55 @@ transparent tile and 0x25 the plain brick -- bytes 60 to 107 are 48 solid
 
 LOTEK and HITEK, 24x24 apiece, are still decoded by `tools/wallart.py`;
 what they are FOR is now an open question rather than a settled one.
+
+## Salvation, played in both games
+
+DOS reached Salvation by the route the flags actually require, which is not
+the one that looks obvious:
+
+```
+Dr Romney            4,2     HELP ROMNEY
+the tannoy          11,4     sets [0x4C07] = 1
+the courtesy console 11,5    bumped west from 12,5; clears it again
+the coronation       2,12    the assassination, [0x4C2F] |= 8
+SECURITY FORCES      5,10    QUESTION -- [0x4C2F] |= 2
+the Terran leader    0,6     the fight, [0x4C2C] = 3
+the ship             0,2     pushed west
+```
+
+The security forces are the pinch point. Their prompt is ATTACK / QUESTION
+/ LEAVE, and only QUESTION produces "ROMNEY? YEAH, HIM AND SOME TERRAN
+FORCE WERE HERE ... TOOK 'IM TO THE DOCKS FOR DEPORTATION", which is the
+only thing that sets bit 2. The scene's own guard is `([0x4C2F] & 3) == 0`,
+so fighting them once closes the door permanently: an earlier playthrough
+did exactly that and could then see the coronation, the assassination and
+de Sade's payoff and still be refused its own ship.
+
+Side by side, Salvation is the same game in both:
+
+```
+                  DOS                              the port
+hub      WHERE DO YOU WISH TO GO?          same
+         BAR CLINIC DEPOT TRAINING PORT    BAR CLINIC DEPOT TRAINING PORT
+bar      YOU ENTER 'THE LOST ORBIT' --     same
+         SALVATION'S PORT LOUNGE
+         BUY DRINKS TALK WAIT EXIT         same
+clinic   THE AUTODOC HEALS EVERYONE        same
+         IN THE TEAM, then "T2 IS HEALED"
+depot    BUY SELL AMMO VIEW POOL EXIT      the shop, with the team's credits
+port     YOU ARE IN THE SALVATION PORT AREA.
+         WHAT DO YOU DO?                   (the prompt is not printed)
+         LAUNCH REPAIR FUEL AMMO           LAUNCH REPAIR FUEL AMMO
+           MED SUP EXIT                      MED EXIT
+```
+
+The two differences at the spaceport are one accommodation, not two bugs.
+That label set is 36 columns and the Genesis horizontal menu holds 35, so
+`transpile.fit_labels` drops the last word of the longest label -- MED SUP
+becomes MED -- and `SELECT_ACTION` is emitted as `HMENU`, which buys eight
+columns by not printing "WHAT DO YOU DO?" first. Both are deliberate and
+both are recorded in the build's menu report.
+
+Salvation has no map. It is a menu hub, in both games, which is why a
+walker pointed at it leaves the bar, is handed back to the hub with the
+cursor on BAR, and walks straight in again.
