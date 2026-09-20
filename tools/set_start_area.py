@@ -27,6 +27,22 @@ import genesis_ecl
 import integrity
 
 
+BOOT_BLOCK = 0x00
+
+
+def boot_area(by_id):
+    """The area the boot block loads, from its own NEWECL/LOADFILES."""
+    code = by_id.get(BOOT_BLOCK)
+    if code is None:
+        raise SystemExit(f"no boot block 0x{BOOT_BLOCK:02X}")
+    table = G.load_opcodes()
+    for off, ins in sorted(G.disassemble(code, table).items()):
+        if ins.name in ("NEWECL", "LOADFILES") and ins.args \
+                and ins.args[0].kind == "imm" and code[off + 1] == 0x00:
+            return code[off + 2]
+    raise SystemExit("the boot block names no area to start in")
+
+
 def retarget(code: bytes, old: int, area: int):
     """
     Point every route to `old` at `area` instead.
@@ -75,8 +91,17 @@ if __name__ == "__main__":
     if area not in ids:
         sys.exit(f"area 0x{area:02X} not present")
 
-    # Whichever area the boot script currently sends the player to.
-    START = 0x10
+    # Whichever area the boot script currently sends the player to, read
+    # out of the boot block rather than assumed.
+    #
+    # This used to be hardcoded to 0x10, Countdown's own opening area. The
+    # port's boot block sends the player to 0x11 instead, so the constant
+    # matched nothing there -- it matched a leftover NEWECL 0x10 in SSI's
+    # developer block, reported success, and changed nothing the player
+    # would ever reach. Every area then looked identical, because every
+    # area WAS the opening dock.
+    START = boot_area(dict((b[0], b[1]) for b in blocks))
+    print(f"  boot block sends the player to area 0x{START:02X}")
     total = 0
     for k, (bid, code, text) in enumerate(blocks):
         new, changed = retarget(code, START, area)
