@@ -95,6 +95,13 @@ def choices(state: bytes, row=None):
         if not lit:
             return []
         row = lit[-1]
+    # Prose is drawn entirely in palette 0. A menu is not: its options are
+    # palette 2 or 3 with only their leading letter back at 0. Without that
+    # check a sentence splits at every letter, and "NOT EVERYONE BELIEVES
+    # IN YOUR CAUSE." reads as thirty separate choices.
+    if not any(grid[row][c] & 0x6000 in (0x4000, CHOSEN)
+               for c in range(COLS)):
+        return []
     out, word, pals = [], "", []
     for c, ch in enumerate(lines[row] + " "):
         pal = grid[row][c] & 0x6000 if c < COLS else None
