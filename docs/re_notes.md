@@ -2874,3 +2874,32 @@ Two details decide whether the reading is usable:
 
 `play.Game` gains `text()`, `options()` and `pick(word)` on top of that, and
 `tools/tour.py` uses them to make an area introduce itself.
+
+## Leaving the Caloris dock
+
+The dock does not let the party go until the story is done with them, and
+the gate is one counter rather than a pile of flags. `[0x4C2C]` is the
+stage, and the ship's computer dispatches on it directly:
+
+```
+00113  PRINT_CLEAR "SCOT.DOS WELCOMES YOU BACK TO YOUR SHIP. '"
+00136  ON_GOTO [0x4C2C], 5, {0x8180, 0x8149, 0x8149, 0x81C4, 0x8225}
+```
+
+stage 0 lands on "YOUR MISSION HAS NOT BEEN COMPLETED. I CANNOT LET YOU
+DISGRACE YOURSELF BY LEAVING", and the airlock at 0x0ED wants stage 3 or
+better. The stages are:
+
+```
+0 -> 1   0x16D9   Dr Romney grabs your arm on the dock
+1 -> 2   0x1B51   the Terran leader takes Romney south
+2 -> 3   0x0BC6   the fight by the cargo elevator, after which
+                  "THE TERRAN LEADER'S BODY IS MISSING"
+3 -> 4   0x16B2   "YOU COLLECT ROMNEY'S PAPERS"
+```
+
+which is also why de Sade's handshake at 3,15 checks `[0x4C2C] >= 3` and
+answers "NOBODY IS HERE" below it. The coronation and the assassination are
+a separate strand on `[0x4C2D]`/`[0x4C2E]`; they can be played through
+without ever advancing the stage, which is exactly what happened here --
+the party saw the whole coronation and still could not board its ship.
