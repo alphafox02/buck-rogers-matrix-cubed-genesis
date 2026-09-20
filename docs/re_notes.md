@@ -2635,3 +2635,31 @@ builds it, and the renderer treats a wall resource as a 64×64 grid of cells
 And the code-to-piece tables at `0x51836` are ours to rewrite once there are
 Matrix Cubed pieces to point at: ten tables of 32 bytes, wall code 0-31 to
 piece 0-7, `0xFF` for nothing.
+
+### Walking INTO the exit is the interaction, not a bug
+
+The movement path recomputes `0x9AF8` before it runs any script:
+
+```
+054CE  move.b -$1B(a6), $9AF7.w     X
+054D4  move.b -$19(a6), $9AF6.w     Y
+054DE  bsr.w  $4228                 recompute the facing feature
+054E2  bsr.w  $4E00                 picture
+054F8  bsr.w  $5A8A                 the script
+```
+
+so the one-action lag is not an ordering fault there. What is actually
+happening is that a SUCCESSFUL step and a BLOCKED one run different event
+hooks. Stepping onto a square runs the square dispatch -- which is what
+fires the shop, the hotel, the clinic. Walking into something that will not
+let you through runs the hook that carries the `0x9AF8` gates.
+
+That is the Gold Box idiom: you walk into a door, a console or a staircase
+to use it. So the coronation summons firing when the party presses into an
+exit is the interaction working, not a timing bug. De Sade tells them to get
+to the hall, and he intercepts them as they try to leave.
+
+`tools/wallvalue.py` is still worth keeping -- turning genuinely never
+recomputed the value, so a gate could be answered against the direction the
+party was facing a moment earlier -- but the "press into it a second time"
+behaviour is correct and faithful.
