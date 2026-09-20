@@ -25,8 +25,11 @@ import genesis_disasm as G
 import geo
 import dockmap
 
-DISPATCH = 0x0210          # the ONGOTO every map event goes through
 GEO_POINTER = 0x05770
+# The map-event dispatch is "mask the square byte, then ONGOTO through a
+# long target list". Its offset moves with the block, so it is found rather
+# than hardcoded: the widest ONGOTO in the block is always this one.
+MIN_TARGETS = 8
 
 
 def expectations(rom: bytes, area: int):
@@ -39,8 +42,13 @@ def expectations(rom: bytes, area: int):
         raise SystemExit(f"no ECL block for area 0x{area:02X}")
     table = G.load_opcodes()
     found = G.disassemble(code, table)
+    wide = [o for o, i in found.items()
+            if i.name == "ONGOTO" and len(i.args) >= MIN_TARGETS]
+    if not wide:
+        return []
+    disp = max(wide, key=lambda o: len(found[o].args))
     # args[0] of the dispatch is the selector VARIABLE, not a target.
-    tgts = [a.value - G.CODE_BASE for a in found[DISPATCH].args
+    tgts = [a.value - G.CODE_BASE for a in found[disp].args
             if a.kind == "mem"][1:]
     order = sorted(found)
 
