@@ -2731,3 +2731,37 @@ fields were read off a character whose sheet was on screen:
 ```
 
 It writes NEW characters and never touches the originals.
+
+## Matrix Cubed's own wall pieces — DECODED
+
+`tools/wallart.py`. The DOS game draws its corridors from two sets of
+**24x24 pieces**:
+
+```
+LOTEK.DAX   52 pieces   low technology  -- warrens, mining, rough interiors
+HITEK.DAX   53 pieces   high technology -- stations and their corridors
+```
+
+Both are one block, one image list, `image_count` in the header, 576 bytes
+a piece. `WALLDEF1.DAX` then says which piece a wall code draws: 2340 bytes
+per deco, fifteen 156-byte records, one per wall code 1-15, eleven decos
+whose ids are the `LOAD_AREA_DECO` arguments.
+
+Rendering HITEK shows what the codes mean. Most pieces are structural --
+runs of corridor, corners, edges -- and then the ones the scripts talk to:
+
+```
+39, 40   a desk and a work station
+41       a lit terminal -- the courtesy console
+42, 43   doors
+46, 47   a staircase
+```
+
+which is exactly what the scripts say when the party faces them: "THE
+COMPUTER COMES TO LIFE", "THIS DOOR IS SEALED SHUT", "THE STAIRS LEAD ...".
+
+So the DOS side is fully in hand: the pieces, the per-code definitions, and
+what each one is. What remains is the Genesis side -- quantising 24x24
+pieces into the engine's tile-and-nametable container, placing them in free
+ROM, and repointing the `lea` addresses listed above so each set loads its
+own art instead of Countdown's four.
