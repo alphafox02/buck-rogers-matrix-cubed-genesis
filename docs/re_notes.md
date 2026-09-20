@@ -2904,20 +2904,26 @@ a separate strand on `[0x4C2D]`/`[0x4C2E]`; they can be played through
 without ever advancing the stage, which is exactly what happened here --
 the party saw the whole coronation and still could not board its ship.
 
-### WALLDEF1's records, one layer further in
+### The 3D wall art is 8X8D1, not LOTEK/HITEK
 
-`WALLDEF1.DAX` holds eleven 2340-byte decos, ids 1,3,5,...,19,22 -- the
-odd numbering is the DAX directory's, not a gap -- and each is fifteen
-156-byte records, one per wall code 1 to 15. The dock loads deco 5, whose
-first record begins
+An earlier note here had `tools/wallart.py`'s LOTEK and HITEK pieces down as
+the corridor art. They are not. The records in `WALLDEF1.DAX` index past 53,
+which is every piece HITEK holds, and the two archives do not even share a
+block numbering.
 
-```
-code  1  01 25 01 70 74 73 01 71 74 72 01 01 01 25 25 25 ...
-```
+`8X8D1.DAX` does. It holds eleven blocks with exactly WALLDEF1's own ids --
+1, 3, 5, ..., 19, 22, matching the `LOAD_AREA_DECO` arguments -- and each is
+**256 8x8 tiles**. Rendering the dock's deco 5 shows brickwork, panelled
+corridor, doors, lit terminals and the sloped magenta edges that give the
+3D view its perspective. A `WALLDEF1` record is 156 tile indices into the
+matching block, and every value seen so far is inside 0-255.
 
-so a record is a run of piece indices with `01` as a separator or a
-repeat marker. The indices go past 53, the number of pieces HITEK holds,
-so a byte is not a bare piece number: the top bits carry something else,
-most likely a flip, which is how a corridor gets its left and right walls
-out of one drawing. That is the next thing to establish before any of this
-can be converted.
+What is still open is how those 156 bytes are shaped. Laying them out as a
+single grid at any width gives brick with perspective edges in the wrong
+places, so a record is not one picture: it is several sub-images, one per
+view slot, at the sizes the renderer expects. Byte 0x01 looks like the
+transparent tile and 0x25 the plain brick -- bytes 60 to 107 are 48 solid
+0x25, which is the size and look of the wall right beside the party.
+
+LOTEK and HITEK, 24x24 apiece, are still decoded by `tools/wallart.py`;
+what they are FOR is now an open question rather than a settled one.
