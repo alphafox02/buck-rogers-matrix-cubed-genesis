@@ -27,7 +27,7 @@ block 112 becomes `0x70`.
 | `0x24` | block 36 | - | THE MATTRESS SMELLS OF PERFUME. TEAM FAILS AT PERCEPTION |
 | `0x25` | block 37 | 33 | THEY ATTACK!APES MOVE OUT OF THE THEY ATTACK!APES MOVE OUT OF THE |
 | `0x26` | block 38 | 32 | YOU DON'T HAVE A BOAT! |
-| `0x30` | block 48 | - | CLOUDS, THICK WITH ACID, BOIL OVERHEAD. |
+| `0x30` | block 48 | - | CLOUDS, THICK WITH ACID, BOIL OVERHEAD. 'YOU'D BETTER HURRY TO THE LOWLANDER VILLAGE!' |
 | `0x31` | block 49 | - | SEEMS RECENTLY ABANDONED. OF THE LOWLANDER VILLAGE. YOU SEE A SMALL |
 | `0x32` | block 50 | 48, 49 | ENTERING THE LAB COMPLEX, YOU FIND THE SOURCE OF THE EARTHQUAKE. AN |
 | `0x34` | Countdown | - | *not replaced* |
@@ -42,8 +42,8 @@ block 112 becomes `0x70`.
 | `0x54` | block 84 | 81 | - GROUND FLOOR - - GROUND FLOOR - |
 | `0x5E` | Countdown | - | *not replaced* |
 | `0x5F` | block 95 | 19, 20 | YOU ARE AT THE HIELO ORBITAL SPACESTATION OVER MERCURY. |
-| `0x60` | block 96 | 97, 112 | *nothing yet* |
-| `0x61` | block 97 | 19, 96, 98, 112 | *nothing yet* |
+| `0x60` | block 96 | 97, 112 | PIRATES PATROL THE AREA. WHAT DO YOU DO? ATTACK HIDE MOVE AWAY |
+| `0x61` | block 97 | 19, 96, 98, 112 | PIRATES COME INTO VIEW. WHAT DO YOU DO? ATTACK HIDE MOVE AWAY |
 | `0x62` | block 98 | 97, 112 | THE ROBOTS DEMAND TO SEE YOUR PASS. WHAT DO YOU DO? |
 | `0x63` | Countdown | - | *not replaced* |
 | `0x70` | block 112 | 113, 114 | A STORMRIDER APPROACHES. 'I AM DR. MAKALI'S ASSISTANT. SHE IS EXPECTIN |
@@ -71,6 +71,12 @@ Historical Museum and its gift shop, the Mercury branch of the Bank of Luna,
 Purge headquarters, the Hielo orbital station, the Venusian lab complex,
 Dr Makali's Genetics Foundation.
 
-Four areas said nothing in a 26-step tour (`0x02`, `0x11`, `0x60`, `0x61`).
-`0x11` is the dock, which says nothing because `visit.py` hijacks its init
-to get anywhere at all; the other three are worth a longer look.
+Two areas still say nothing. `0x11` is the dock, and it is silent because
+`visit.py` hijacks its init to get anywhere at all. `0x02` is DOS block 2,
+the developer screen that asks you to "GIVE ALL NUMBERS IN DECIMAL"; it
+draws nothing without being driven, which is what it should do.
+
+`0x60` and `0x61` were silent at first for a different reason: the tour had
+no cautious answer to "PIRATES PATROL THE AREA. WHAT DO YOU DO? ATTACK HIDE
+MOVE AWAY", so it attacked, and the rest of the tour was a fight. HIDE,
+MOVE AWAY, FLEE and WAIT are in the decline list now.

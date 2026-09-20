@@ -24,7 +24,8 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Answers that decline, in the order they are preferred.
-DECLINE = ("EXIT", "LEAVE", "NO", "NOTHING", "DONE", "IGNORE HIM")
+DECLINE = ("EXIT", "LEAVE", "NO", "NOTHING", "DONE", "IGNORE HIM",
+           "MOVE AWAY", "HIDE", "FLEE", "WAIT")
 # Compass moves, tried in turn once the talking stops.
 WALK = ("N", "E", "S", "W")
 
