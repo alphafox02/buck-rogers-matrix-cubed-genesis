@@ -2523,14 +2523,18 @@ and the map says where they are:
 
 ```
 code 6, 21 sides: all four sides of (2,2) -- the cargo elevator -- and
-                  (11,4)N and (12,4)N, which are the courtesy consoles
+                  (11,4)N and (12,4)N
 code 8, 11 sides: (3,0)N (11,0)N (0,4)W (11,5)W (12,7)E (6,9)N
                   (10,10)S (13,10)S (10,15)S (12,15)S (14,15)S
 ```
 
-So **6 is a wall-mounted panel** -- consoles and the elevator, the things
-you face to use -- and **8 is an exit**: almost every one is on the map
-boundary or a division between wings. Most of the dock's other events guard
+**8 is the COURTESY CONSOLE**, settled by running the DOS original: at
+`11,5` facing west the 3D view shows a computer terminal set into the wall,
+and pressing into it prints "THE COMPUTER COMES TO LIFE. 'THE CORONATION IS
+ABOUT TO BEGIN...'" followed by de Sade. That is the console the tannoy
+pages the party to one square earlier, at `11,4`. An earlier guess here said
+"exit", from the fact that most code-8 sides sit on the map boundary; that
+was wrong. Most of the dock's other events guard
 on `COMPARE [0xC04E], 0` instead, meaning "approached across an open side",
 which is how the shop, the hotel, the portmaster and the residences work.
 
@@ -2663,3 +2667,29 @@ to the hall, and he intercepts them as they try to leave.
 recomputed the value, so a gate could be answered against the direction the
 party was facing a moment earlier -- but the "press into it a second time"
 behaviour is correct and faithful.
+
+### Verified against the DOS original, side by side
+
+Driving both games to the same place, key for key:
+
+```
+                         DOS                  the port
+start                    0,2 E                (0,2,'E')
+Dr Romney                4,2 E                (4,2,'E')
+the three-way menu       HELP ROMNEY / CALL SECURITY / AID TERRANS
+the tannoy               11,4 S               (11,4,'S')
+the console              11,5 W               (11,5,'W')
+```
+
+and the interaction is identical at the console:
+
+```
+arrive at 11,5 facing west   nothing        nothing
+turn to face it              nothing        --
+press INTO it                de Sade        de Sade
+```
+
+So pressing into the console a second time is the ORIGINAL behaviour, not a
+port artefact, and the transplanted map puts every one of these on the same
+square as the DOS game. DOS also prints the page message twice, exactly as
+the port does.
