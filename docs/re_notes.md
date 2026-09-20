@@ -2693,3 +2693,41 @@ So pressing into the console a second time is the ORIGINAL behaviour, not a
 port artefact, and the transplanted map puts every one of these on the same
 square as the DOS game. DOS also prints the page message twice, exactly as
 the port does.
+
+## Driving the DOS original
+
+`tools/dosdrive.py` sends keystrokes to DOSBox through X11's XTEST
+extension and reads the window back, so the original can be walked instead
+of asked about. It needs `python-xlib`, which is not a build dependency:
+
+```
+python3 -m venv /tmp/xvenv && /tmp/xvenv/bin/pip install python-xlib pillow
+```
+
+Three things learned the hard way while building it:
+
+* **The controls differ.** DOS is relative -- `Up` walks forward,
+  `KP_Left`/`KP_Right` turn in place. The port is absolute -- the d-pad
+  walks in compass directions. So to face a wall in DOS you turn; in the
+  port you must ARRIVE travelling that way. Comparing the two without
+  knowing this produces nonsense.
+* **Counting keypresses does not work.** The menus wrap, and a level-up or
+  an icon prompt appears in the middle of a sequence and eats the rest of
+  it. `highlighted_row` reads which row is in inverse video instead, which
+  is stable.
+* **The status line is the ground truth.** DOS prints its own coordinates
+  and facing -- `11,5 W 00:14` -- which is what let every square be checked
+  against the port's RAM.
+
+`tools/dostank.py` writes characters with 999 hit points so the walk is not
+interrupted by combat. The record is `SAVE/<name>.WHO`, 259 bytes; the
+fields were read off a character whose sheet was on screen:
+
+```
+0x00  name length, then the name      0x2F  experience   u32
+0x10  seven abilities, copy at 0x17   0x38  age          u16
+0x2B  credits          u16            0x45  hit points   u16, mirrored
+                                            at 0x9F and 0xE3
+```
+
+It writes NEW characters and never touches the originals.
