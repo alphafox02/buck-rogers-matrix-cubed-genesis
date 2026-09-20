@@ -2903,3 +2903,21 @@ answers "NOBODY IS HERE" below it. The coronation and the assassination are
 a separate strand on `[0x4C2D]`/`[0x4C2E]`; they can be played through
 without ever advancing the stage, which is exactly what happened here --
 the party saw the whole coronation and still could not board its ship.
+
+### WALLDEF1's records, one layer further in
+
+`WALLDEF1.DAX` holds eleven 2340-byte decos, ids 1,3,5,...,19,22 -- the
+odd numbering is the DAX directory's, not a gap -- and each is fifteen
+156-byte records, one per wall code 1 to 15. The dock loads deco 5, whose
+first record begins
+
+```
+code  1  01 25 01 70 74 73 01 71 74 72 01 01 01 25 25 25 ...
+```
+
+so a record is a run of piece indices with `01` as a separator or a
+repeat marker. The indices go past 53, the number of pieces HITEK holds,
+so a byte is not a bare piece number: the top bits carry something else,
+most likely a flip, which is how a corridor gets its left and right walls
+out of one drawing. That is the next thing to establish before any of this
+can be converted.
