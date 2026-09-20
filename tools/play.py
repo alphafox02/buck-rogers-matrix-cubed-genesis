@@ -91,6 +91,38 @@ class Game:
         from PIL import Image
         return Image.fromarray(np.asarray(self.em.get_screen()))
 
+    def text(self):
+        """What the screen says, read off the window plane's tilemap."""
+        import genread
+        return genread.text(bytes(self.save()))
+
+    def options(self):
+        """[(option, selected)] for the menu on the bottom line, if any."""
+        import genread
+        return genread.choices(bytes(self.save()))
+
+    def pick(self, want, tries=12):
+        """Move the cursor onto `want` on the bottom line and press C."""
+        want = want.upper()
+        for _ in range(tries):
+            opts = self.options()
+            names = [w for w, _ in opts]
+            if want not in names:
+                return False
+            here = [i for i, (_w, sel) in enumerate(opts) if sel]
+            if not here:
+                self.tap("RIGHT", hold=8, rest=40)
+                continue
+            i, j = here[0], names.index(want)
+            if i == j:
+                self.tap("C", hold=10, rest=130)
+                return True
+            # Step towards it rather than the short way round: the cursor
+            # does not always wrap, and a wrap that does not happen leaves
+            # the picker pressing LEFT at the first option forever.
+            self.tap("RIGHT" if j > i else "LEFT", hold=8, rest=40)
+        return False
+
     def lit(self):
         """How much of the screen is not black -- a cheap 'is anything drawn'."""
         return int((np.asarray(self.em.get_screen()).sum(axis=2) > 30).sum())
