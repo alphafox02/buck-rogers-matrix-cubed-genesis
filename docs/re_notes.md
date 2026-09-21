@@ -3273,3 +3273,41 @@ and the screens that set it are all reached from engine code rather than
 from scripts, so whatever decides "this area is the star map" is upstream
 of anything a transplanted block can say. Finding it means following the
 area-setup path itself rather than patching operands.
+
+### The Genesis wall container, read exactly
+
+The wall-set loader is a jump table of 16-bit offsets at 0x083D8 indexed by
+the set number, and each case installs one or two resources through
+`bsr.w $9DD4` -- the same LZW the ECL and geometry streams use, which is why
+the headers look like nonsense until they are decompressed.
+
+```
+set 3   0x0918A8 -> [0xB53E]    0x0EBE89 -> [0xB542]
+set 4   0x06B888 -> [0xB536]    0x0ECFCE -> [0xB53A]
+set 5   0x06B888 -> [0xB536]    0x09B47A -> [0xB53A]
+```
+
+Decompressed, a resource is
+
+```
+u16   tile count
+u16   nametable length, in bytes
+u16   zero
+      nametable, one byte per cell, each an index into the tiles
+      tile count * 32 bytes, 4bpp 8x8 tiles
+```
+
+and that accounts for every byte of all five -- 6 + nametable + 32 * tiles
+is exactly the decompressed length in each case:
+
+```
+0x0918A8   55 tiles   960 bytes of nametable    2726 total
+0x0EBE89   32 tiles   680                       1710
+0x06B888   19 tiles    36                        650
+0x0ECFCE  398 tiles  1134                      13876
+0x09B47A  355 tiles   756                      12122
+```
+
+`tools/genwall.py` reads them and builds the same container, so both ends
+of the wall job are now understood: `walldef.py` decodes what Matrix Cubed
+draws, and this is the shape the Genesis side wants it in.
