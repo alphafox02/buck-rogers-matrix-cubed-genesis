@@ -30,9 +30,12 @@ stands: dispatch on [0x979B] and permute the fourteen jump targets into the
 engine's order. That is operands only -- no instruction moves, no jump
 target shifts -- and it buys the moving solar system the port never had.
 
-The area also has to ask for space rather than a dungeon. Countdown's map
-loads no area map at all (LOADFILES 0x7F) where the transplant faithfully
-carries DOS's LOAD_AREA_MAP 17, and sets a flag alongside it.
+The area keeps its own map. Countdown's star map loads none (LOADFILES
+0x7F), and copying that looked sensible -- but Matrix Cubed's space area
+really does load map 17, DOS says so, and stopping it means the area
+inherits whatever was loaded before: stepping in space then printed the
+DOCK's arrival text, because the dock's map and its events were still
+there.
 
 NOT YET SUFFICIENT. The dispatch and the ordering are right -- disassembling
 the patched block shows index 1 reaching HIELO, 3 reaching SALVATION /
@@ -109,15 +112,6 @@ def patch(code: bytes, table=None):
                                      addrs[ORDER[i]])
                 notes.append(f"dispatch at 0x{off:04X}: selector -> "
                              f"[0x{ENGINE_BODY:04X}], targets reordered")
-        elif ins.name == "LOADFILES" and len(ins.args) == 3 \
-                and ins.args[0].kind == "imm" and ins.args[0].value not in (NO_MAP,):
-            out[off + 2] = NO_MAP
-            notes.append(f"LOADFILES at 0x{off:04X}: map "
-                         f"0x{ins.args[0].value:02X} -> none")
-        elif ins.name == "LOADPIECES" and ins.args and ins.args[0].kind == "imm":
-            out[off + 2] = PIECES
-            notes.append(f"LOADPIECES at 0x{off:04X}: "
-                         f"0x{ins.args[0].value:02X} -> 0x{PIECES:02X}")
     return bytes(out), notes
 
 

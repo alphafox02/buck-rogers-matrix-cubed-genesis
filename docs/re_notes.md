@@ -3157,3 +3157,31 @@ init should wake it. `tools/starmap.py` now does that alongside the
 dispatch change. Not yet seen rendering -- the test run never reached area
 0x13, because driving Salvation's menus in the emulator is still
 unreliable -- so whether the dormant map draws is the open question.
+
+### What the port's space area actually looks like
+
+Driven a menu at a time with `step.py` -- which keeps the emulator's state
+in a file between commands, so each action can be looked at before the next
+one is chosen -- the port reaches its space area and draws **a 3D corridor**:
+red panelled walls, a starfield to one side, and a night-time city with a
+moon in the picture window. Mode is 8, the ordinary dungeon view.
+
+That is faithful as far as it goes. DOS's block 19 really does
+`LOAD_AREA_MAP 17`, so the area has a map; what DOS adds on top is its own
+space interface -- MOVE ROCKET CHANGE SAVE and the star chart -- and that
+is the part with no counterpart running here.
+
+Two things were learned by stepping rather than scripting:
+
+* Forcing `LOADFILES 0x7F` (copying what Countdown's star map does) is
+  wrong. The area then loads no map at all and inherits the previous one,
+  and walking in "space" printed the DOCK's arrival text.
+* Writing 6 into [0x9BBC] once, in the area's init, does not stick. The
+  mode changes with every screen -- 8 for the view, 3 for the locker, 11
+  for a shop, 12 for the character sheet -- so the engine sets it as it
+  draws, and a single write at load time is overwritten immediately.
+
+Countdown's own star map block, 0x22, IS reachable -- ten of its blocks
+NEWECL to it -- so mode 6 must be entered somehow, but no write of 6 to
+[0x9BBC] exists anywhere in the cartridge in any addressing mode. Whatever
+sets it is not a plain move, and that is where this thread stops for now.
