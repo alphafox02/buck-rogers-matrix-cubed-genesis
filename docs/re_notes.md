@@ -3122,3 +3122,38 @@ uses none this block lacks -- nor the layout selector [0x97DC], which both
 set to 0x70, nor the flag Countdown writes in the instruction after it.
 Finding that trigger is the whole remaining job; everything else about the
 port's solar system is now in place.
+
+### The Genesis engine has a star map its own game never enters
+
+Tracing why [0x979B] stays 0 leads to a screen-mode dispatcher at 0x0AF00:
+
+```
+00AF00  move.b  $ba5e.w, d0      an override, used when non-zero
+00AF06  move.b  $9bbc.w, d0      otherwise the mode
+00AF0A  cmp.b   #$7, d0  -> $8882
+00AF16  cmp.b   #$6, d0  -> $87d0      <- the routine that owns $979b
+00AF22  cmp.b   #$0, d0  -> the dungeon 3D view
+00AF52  jsr     $befc.l                 everything else
+```
+
+Mode 6 is the star map. `0x87D0` clears [0x979B] at 0x8828 and sets up the
+map; the routine ending at 0xBC14 writes the body index at 0xBBE6. The
+layout code agrees: at 0x82B0 mode 6 selects layout 7 before the ordinary
+[0x97DC] path is even consulted.
+
+And nothing ever turns it on. Searching the WHOLE cartridge for a write of
+6 into [0x9BBC] finds none -- the immediate writes present are 0, 2, 3, 4,
+5, 8, 9, 10, 11, 12, 13, 14 and 15, and there are no register writes to
+that address at all. Modes 1, 6 and 7 are checked and never set. Nothing
+calls the body-index routine either.
+
+So Countdown's Genesis build carries a complete star map that its own game
+never uses -- it travels by destination menu instead -- and that is why
+[0x979B] reads 0 no matter what the transplanted script does.
+
+Which makes the fix small in principle: an ECL `SAVE` can write any
+address, engine RAM included, so `SAVE 6, [0x9BBC]` in the space area's
+init should wake it. `tools/starmap.py` now does that alongside the
+dispatch change. Not yet seen rendering -- the test run never reached area
+0x13, because driving Salvation's menus in the emulator is still
+unreliable -- so whether the dormant map draws is the open question.

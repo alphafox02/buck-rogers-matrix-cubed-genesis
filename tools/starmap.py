@@ -66,7 +66,8 @@ ORDER = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
          13: 5}
 
 # What Countdown's star map asks the engine for.
-SPACE_FLAG = 0x97A1
+VIEW_MODE = 0x9BBC     # the engine's screen-mode selector
+SPACE_MODE = 6         # its star map -- checked at 0x82B0 and 0xAF16
 NO_MAP = 0x7F
 PIECES = 0x01
 
@@ -86,11 +87,13 @@ def patch(code: bytes, table=None):
                 and ins.args[1].kind == "mem" and ins.args[1].value == 0x97DC:
             nxt_off = order[k + 1]
             nxt = found[nxt_off]
-            if nxt.name == "SAVE" and nxt.args[1].kind == "mem":
-                struct.pack_into("<H", out, nxt_off + 5, SPACE_FLAG)
+            if nxt.name == "SAVE" and nxt.args[1].kind == "mem" \
+                    and nxt.args[0].kind == "imm":
+                out[nxt_off + 2] = SPACE_MODE
+                struct.pack_into("<H", out, nxt_off + 5, VIEW_MODE)
                 notes.append(f"SAVE after layout at 0x{nxt_off:04X}: "
-                             f"[0x{nxt.args[1].value:04X}] -> "
-                             f"[0x{SPACE_FLAG:04X}]")
+                             f"{nxt.args[0].value} -> [0x{nxt.args[1].value:04X}]"
+                             f" becomes {SPACE_MODE} -> [0x{VIEW_MODE:04X}]")
     for off, ins in sorted(found.items()):
         if ins.name == "ONGOTO" and len(ins.args) >= 2 \
                 and ins.args[1].value == BODIES and ins.args[0].kind == "mem":
