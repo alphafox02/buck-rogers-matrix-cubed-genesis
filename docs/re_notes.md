@@ -3322,3 +3322,24 @@ railings and panels -- coherent, which is what confirms the reading.
 What that is NOT is a screen layout. 480 cells is a library of pieces the
 renderer indexes into, and how it picks and places them is the next thing
 to work out before anything can be built to replace it.
+
+### The wall records are an atlas, and they decode correctly
+
+Held against a DOS screenshot of the dock's courtesy console, the decoded
+record for that wall code checks out piece for piece: the POWER label, the
+blue-to-red gradient bar, the orange readout, the row of lights, the red
+fixture and the panelled columns, all present and all the right colours.
+The tiles and the palette are right.
+
+What a record is NOT is a picture of the view. It is an atlas the renderer
+cuts from, holding the same motif more than once at different sizes for
+near and far, with magenta between the boxes. Magenta is the game's own
+transparency colour and it lives inside tiles as the diagonal wedges that
+make the perspective, not as a separate blank tile -- there is no wholly
+magenta tile in the set.
+
+So rendering a record whole looks like scattered fragments, which is what
+it should look like. What is missing is the cut list: which box goes where
+on screen for a wall one, two or three squares ahead. That is the last
+thing needed before the art can be rebuilt for the Genesis rather than
+merely read.

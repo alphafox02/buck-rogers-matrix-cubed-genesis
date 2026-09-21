@@ -7,14 +7,23 @@ numbering -- 1, 3, 5, ... 19, 22, the ids `LOAD_AREA_DECO` passes:
     8X8D1.DAX    256 8x8 tiles, the pieces the walls are drawn from
     WALLDEF1.DAX fifteen 156-byte records, one per wall code 1-15
 
-A record is 156 tile indices laid out **12 wide by 13 tall** -- the 96x104
-3D viewport -- with tile 0x01 transparent. That shape is what makes it
-readable: the transparent cut-outs are identical in every one of the
-fifteen records, because the silhouette of a wall in perspective does not
-depend on what the wall is made of, and only the texture changes between
-codes. The dock's deco 5 gives brick, dark panelling, rock, and at codes 7
-and 8 a bank of screens and readouts, which is the courtesy console the
-scripts talk to.
+A record is 156 tile indices laid out 12 wide by 13 tall -- but it is an
+ATLAS, not a picture. It holds the pieces the renderer cuts from to draw
+that wall at every view position: the same motif appears more than once at
+different sizes, near and far, with magenta between. Magenta is the game's
+own transparency colour and it is inside the tiles, as the diagonal wedges
+that give the perspective, not a separate blank tile.
+
+Rendered whole, a record therefore looks like scattered fragments, and that
+is correct. Held against a screenshot of the dock's courtesy console it
+checks out piece for piece -- the POWER label, the blue-to-red gradient
+bar, the orange readout, the row of lights, the red fixture and the
+panelled columns are all present and all the right colours. See
+art_preview/walls/console_dos_vs_decoded.png.
+
+What is not yet known is the cut list: which box of the atlas goes where on
+screen for a wall one, two or three squares away. Until that exists the art
+can be read but not rebuilt.
 
 An earlier note here had LOTEK.DAX and HITEK.DAX down as the source. They
 are not: their records index past what those archives hold, while every
