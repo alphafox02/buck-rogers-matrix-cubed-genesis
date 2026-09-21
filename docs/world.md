@@ -98,3 +98,44 @@ The port shows `BANK DOWNTOW HOSPITAL PORT TRAINING`, one character short.
 That is `fit_labels` again: 36 columns against 35, and with no filler word
 to drop and no multi-word label to shorten it falls through to its last
 resort and clips the longest word.
+
+## Ship-to-ship combat (in block 19)
+
+Crossing the system runs into traffic: "SENSORS IDENTIFY A PIRATE MED.
+CRUISER ON LR SCANNER. WHAT DO YOU DO? HAIL ATTACK FLEE". Hailing a pirate
+opens the tactical screen -- the other ship drawn large, both ships'
+systems, and a weapons rack.
+
+```
+                    FLARE (a pirate)   MAELSTROM RIDER (ours)
+HULL                      400                600
+SENSORS                   100                150
+CONTROL                   100                150
+LIFE                      200                300
+FUEL                      300                320
+ENGINE                    300                450
+weapons                                      K-CANNON 2, MISSILE 2, LASER 5
+```
+
+It is crew-driven and turn-based. Each character is asked "WHAT DOES T2
+WANT TO DO?" in turn; `QUIT` passes to the next one rather than leaving.
+`COMMAND` puts a character at a station -- "T2 TAKES OVER AS PILOT" -- and
+what the menu offers then depends on the range:
+
+```
+far        QUIT VIEW COMMAND
+piloting   QUIT VIEW CLOSE WITHDRAW
+in range   FIRE TARGET QUIT VIEW CLOSE WITHDRAW
+close      FIRE TARGET QUIT VIEW WITHDRAW RAM
+```
+
+and the other ship plays the same game: "ENEMY SHIP ATTEMPTS TO RAM! TRY TO
+DODGE ENEMY SHIP? YES NO".
+
+Withdrawing is not immediate -- twenty rounds of it left the range at 8 and
+the status still CLOSING -- so an encounter is a real engagement rather than
+something to walk away from. It took about forty rounds of closing, firing
+and dodging before the screen handed the party back to the star map.
+
+This is the DOS side of the `SPACECOMBAT` opcode, 0x1F, which until now was
+only a fetch count in the Genesis handler table.
