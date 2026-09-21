@@ -3090,3 +3090,35 @@ can never travel to another one.
 That also narrows the fix: not the dispatch, and not a wholesale port of
 the DOS table, but the thirteen coordinate pairs and the motion behind
 them.
+
+### The two star maps are numbered almost the same
+
+Countdown's Genesis star map, block 0x22, dispatches fourteen ways on
+[0x979B] -- an address its engine's own code writes -- and the bodies it
+reaches are Matrix Cubed's bodies:
+
+```
+        Countdown                   Matrix Cubed
+  0     an encounter                nothing
+  1-4   Mercury Venus Earth Mars    the same four, same order
+  5     VESTA                       CERES
+  6-12  FORTUNA .. THULE            VESTA .. AURORA
+  13    CERES                       THULE
+```
+
+Only Ceres sits in a different slot; everything else is either identical or
+shifted by one. So the port does not need DOS's coordinate table at all --
+it can read the engine's index and permute its own fourteen jump targets
+into the engine's order, which is operands only and moves no instruction.
+
+`tools/starmap.py` does that, and the result disassembles correctly: index 1
+reaches HIELO, 3 reaches SALVATION / LOSANGELORG / TYCHO, 13 reaches CERES,
+while keeping Matrix Cubed's own destinations such as LOSANGELORG that
+Countdown never had.
+
+What it does not yet do is make the engine run. Booted, the area comes up
+with [0x979B] still 0. The trigger is not an opcode -- Countdown's star map
+uses none this block lacks -- nor the layout selector [0x97DC], which both
+set to 0x70, nor the flag Countdown writes in the instruction after it.
+Finding that trigger is the whole remaining job; everything else about the
+port's solar system is now in place.
