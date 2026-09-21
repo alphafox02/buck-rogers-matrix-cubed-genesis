@@ -87,26 +87,52 @@ def patch(code: bytes, table=None):
     # Countdown sets a flag in the instruction right after it writes the
     # layout selector. Match it by that position, not by its value: four
     # other SAVE 1s in this block are ordinary story flags.
-    # Request the star map next to the body dispatch, not in the init.
-    # The engine commits [0xBA5E] at the next screen change, so an
-    # init-time request is spent on the briefing that follows it; asking
-    # here means it is asked for every time the area works out where the
-    # ship is.
+    # Turn the now-dead write into the request.
+    #
+    # The per-turn handler opens by clearing the old body selector before
+    # it rescans. Once the dispatch reads the engine's variable instead,
+    # that write does nothing -- so it becomes the place to ask for the
+    # star map, which is exactly the moment the area wants it: every turn,
+    # after the briefing, and before the bodies are worked out.
     order = sorted(found)
     disp = next((o for o in order if found[o].name == "ONGOTO"
                  and len(found[o].args) >= 2
                  and found[o].args[1].value == BODIES), None)
     if disp is not None:
+        old_sel = found[disp].args[0].value
         for o in reversed([x for x in order if x < disp]):
             ins = found[o]
             if ins.name == "SAVE" and len(ins.args) == 2 \
-                    and ins.args[0].kind == "imm" and ins.args[1].kind == "mem":
+                    and ins.args[0].kind == "imm" and ins.args[0].value == 0 \
+                    and ins.args[1].kind == "mem" and ins.args[1].value == old_sel:
                 out[o + 2] = SPACE_MODE
                 struct.pack_into("<H", out, o + 5, VIEW_MODE)
-                notes.append(f"SAVE before the dispatch at 0x{o:04X}: "
-                             f"{ins.args[0].value} -> [0x{ins.args[1].value:04X}]"
-                             f" becomes {SPACE_MODE} -> [0x{VIEW_MODE:04X}]")
+                notes.append(f"dead clear at 0x{o:04X} becomes "
+                             f"{SPACE_MODE} -> [0x{VIEW_MODE:04X}]")
                 break
+    # Open the gate. The per-turn handler starts with
+    #   COMPARE [gate], 0 / IFNE / GOTO away
+    # and the init sets that gate to 1, so the whole space update -- the
+    # rescan, and now the request for the star map -- never runs at all.
+    if disp is not None:
+        gate = None
+        for o in order:
+            ins = found[o]
+            if ins.name == "COMPARE" and len(ins.args) == 2 \
+                    and ins.args[0].kind == "mem" and ins.args[1].value == 0 \
+                    and o < disp and o > 0x400:
+                gate = ins.args[0].value
+                break
+        if gate is not None:
+            for o in order:
+                ins = found[o]
+                if o < 0x100 and ins.name == "SAVE" and len(ins.args) == 2 \
+                        and ins.args[0].kind == "imm" and ins.args[0].value == 1 \
+                        and ins.args[1].kind == "mem" and ins.args[1].value == gate:
+                    out[o + 2] = 0
+                    notes.append(f"gate [0x{gate:04X}] at 0x{o:04X}: 1 -> 0")
+                    break
+
     for off, ins in sorted(found.items()):
         if ins.name == "ONGOTO" and len(ins.args) >= 2 \
                 and ins.args[1].value == BODIES and ins.args[0].kind == "mem":

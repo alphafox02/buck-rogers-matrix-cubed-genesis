@@ -3214,3 +3214,29 @@ Also worth recording, since it looked like a bug twice: walking in the port
 here prints the DOCK's arrival text, and that is not wrong. DOS's block 19
 loads map 17, the dock's own map, so the space area really does stand on
 those squares.
+
+### Where the star-map attempt stands
+
+Four things are now established and hold up:
+
+* `[0x9BBC]` is the mode being drawn, `[0xBA5E]` is the request for the
+  next one, committed and cleared at 0x085F8. Mode 6 is the star map --
+  checked at 0x82B0 for its layout and dispatched at 0xAF16 to 0x87D0,
+  which clears [0x979B] and sets the map up.
+* Countdown numbers the bodies as Matrix Cubed does apart from Ceres, so
+  the port's own fourteen jump targets can simply be permuted into the
+  engine's order. `tools/starmap.py` does that and it disassembles right.
+* Block 19's per-turn handler is hook 1. It opens by clearing the old body
+  selector -- dead once the dispatch reads the engine's -- so that write is
+  free to become the request. It is also gated: `COMPARE [0x9838], 0` and
+  the init sets that to 1, so the whole space update never runs.
+* Opening the gate and requesting mode 6 every turn still leaves the area
+  drawing mode 8, and walking still lands on the dock's squares.
+
+That last point is the wall. The likeliest reading is that Matrix Cubed's
+block 19 is not an area the Genesis engine can render as space at all: DOS
+draws its own star chart over a loaded map, and the Genesis engine's
+equivalent is a mode its area loader never enters for a block that asked
+for a dungeon map. Getting the port there probably means driving the mode
+from the engine side -- where the area is set up -- rather than from the
+script, which is a bigger change than an operand patch.
