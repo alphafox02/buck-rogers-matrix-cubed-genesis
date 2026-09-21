@@ -2979,3 +2979,51 @@ both are recorded in the build's menu report.
 Salvation has no map. It is a menu hub, in both games, which is why a
 walker pointed at it leaves the bar, is handed back to the hub with the
 cursor on BAR, and walks straight in again.
+
+## The port has no solar system
+
+Matrix Cubed's star map is a 21x21 grid. The ship's square is one pair of
+script variables; each of the thirteen bodies has its own pair at
+`[0x4B85]`-`[0x4B9E]`. Every turn block 19 copies each body's pair into
+scratch, compares it with the ship's, and on a match writes that body's
+index into `[0x4BA5]`. A fourteen-way `ON_GOTO` on that index chooses the
+planet picture and the port list:
+
+```
+1 Mercury  HIELO                     8  PALLAS
+2 Venus    NEW ELYSIUM / LOWLANDS    9  PSYCHE
+3 Earth    SALVATION / LOSANGELORG   10 JUNO / FUNGUS ASTEROID
+           / TYCHO / DUKE'S HILL     11 HYGEIA
+           / COPERNICUS              12 AURORA
+4 Mars     PAVONIS                   13 THULE
+5 CERES / RAM BASE   6 VESTA   7 FORTUNA / NEO BASE
+```
+
+All of that transplanted: the port's block `0x13` has the same fourteen-way
+dispatch with all fourteen targets, the same scan loop, and all twenty-one
+destination names.
+
+**The coordinates did not.** Checked across every block: those 26 addresses
+are read 26 times and written never -- the DOS engine puts them there, not
+the scenario. The transplanter therefore saw 26 read-only addresses,
+classified them as ordinary story flags, and scattered them over
+`0x9788`-`0x97A7`, which start at zero. Every body in the port sits at
+(0,0), so no approach can ever be offered and the star map is unreachable.
+
+### Why reading them out of DOS is harder than it looks
+
+`tools/dosmem.py` launches DOSBox as a child (ptrace_scope is 1, so only a
+descendant can be read) and its memory searches work -- a character's .WHO
+record is found at consistent offsets, and walking the party pins the
+position pair to a single address. What does NOT hold is the assumption
+that an ECL address is an offset into one flat block: solving for a base
+from the position pair and then checking the clock at `[0x4BC7]`, or
+`LAST_ECL` at `[0x4BF2]`, matches nothing at any base. The DOS VM resolves
+addresses through a mapping, as the Genesis one does at `0x042E0`, so
+`[0x4BC7]` and `[0xC04B]` need not be anywhere near each other.
+
+So the coordinates have to come from the game rather than from its memory:
+the star map draws every body, so they can be read off the picture and
+confirmed by flying to one or two. Whatever the source, the fix is the same
+-- write the thirteen pairs into those addresses when the area loads, which
+is a handful of `SAVE` instructions at the top of block `0x13`.
