@@ -70,6 +70,8 @@ ORDER = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
 
 # What Countdown's star map asks the engine for.
 VIEW_MODE = 0xBA5E     # the engine's REQUESTED screen mode
+NO_MAP = 0x7F          # LOADFILES: no dungeon map, as Countdown's map does
+PIECES = 0x01
 SPACE_MODE = 6         # its star map -- checked at 0x82B0 and 0xAF16
 
 # Writing the mode straight into [0x9BBC] does not last: the engine sets
@@ -148,6 +150,15 @@ def patch(code: bytes, table=None):
                                      addrs[ORDER[i]])
                 notes.append(f"dispatch at 0x{off:04X}: selector -> "
                              f"[0x{ENGINE_BODY:04X}], targets reordered")
+        elif ins.name == "LOADFILES" and len(ins.args) == 3 \
+                and ins.args[0].kind == "imm" and ins.args[0].value != NO_MAP:
+            out[off + 2] = NO_MAP
+            notes.append(f"LOADFILES at 0x{off:04X}: map "
+                         f"0x{ins.args[0].value:02X} -> none")
+        elif ins.name == "LOADPIECES" and ins.args and ins.args[0].kind == "imm":
+            out[off + 2] = PIECES
+            notes.append(f"LOADPIECES at 0x{off:04X}: "
+                         f"0x{ins.args[0].value:02X} -> 0x{PIECES:02X}")
     return bytes(out), notes
 
 

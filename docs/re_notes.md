@@ -3240,3 +3240,30 @@ equivalent is a mode its area loader never enters for a block that asked
 for a dungeon map. Getting the port there probably means driving the mode
 from the engine side -- where the area is set up -- rather than from the
 script, which is a bigger change than an operand patch.
+
+### Eliminated, and what is left
+
+Tried against the port's space area, none of which produced the star map --
+the mode is still 8 on arrival every time:
+
+* dispatching on the engine's [0x979B] with the targets permuted into its
+  numbering (correct, and verified by disassembly, but inert until the map
+  runs)
+* requesting mode 6 through [0xBA5E] in the area's init, beside the body
+  dispatch, and in the per-turn handler
+* opening the gate at [0x9838] that stopped the per-turn handler running
+* loading no area map (LOADFILES 0x7F) and Countdown's piece set, together
+  and separately
+
+One promising lead turned out to be nothing. Countdown sets
+`SAVE 2, [0x9E08]` immediately before `NEWECL` to its star map, under the
+very same "ALL PREPARATIONS ARE COMPLETE" line the port uses, where the
+port carries DOS's 1 -- which looked exactly like an entry mode. It is not:
+0x9E08 has no engine references at all, and across Countdown's blocks it is
+written 24 times, printed once and read by INPUTNUMBER. It is scratch.
+
+What that leaves is the engine side. [0x9BBC] is set as each screen draws,
+and the screens that set it are all reached from engine code rather than
+from scripts, so whatever decides "this area is the star map" is upstream
+of anything a transplanted block can say. Finding it means following the
+area-setup path itself rather than patching operands.
