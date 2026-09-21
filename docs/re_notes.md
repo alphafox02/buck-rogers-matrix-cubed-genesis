@@ -3027,3 +3027,36 @@ the star map draws every body, so they can be read off the picture and
 confirmed by flying to one or two. Whatever the source, the fix is the same
 -- write the thirteen pairs into those addresses when the area loads, which
 is a handful of `SAVE` instructions at the top of block `0x13`.
+
+### The planets orbit
+
+Two captures of the same star map, some game time apart, with everything
+measured in grid cells (the map pane is 21x21):
+
+```
+                     earlier            later
+the sun          (10.78, 10.07)    (10.78, 10.07)    fixed
+a small orange   ( 9.86, 10.02)    ( 9.86, 10.02)    fixed -- Mercury
+green            ( 9.68,  8.90)    (11.97, 11.00)    MOVED
+cyan             ( 8.02,  9.95)    (10.89, 12.72)    MOVED
+rust             (10.83, 15.43)    (14.64, 13.69)    MOVED
+two blue smears  ( 4.44,  1.56)    unchanged         fixed -- decoration
+the ship         ( 0.47,  7.18)    ( 1.16,  2.57)    MOVED (it is the ship)
+```
+
+The sun sits at the centre of the grid and does not move. Three bodies do,
+and their order outward from the sun is the same in both readings --
+0.9, 1.6, 2.7, 5.1 cells -- which with the colours (rust for Mars, blue for
+Earth) reads as Mercury, Venus, Earth, Mars.
+
+Which the ship is was settled by stepping once and diffing the picture
+rather than by colour, because the ship and Earth are both cyan; only one
+of them moves when you press a key.
+
+So the thirteen coordinate pairs are not a fixed layout the port can simply
+be given. The DOS engine advances them with the calendar, and nothing in
+any script does it. Porting the star map faithfully means reproducing that
+motion, not just the positions; giving the port a static table would place
+the system correctly for exactly one date and wrongly thereafter -- though
+it would still be a large improvement on thirteen bodies stacked at (0,0),
+which is what it has now.
