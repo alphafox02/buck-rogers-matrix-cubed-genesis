@@ -3311,3 +3311,14 @@ is exactly the decompressed length in each case:
 `tools/genwall.py` reads them and builds the same container, so both ends
 of the wall job are now understood: `walldef.py` decodes what Matrix Cubed
 draws, and this is the shape the Genesis side wants it in.
+
+Correction to the above: the nametable is **words**, not bytes -- ordinary
+Genesis entries with palette and flip in the top five bits and the tile
+index in the low eleven. So 0x0918A8's 960 bytes are 480 cells, and its
+first entries 0x2001, 0x2002, 0x0003 are palette 1 tile 1, palette 1 tile
+2, palette 0 tile 3. Rendered, they are Countdown's own pipes, dials,
+railings and panels -- coherent, which is what confirms the reading.
+
+What that is NOT is a screen layout. 480 cells is a library of pieces the
+renderer indexes into, and how it picks and places them is the next thing
+to work out before anything can be built to replace it.

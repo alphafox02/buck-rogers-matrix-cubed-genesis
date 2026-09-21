@@ -23,7 +23,9 @@ Decompressed, a resource is
     u16   tile count
     u16   nametable length, in bytes
     u16   zero
-    ...   nametable, one byte per cell, each an index into the tiles
+    ...   nametable: ordinary Genesis words, palette and flip bits in the
+          top five, tile index in the low eleven -- so half as many cells
+          as bytes
     ...   tile count * 32 bytes, 4bpp 8x8 tiles
 
 which accounts for every byte of all five: 6 + nametable + 32 * tiles is
@@ -55,14 +57,19 @@ def read(rom: bytes, addr: int):
     raw = genesis_ecl.decompress(rom[addr:], limit=0x20000)
     count = struct.unpack_from(">H", raw, 0)[0]
     ntlen = struct.unpack_from(">H", raw, 2)[0]
-    nt = raw[HEADER:HEADER + ntlen]
+    nt = raw[HEADER:HEADER + ntlen]          # words, not bytes
     body = raw[HEADER + ntlen:]
     tiles = [body[i * TILE:(i + 1) * TILE] for i in range(count)]
     return tiles, nt, raw
 
 
+def cells(nt):
+    """The nametable as Genesis words."""
+    return [struct.unpack_from(">H", nt, i)[0] for i in range(0, len(nt), 2)]
+
+
 def build(tiles, nametable):
-    """The container for a set of 8x8 tiles and a nametable of indices."""
+    """The container for a set of 8x8 tiles and a nametable of words."""
     out = bytearray(struct.pack(">HHH", len(tiles), len(nametable), 0))
     out += bytes(nametable)
     for t in tiles:
