@@ -2918,12 +2918,18 @@ corridor, doors, lit terminals and the sloped magenta edges that give the
 3D view its perspective. A `WALLDEF1` record is 156 tile indices into the
 matching block, and every value seen so far is inside 0-255.
 
-What is still open is how those 156 bytes are shaped. Laying them out as a
-single grid at any width gives brick with perspective edges in the wrong
-places, so a record is not one picture: it is several sub-images, one per
-view slot, at the sizes the renderer expects. Byte 0x01 looks like the
-transparent tile and 0x25 the plain brick -- bytes 60 to 107 are 48 solid
-0x25, which is the size and look of the wall right beside the party.
+A record is **12 tiles wide by 13 tall** -- 156 exactly, and 96x104 pixels,
+the 3D viewport. Tile 0x01 is transparent.
+
+What makes that reading certain is not how any one record looks but how
+they compare: the transparent cut-outs are identical in all fifteen
+records of a deco, because the silhouette of a wall in perspective does not
+depend on what the wall is made of. Only the texture changes between codes.
+The dock's deco 5 gives brick, dark panelling, rock, and at codes 7 and 8 a
+bank of screens and readouts -- the courtesy console the scripts talk to.
+Deco 22 renders the same silhouettes over blue panelling and rust.
+
+`tools/walldef.py` decodes and renders any deco.
 
 LOTEK and HITEK, 24x24 apiece, are still decoded by `tools/wallart.py`;
 what they are FOR is now an open question rather than a settled one.
