@@ -3060,3 +3060,33 @@ motion, not just the positions; giving the port a static table would place
 the system correctly for exactly one date and wrongly thereafter -- though
 it would still be a large improvement on thirteen bodies stacked at (0,0),
 which is what it has now.
+
+### Correction: the port's body index is not simply unset
+
+Countdown's own star map, block 0x22, dispatches on [0x979B], which the
+engine's 68000 code does write -- so it looked as though Matrix Cubed's
+transplanted map should read that instead of the address it got. Patching
+the dispatch to do so is wrong, and reading the port's RAM says why.
+
+Standing in Salvation, area 0x12:
+
+```
+area          [0x97E8] = 18      correct
+body index    [0x9707] = 3       correct -- Earth
+Countdown's   [0x979B] = 0
+layout        [0x97DC] = 0
+```
+
+DOS block 18 opens with `WRITE_MEM 3, [0x4BA5]`, and that survived the
+transplant: arriving at Salvation tells the script the ship is at body 3,
+Earth, and the port has it. So the map is not dead -- a body index set
+directly by a script works, and the ports offered on arrival are right.
+
+What cannot work is FLYING. Moving the ship is what makes the script rescan
+the coordinate table to find the new body, and that table is the part that
+arrived as zeroes. So the port can be at a body the story puts it at, and
+can never travel to another one.
+
+That also narrows the fix: not the dispatch, and not a wholesale port of
+the DOS table, but the thirteen coordinate pairs and the motion behind
+them.
