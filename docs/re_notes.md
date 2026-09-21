@@ -3185,3 +3185,32 @@ Countdown's own star map block, 0x22, IS reachable -- ten of its blocks
 NEWECL to it -- so mode 6 must be entered somehow, but no write of 6 to
 [0x9BBC] exists anywhere in the cartridge in any addressing mode. Whatever
 sets it is not a plain move, and that is where this thread stops for now.
+
+### How the view mode is actually set
+
+Decoding every reference to [0x9BBC] rather than pattern-matching for
+writes turns up five register writes among the immediates, and one of them
+explains the rest:
+
+```
+0085F8  move.b  $ba5e.w, d0     a REQUESTED mode
+0085FC  beq.b   $8606
+0085FE  move.b  d0, $9bbc.w     commit it
+008602  clr.b   $ba5e.w         and clear the request
+```
+
+So [0x9BBC] is what the engine is drawing now, and [0xBA5E] is what it has
+been asked to draw next; the request is consumed at the following screen
+change. That is why writing 6 into [0x9BBC] from a script achieves nothing
+-- it is overwritten by whatever screen comes next.
+
+Requesting mode 6 through [0xBA5E] was tried in two places, in the area's
+init and beside the body dispatch. Neither has produced the star map yet:
+the mode is still 8 when the area is reached. The init request is spent on
+the briefing that follows it, and the dispatch does not appear to run
+before the player moves.
+
+Also worth recording, since it looked like a bug twice: walking in the port
+here prints the DOCK's arrival text, and that is not wrong. DOS's block 19
+loads map 17, the dock's own map, so the space area really does stand on
+those squares.

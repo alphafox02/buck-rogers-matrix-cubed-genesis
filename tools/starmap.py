@@ -69,8 +69,13 @@ ORDER = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
          13: 5}
 
 # What Countdown's star map asks the engine for.
-VIEW_MODE = 0x9BBC     # the engine's screen-mode selector
+VIEW_MODE = 0xBA5E     # the engine's REQUESTED screen mode
 SPACE_MODE = 6         # its star map -- checked at 0x82B0 and 0xAF16
+
+# Writing the mode straight into [0x9BBC] does not last: the engine sets
+# that as it draws each screen, so an init-time write is gone by the first
+# menu. [0xBA5E] is the request -- at 0x085F8 the engine copies it into
+# [0x9BBC] and clears it -- so that is what a script should set.
 NO_MAP = 0x7F
 PIECES = 0x01
 
@@ -82,21 +87,26 @@ def patch(code: bytes, table=None):
     # Countdown sets a flag in the instruction right after it writes the
     # layout selector. Match it by that position, not by its value: four
     # other SAVE 1s in this block are ordinary story flags.
+    # Request the star map next to the body dispatch, not in the init.
+    # The engine commits [0xBA5E] at the next screen change, so an
+    # init-time request is spent on the briefing that follows it; asking
+    # here means it is asked for every time the area works out where the
+    # ship is.
     order = sorted(found)
-    for k, off in enumerate(order[:-1]):
-        ins = found[off]
-        if ins.name == "SAVE" and len(ins.args) == 2 \
-                and ins.args[0].kind == "imm" and ins.args[0].value == 0x70 \
-                and ins.args[1].kind == "mem" and ins.args[1].value == 0x97DC:
-            nxt_off = order[k + 1]
-            nxt = found[nxt_off]
-            if nxt.name == "SAVE" and nxt.args[1].kind == "mem" \
-                    and nxt.args[0].kind == "imm":
-                out[nxt_off + 2] = SPACE_MODE
-                struct.pack_into("<H", out, nxt_off + 5, VIEW_MODE)
-                notes.append(f"SAVE after layout at 0x{nxt_off:04X}: "
-                             f"{nxt.args[0].value} -> [0x{nxt.args[1].value:04X}]"
+    disp = next((o for o in order if found[o].name == "ONGOTO"
+                 and len(found[o].args) >= 2
+                 and found[o].args[1].value == BODIES), None)
+    if disp is not None:
+        for o in reversed([x for x in order if x < disp]):
+            ins = found[o]
+            if ins.name == "SAVE" and len(ins.args) == 2 \
+                    and ins.args[0].kind == "imm" and ins.args[1].kind == "mem":
+                out[o + 2] = SPACE_MODE
+                struct.pack_into("<H", out, o + 5, VIEW_MODE)
+                notes.append(f"SAVE before the dispatch at 0x{o:04X}: "
+                             f"{ins.args[0].value} -> [0x{ins.args[1].value:04X}]"
                              f" becomes {SPACE_MODE} -> [0x{VIEW_MODE:04X}]")
+                break
     for off, ins in sorted(found.items()):
         if ins.name == "ONGOTO" and len(ins.args) >= 2 \
                 and ins.args[1].value == BODIES and ins.args[0].kind == "mem":
