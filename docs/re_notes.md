@@ -3729,3 +3729,38 @@ which keeps the correct mapping so the console appears where the map says.
 
 The grey in the console is not out of place: Countdown's own piece 5 already
 draws a grey pipe across the same wall.
+
+### Confirming code 8 really is the console, from the data
+
+The claim "wall code 8 is the courtesy console" was settled earlier by running
+the DOS original. It is worth confirming from the files too, because the whole
+console placement rests on it and because passing DOS ids through has failed in
+five other resource spaces.
+
+The port's area `0x11` is Matrix Cubed's own dock, not Countdown's:
+
+```
+    port 0x11 vs stock countdown.gen 0x11   356/1024 bytes -- different maps
+    port 0x11 vs GEO1.DAX block 17          972/1024 bytes
+        square-info plane   256/256   identical
+        door plane          256/256   identical
+        wall planes         460/512
+```
+
+The info and door planes being byte-for-byte identical settles that it is the
+same map. Of the 52 wall bytes that differ, **every one is the same
+substitution, code 13 -> code 6**. Nothing else was remapped.
+
+In particular the console square is untouched:
+
+```
+    (11,5)   DOS block 17 : N=0 E=0 S=0 W=8
+             port 0x11    : N=0 E=0 S=0 W=8
+```
+
+and all four code-8 sides in the N/E plane -- (3,0), (11,0), (12,7), (6,9) --
+sit at identical coordinates in both. So code 8 means in the port exactly what
+it meant in DOS, and piece 5 of set 1 is the right place for the console art.
+
+The eleven code-8 sides are DOS's own design, not a transplant artefact; the
+same eleven are in GEO1 block 17.
