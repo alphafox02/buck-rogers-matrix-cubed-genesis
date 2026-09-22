@@ -3875,3 +3875,58 @@ measured per area, by reading the graphics handle stack in each.
 Isolating the dock would mean giving it a wall set of its own, but all ten
 entries behind `0x51836` are in use, so that needs an eleventh set rather than
 a spare one. Not done.
+
+### The coronation ambush is correctly transplanted -- verified, do not re-chase
+
+A play session reported the fight as very hard and reported never being offered
+the WAIT / ATTACK / KNOCK DOWN THE SUN KING choice. Both turn out to be correct
+behaviour. Checked end to end against DOS block 17:
+
+**The encounter.** DOS `LOAD_MON 46, 8, 46`; port `LOADMONSTER 0xF, 0x8, 0x2E`.
+Eight RAM ASSASSINs either way -- DOS 46 and Genesis 15 are the same creature by
+name, an exact match rather than a substitution. The third argument is still the
+raw DOS id, but that is harmless: `LOADMONSTER` at `0x03544` reads it into `d0`
+and then does `move.l d2, d4`, discarding it before the loader is called.
+
+**The missing menu.** The choice is gated behind a skill check, and failing it
+jumps past both the narration and the menu:
+
+```
+    00BD0  GOSUB  [0x786D]
+    00BD4  IFNE
+    00BD5  GOTO   [0x76F1]     <- straight to the assassination
+    00BD9  PRINT  " NOTICES A GROUP OF MARTIANS..."
+    00BDD  HMENU  [0x9E6F], 3, "WAIT", "ATTACK", "KNOCK DOWN THE SUN KING"
+```
+
+DOS has the same shape at `0xA197`. The subroutines match line for line:
+
+```
+    DOS   WRITE_MEM 1, [0x7F7B] / PARTY_SKILL_CHECK 83, [0x7F7B], [0x7F7C]
+          COMPARE [0x7F7C], 2 / IF_LESS / GOTO fail / LOAD_CHAR [0x7F7B]
+    port  SAVE 0x1, [0x9E71]   / PRINTSKILL 0x5, [0x9E71], [0x9E72]
+          COMPARE [0x9E72], 2 / IFLT     / GOTO fail / LOADCHARACTER [0x9E71]
+```
+
+DOS skill 83 is `Notice`; Genesis skill 5 is `perception`; `skillmap.MAP` marks
+that pair as an exact match of meaning.
+
+**The threshold is the engine's own.** `0x022`/`0x023` both fall through to
+`0x04E52`, which rolls at `0x04F20` and then decides what to print:
+
+```
+    004EAE  cmp.b #$1, d0
+    004EB2  bls.b $4ec6        ; <= 1 prints the failure line
+```
+
+So >= 2 is success by the engine's definition, and the script's `COMPARE 2 /
+IFLT` agrees with it. Argument wiring also checked: the second variable receives
+the character who noticed (`0x04F16`), the third receives the result
+(`0x04F08`), which is the one the script tests.
+
+Still open: whether Countdown's RAM ASSASSIN is statistically heavier than
+Matrix Cubed's. That needs the 214-byte monster record decoded, which
+`docs/monster_map.md` already lists as outstanding. A quick attempt to parse the
+roster at `0x9E77C` produced 27 records with unreadable names against the 54
+expected, so that offset or layout is wrong too and nothing should be concluded
+from it.
