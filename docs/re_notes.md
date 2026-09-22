@@ -4240,3 +4240,46 @@ structural rather than a bug in any one table.
 
 `boostparty.py --strong` exists for getting past it while testing. A real fix
 would be a starting party at the level Matrix Cubed assumes.
+
+### What the starting party should be
+
+Matrix Cubed ships **no pregenerated team**. `CHARS.DAX` is 72 blocks of 758
+bytes with no named character in any of them, and nothing else in the DOS data
+holds a party. That is deliberate: it is Volume II, and it expects one imported
+from Countdown to Doomsday. A DOS player who makes a fresh team instead starts
+at level 1 -- the creation handlers set exp-to-next to 1250-2000, the first
+level's threshold -- so a new DOS party is *weaker* than what the port ships,
+not stronger.
+
+The port inherits Countdown's own pregens: level 2, 11 to 25 hit points.
+
+Reading the opening dock's script against the monster roster says plainly what
+it is built for:
+
+```
+    8 x RAM ASSASSIN      level 6, 42 hp
+    6 x MER. WARRIOR      level 7, 49 hp
+    5 x MER. H.S. ROBOT   level 7, 77 hp
+    6 x TECHNICIAN        level 4, 16 hp
+    5 x PURGE WARRIOR     level 2, 16 hp
+```
+
+Groups of five to eight, mostly level 6 and 7, in the *first area*. So the
+mismatch is not subtle and it is not a balance opinion: the team is four levels
+below the content on its opening map.
+
+`boostparty.py --veteran` builds what an imported party would look like --
+level 6, hit points scaled by each character's own points-per-level so the
+warriors stay the tough ones, existing skills scaled with them and capped at
+twice level, and perception brought up for everyone because the game gates set
+pieces on it and a party check takes the best score.
+
+```
+    FLAVIUS  level 2 -> 6, hp 25 -> 75      NICHOLE  level 2 -> 6, hp 15 -> 45
+    CELESTE  level 2 -> 6, hp 23 -> 69      ROARKE   level 2 -> 6, hp 11 -> 33
+    PIERRE   level 2 -> 6, hp 17 -> 51      JANELLE  level 2 -> 6, hp 11 -> 33
+```
+
+This is the honest build. `--strong` (99 hp, 18s across the board, every skill
+at 10) remains for pushing through content to check it, and should not be used
+to judge difficulty.

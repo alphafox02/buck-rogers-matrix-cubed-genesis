@@ -49,7 +49,7 @@ back correctly on the shipped team):
     +0x31         skills, one byte each
 
 Usage:
-    boostparty.py <in.gen> <out.gen> [--strong] [skill=value ...]
+    boostparty.py <in.gen> <out.gen> [--veteran|--strong] [skill=value ...]
 """
 
 import struct
@@ -80,6 +80,28 @@ STRONG_ATTR = 18
 STRONG_SKILL = 10
 SKILL_COUNT = 19
 
+# A party at the level Matrix Cubed actually assumes.
+#
+# Matrix Cubed is Volume II. DOS ships no pregenerated team at all -- CHARS.DAX
+# holds no named characters -- because it expects a party imported from
+# Countdown to Doomsday, already several levels in. A player who makes a fresh
+# team in DOS starts at level 1, which is worse still.
+#
+# The port inherits Countdown's own pregens instead: level 2, 11 to 25 hit
+# points. What the opening dock spawns at them, read out of its script and the
+# monster roster:
+#
+#     8 x RAM ASSASSIN     level 6, 42 hp
+#     6 x MER. WARRIOR     level 7, 49 hp
+#     5 x MER. H.S. ROBOT  level 7, 77 hp
+#     6 x TECHNICIAN       level 4, 16 hp
+#
+# So level 6 is not a guess -- it is what the first area fights with. Hit
+# points scale each character by the same points-per-level they already have,
+# which keeps the team's internal balance (the warriors stay the tough ones)
+# instead of flattening everyone to one number the way --strong does.
+VETERAN_LEVEL = 6
+
 
 def records(raw):
     for k in range(len(raw) // RECORD):
@@ -89,10 +111,34 @@ def records(raw):
             yield k, off, name
 
 
-def boost(rom: bytes, want, strong=False):
+def veteran(raw, off, name, level):
+    """Bring one character up to `level`, keeping its own shape."""
+    was = raw[off + LEVEL] or 1
+    hp_was = raw[off + HP]
+    raw[off + LEVEL] = level
+    raw[off + HP] = min(250, round(hp_was / was * level))
+    cap = level * 2
+    grown = []
+    for i in range(SKILL_COUNT):
+        at = off + SKILLS + i
+        if raw[at]:
+            raw[at] = min(cap, round(raw[at] / was * level))
+            grown.append(i)
+    # Every character needs some perception: the game gates set pieces on it,
+    # and a party check takes the best score, so a team of zeroes never passes.
+    per = off + SKILLS + PERCEPTION
+    raw[per] = max(raw[per], level)
+    print(f"  {name:10s} level {was} -> {level}, hp {hp_was} -> {raw[off + HP]}, "
+          f"{len(grown)} skills scaled, perception {raw[per]}")
+
+
+def boost(rom: bytes, want, strong=False, vet=False):
     raw = bytearray(genesis_ecl.decompress(rom[TEAM:], limit=0x8000))
     for _k, off, name in records(raw):
         cap = raw[off + LEVEL] * 2
+        if vet:
+            veteran(raw, off, name, VETERAN_LEVEL)
+            continue
         if strong:
             hp_before = raw[off + HP]
             raw[off + HP] = STRONG_HP
@@ -126,11 +172,12 @@ def boost(rom: bytes, want, strong=False):
 if __name__ == "__main__":
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
     strong = "--strong" in sys.argv[3:]
+    vet = "--veteran" in sys.argv[3:]
     want = dict(DEFAULT)
     for arg in sys.argv[3:]:
         if "=" in arg:
             k, v = arg.split("=")
             want[int(k)] = int(v)
-    out = integrity.repair(boost(src.read_bytes(), want, strong))
+    out = integrity.repair(boost(src.read_bytes(), want, strong, vet))
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'BAD'}; wrote {dst}")
