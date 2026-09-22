@@ -3446,3 +3446,37 @@ The dock issues LOADPIECES 4, so table 1, whose entry for wall code 8 -- the
 courtesy console -- is piece 5. Whether piece 5 of set 3's library reads as
 a console is the open question, and it is a ten-way choice that can be
 tested rather than reasoned about.
+
+### What 0x0918A8 and 0x0EBE89 really are
+
+Settled by experiment rather than reading: repaint every tile of both
+resources a flat green, inject, boot. The green covers the entire
+right-hand HUD -- the panel frame around the picture window -- and the
+corridor is untouched.
+
+So they are the status panel, not walls, and the note above calling
+[0xB53E]/[0xB542] the "wall slots" was wrong.
+
+Read off the running game standing on the dock:
+
+```
+[0xB52A] = 3        the set, as predicted
+[0x9AFB] = 1        the pieces index
+[0xB556] = 0        terrain slots empty
+[0xB536] = 0        and so are the other resource slots
+[0xB57A] = FFFFB452 the renderer's sources are RAM descriptors
+```
+
+Every ROM-resource slot is empty on the dock, which means the corridor's
+tiles are not loaded through any of them. Its tiles do exist in VRAM --
+103, 104, 102, 107 and neighbours -- and none appears raw in the ROM, so
+they arrive compressed by a path not yet found.
+
+The palette table at 0xF16AA turns out to be exactly what
+docs/art_conversion.md already recorded: twelve WALL palettes on CRAM line
+2, selected by LOADPIECES. 0x0976C loads one of those, not tiles.
+
+What this stretch did settle is that injection works. `tools/injectwalls.py`
+builds a resource, compresses it, places it at 0x1B5000, repoints the
+loader's lea and repairs the checksum, and the change shows on screen. The
+machinery is proven; only the target is wrong.
