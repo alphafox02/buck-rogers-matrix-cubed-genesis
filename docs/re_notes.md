@@ -4100,3 +4100,48 @@ treating as the end of a run. Across the whole scenario that adds **38 page
 breaks** and promotes 36 prints to clears, so this was not a one-off: it was
 wrong everywhere a conditional sat between two prints, which is the engine's
 normal idiom for anything with a variable in it.
+
+### Checking the text rather than trusting the transpiler
+
+`transpile.py` simulates the 35x4 window and inserts page breaks, and the bug
+above shows what that is worth on its own: it was wrong for months and a person
+reading a screenshot found it. So `tools/textcheck.py` now replays the runs in a
+**built** ROM's disassembly and reports every page that does not fit. It shares
+no code with the transpiler on purpose -- agreement between two copies of the
+same mistake proves nothing.
+
+Two more terminators turned up once the checker existed:
+
+* **GOSUB.** A call does not reset the window, but the simulation ended its run
+  at one, losing every break after it. That is what put "DR. MAKALI, COME WITH
+  ME" over the top of "YOU JUMP OFF THE SHUTTLE ONTO THE OPEN DECK OF THE
+  MINING RIG."
+* **INPUT_RETURN.** Read the two opcodes and it is obvious: `PRINT_CLEAR` at
+  `0x036E6` calls the clear at `0x1343E` and then falls into `PRINT`, while
+  `CONTINUE` at `0x0399E` only sets `$d595` and waits for a button. **A page
+  break does not clear the window.** Text after one lands on top of the page
+  still showing.
+
+Scoring the whole scenario:
+
+```
+    port, before   24 pages overflow
+    port, after    10
+    stock Countdown 17          (for reference -- the original is not clean)
+```
+
+Of the ten left, **two are Countdown's own**: area 0x43 at 002D8 and 00C35,
+Commander Gilbert's speeches, present at identical offsets in the stock ROM
+because that area was never transplanted. They overflow in the original game.
+
+The other eight are all formatted service screens built from runs of
+`PRINT_RETURN` -- the bank (area 14), salvage (13), the ship status readouts
+(5F) and a computer console (54). Whether those really overflow or are drawn in
+a taller window is **not established**; every one of them would need looking at
+in game. They are listed here rather than fixed, because a page break inserted
+into the middle of a formatted table would be worse than the thing it fixes.
+
+A note on writing a checker for this: `RETURN` between two prints means they are
+alternative branches of a subroutine and only one of them runs. Counting both
+invents overflows that are not there -- the first version of this file reported
+16 and most were that mistake.

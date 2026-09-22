@@ -599,10 +599,26 @@ def transpile(block: bytes, flags=None):
     # land back on the first two. The player reads "NEVERTHELESS, HERE IS
     # PAYMENT FORND / YOUR SERVICES.'TH BERKELEY DEAD" -- the ND and TH being
     # what is left of HAND and WITH underneath.
+    # GOSUB is here on purpose, and it is the one that needs an argument.
+    # A call does not reset the window, so ending the run at one loses every
+    # page break after it -- which is how "YOU JUMP OFF THE SHUTTLE ONTO THE
+    # OPEN DECK OF THE MINING RIG." kept running over its own continuation.
+    # The risk is a subroutine that prints, which this cannot see and would
+    # under-count. That is no worse than the alternative: today the run ends
+    # and the page overflows for certain. tools/textcheck.py re-checks the
+    # built ROM independently, so an under-count shows up there.
     WINDOW_TRANSPARENT = {
         "AND", "OR", "COMPARE", "ADD", "SUB", "WRITE_MEM", "SAVE",
         "IF_EQUALS", "IF_NOT_EQUALS", "IF_LESS", "IF_GREATER",
         "IF_LESS_EQUALS", "IF_GREATER_EQUALS",
+        "GOSUB", "SOUND_EVENT", "DELAY",
+        # INPUT_RETURN waits for a button; it does NOT clear the window.
+        # PRINT_CLEAR at 0x036E6 calls the clear at 0x1343E and then falls
+        # into PRINT, while CONTINUE at 0x0399E only sets $d595 and waits.
+        # So text after a page break lands on top of the page still showing,
+        # which is what put "DR. MAKALI, COME WITH ME" over the top of "YOU
+        # JUMP OFF THE SHUTTLE ONTO THE OPEN DECK OF THE MINING RIG."
+        "INPUT_RETURN",
     }
 
     breaks = {}
