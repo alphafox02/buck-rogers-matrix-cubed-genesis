@@ -3343,3 +3343,38 @@ it should look like. What is missing is the cut list: which box goes where
 on screen for a wall one, two or three squares ahead. That is the last
 thing needed before the art can be rebuilt for the Genesis rather than
 merely read.
+
+### The cut list, found by matching the screen against the atlas
+
+The atlas can be cut without guessing, because the game will show you where
+the boxes are. Take a DOS screenshot of a known wall -- the dock's courtesy
+console -- halve it back to 320x200, and match each 8x8 screen cell against
+the deco's tiles. Colour matching fails, because the extracted tiles carry
+a different palette, but matching on PATTERN does not: reduce each block to
+which pixels share a colour and compare that. 98 cells matched, on an
+8-pixel grid aligned at the origin.
+
+That gives the tile index in every screen cell, and those indices can then
+be looked for in the record:
+
+```
+screen row y=56   99 1B 2B 2E 2C 99 1B   found at atlas offset 75
+screen row y=64   1D 99 28 2A 1F 1B 99                        82
+screen row y=72   99 1D 17 2D 29 1B 1D                        89
+screen row y=80   1B 1D 13 12 27 1B 1B                        96
+```
+
+Seven apart, every time. So the piece is seven cells wide, and walking back
+from there the whole box is **atlas[61:110], 7 wide by 7 tall** -- the wall
+directly ahead at one square. Cut and rendered on its own it is the console
+exactly as the game draws it: POWER label, the blue-to-red gradient bar,
+the orange readout, the row of lights, the red fixture, panelled columns
+and brick above. See art_preview/walls/console_side_by_side.png.
+
+The flanking columns on screen are not part of that box -- they are the
+side walls, drawn either side of it.
+
+So the method for the rest is settled: screenshot a wall at a known
+distance, pattern-match the cells, find the run in the record, and the box
+falls out. One box down, and each remaining distance and angle is the same
+exercise.
