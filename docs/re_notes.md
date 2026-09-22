@@ -3378,3 +3378,32 @@ So the method for the rest is settled: screenshot a wall at a known
 distance, pattern-match the cells, find the run in the record, and the box
 falls out. One box down, and each remaining distance and angle is the same
 exercise.
+
+### The Genesis side can be read the same way
+
+The same pattern-matching that found the DOS atlas boxes works on the port.
+Take a screenshot of the dock, signature every 8x8 cell by which pixels
+share a colour, and match against the 4bpp tiles of the five wall
+resources: 83 cells match, split between 0x0918A8 (40) and 0x0EBE89 (43) --
+exactly the two resources the loader installs for set 3, which is the
+dock's.
+
+That closes the loop. Both sides can now be read from a screenshot:
+
+```
+DOS      screenshot -> tile indices -> WALLDEF1 record -> atlas box
+Genesis  screenshot -> tile indices -> wall resource   -> library cell
+```
+
+So the shape of the injection is clear. The cheapest useful version keeps
+the Genesis nametable exactly as it is and replaces only the tile
+GRAPHICS with Matrix Cubed's, converted to 4bpp: the corridors would then
+be drawn with Matrix Cubed's pixels in Countdown's geometry. The faithful
+version also rebuilds the nametable so the pieces match Matrix Cubed's own
+perspective, which needs the rest of the DOS cut list.
+
+Neither is done. What stands in the way of even the cheap version is
+palette: the DOS art is 8-bit VGA with its own palette per deco, the
+Genesis is 4bpp with sixteen colours a tile from a shared palette, and
+quantising badly is how art ends up looking wrong even when every index is
+right.
