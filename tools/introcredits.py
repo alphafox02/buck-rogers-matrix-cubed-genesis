@@ -49,7 +49,7 @@ COLS, ROWS = 40, 28
 # Matrix Cubed card show through and the credits come out unreadable on top of
 # it. The background here is a non-zero index that happens to be black.
 BG, INK, DIM = 15, 1, 2
-PALETTE = {BG: (0, 0, 0), INK: (0, 7, 0), DIM: (0, 5, 0)}   # 3-bit RGB
+PALETTE = {BG: (0, 0, 0), INK: (0, 7, 0), DIM: (2, 6, 2)}   # 3-bit RGB
 
 # Straight out of dos_game/matrix/GAME.OVR. `True` marks a bright line.
 LINES = [
@@ -59,9 +59,9 @@ LINES = [
     ("RHONDA GILBERT          RUSS BROWN", False),
     ("                        KERRY BONIN", False),
     ("", False),
-    ("ENCOUNTER CODE:        GRAPHIC ARTS:", True),
-    ("DAVE SHELLEY            CHRIS CARR", False),
-    ("                        LAURA BOWEN", False),
+    ("ENCOUNTER CODE:", True),
+    ("DAVE SHELLEY           GRAPHIC ARTS:", None),
+    ("CHRIS CARR              LAURA BOWEN", False),
     ("TOM ONO                 FRED BUTTS", False),
     ("KEN EKLUND              MAURINE STARKEY", False),
     ("TONY VAN                MIKE PROVENZA", False),
@@ -79,6 +79,9 @@ LINES = [
     ("CHRIS WARSHAUER, JAMES YOUNG", False),
 ]
 
+# A line marked None is mixed: a name on the left, a heading on the right,
+# which is how DOS sets "DAVE SHELLEY  GRAPHIC ARTS:". The split is the run of
+# spaces before the heading.
 TOP = 2          # leave a couple of rows above
 
 
@@ -113,8 +116,14 @@ def tiles_and_map():
         row = TOP + r
         if row >= ROWS:
             raise SystemExit(f"credits need {TOP + len(LINES)} rows, screen has {ROWS}")
-        colour = INK if bright else DIM
+        split = None
+        if bright is None:                  # name left, heading right
+            split = text.rstrip().rfind("  ") + 2
         for c, ch in enumerate(text[:COLS]):
+            if bright is None:
+                colour = INK if c >= split else DIM
+            else:
+                colour = INK if bright else DIM
             nt[row * COLS + c] = tile_for(ch.upper(), colour)
     return tiles, nt
 
