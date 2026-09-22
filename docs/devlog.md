@@ -2103,3 +2103,48 @@ branch lands. Two sites, both in area 0x11, and the build log says so.
 Verified by driving it: shop door, in, out, then on to the clinic and the
 autodoc. Tile 0x774 reads `00 22 22 22 ...` at every step and the sprite
 count never leaves 73.
+
+## The long session: DOS driven end to end, and the art read
+
+Two days in one sitting. What came out of it, in the order it happened.
+
+**The DOS original became drivable.** The copy protection is answerable from
+the data -- all 26 questions and answers sit in START.EXE at 0x0E200,
+reversed with a key stored twice beside them (`tools/dosprotect.py`). The
+screen became readable: the game's own 8x8 font is block 201 of 8X8D1.DAX,
+stored rotated so index 0 is '@', and DOSBox doubles the mode, so a cell is
+16x16 on screen and halves back exactly (`tools/dosocr.py`). And prompts
+became answerable rather than guessable -- DOS has two resting states and
+only one of them moves anybody.
+
+**The dock was played through in both games** and matches square for
+square, including the RAM assassin ambush that looked like a transplant
+fault and is not. The dock's gate is one counter, [0x4C2C], and the
+security forces at 5,10 can only be QUESTIONED once: fighting them sets a
+bit their own guard tests, which strands the playthrough permanently. That
+cost hours before it was understood.
+
+**Salvation, space, and Tycho were mapped** (`docs/world.md`), and all 37
+of the port's areas were toured and written down (`docs/areas.md`), which
+turned up seven areas still carrying Countdown's own scripts.
+
+**The star map is the one real gap.** The port has every destination name
+and the whole fourteen-way dispatch, but not the thirteen bodies'
+coordinates -- the DOS engine supplies those, so they arrived as story
+flags full of zeroes. The planets also orbit, measured across two readings.
+The Genesis engine turns out to contain a star map of its own at view mode
+6 that Countdown never enters, and four ways of waking it were tried and
+eliminated; the trigger is upstream of anything a script can say.
+
+**The wall art was decoded.** 8X8D1.DAX is the source, not LOTEK/HITEK: 256
+8x8 tiles per deco, indexed by WALLDEF1's fifteen 156-byte records. A record
+is an atlas, not a picture -- the same wall at every view position, with the
+game's magenta between the boxes. Which box goes where can be read off a
+screenshot by matching cells on PATTERN rather than colour, and that put the
+dock's courtesy console at atlas[61:110], seven by seven, rendering exactly
+as the game draws it.
+
+Still open: the rest of the cut list, and whether it is the same for every
+wall code -- a first pass across fresh captures found an eleven-wide run
+where the console's rows are seven, which is either a wider piece or a
+false match, and is the next thing to settle.
