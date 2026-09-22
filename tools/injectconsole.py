@@ -267,8 +267,10 @@ if __name__ == "__main__":
     piece = int(nums[0]) if nums else PIECE
     region = tuple(int(n) for n in nums[1:5]) if len(nums) >= 5 else REGION
     style = next((a for a in sys.argv[3:] if a in ("drawn", "dos")), "dos")
+    recolour = "--nopal" not in sys.argv[3:]
     state = Path(sys.argv[-1]) if sys.argv[-1].endswith(".state") else None
     out = build(src.read_bytes(), piece, region, state, style=style,
+                recolour=recolour,
                 preview=REPO / "art_preview/walls/06_console_piece.png")
     out = integrity.repair(out)
     dst.write_bytes(out)
