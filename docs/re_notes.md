@@ -4189,3 +4189,54 @@ this a patch instead of a relocation. The new routine is 72 bytes.
 
 The first attempt looked like scrambled text and sent me hunting for a stride
 bug. It was all three of the above at once.
+
+### The monster roster, decoded -- and the difficulty question answered
+
+`docs/monster_map.md` has listed the 214-byte monster record as outstanding,
+and an earlier attempt here read the stream at `0x9E77C` and got 27 records with
+unreadable names. That address is stale: in the built ROM the roster is
+**compressed at 0x1B1000**, 19352 bytes, and it is laid out exactly as the GEO
+stream is:
+
+```
+    u16   count                      90 in this build
+    u8    count ids                  54 of Countdown's plus 36 added
+    n x   214-byte records           from offset 2 + count
+```
+
+**A monster record is a character record.** The same offsets decoded from the
+party work on it unchanged -- name at +0x00, attributes at +0x10, career at
++0x17, level at +0x19, hit die at +0x26, hit points at +0x2E:
+
+```
+    D.R. WARRIOR    level 5   35 hp        RAM ASSASSIN   level 6   42 hp
+    DESERT APE      level 8   48 hp        SPACE RAT      level 2   10 hp
+```
+
+DOS keeps its own in `MON0CHA.DAX`, 63 blocks of 259 bytes, length-prefixed
+name but attributes still at +0x10, and class/level at +0x28/+0x29.
+
+**So: is the port harder than DOS?** A play session found the coronation ambush
+brutal, and the honest answer had been "not established". It is now. Comparing
+every creature `monstermap.MAP` pairs up:
+
+```
+    63 mapped creatures:  5 the same level,  19 higher on Genesis,  39 LOWER
+```
+
+The substitutions err heavily toward *weaker*, sometimes drastically -- DOS's
+SID REFUGE at level 12-15 becomes a level 6 LL. WARRIOR, a level 13 CARNIFERN
+becomes a level 3 SWAMP HORNET. The coronation's own creature is among them:
+DOS RAM ASSASSIN is class 3 level 7, the Genesis one class 3 level 6.
+
+So the fight is not hard because the monsters are inflated. They are deflated.
+
+What makes it hard is the other side of the arithmetic. Matrix Cubed is Volume
+II: DOS expects a party imported from Countdown to Doomsday, already several
+levels in. The port hands the player Countdown's own pregenerated team --
+**level 2**, 11 to 25 hit points, and before today one character with one
+skill. Eight level-6 assassins against that is the mismatch, and it is
+structural rather than a bug in any one table.
+
+`boostparty.py --strong` exists for getting past it while testing. A real fix
+would be a starting party at the level Matrix Cubed assumes.
