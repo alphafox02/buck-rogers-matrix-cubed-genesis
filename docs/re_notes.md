@@ -3480,3 +3480,149 @@ What this stretch did settle is that injection works. `tools/injectwalls.py`
 builds a resource, compresses it, places it at 0x1B5000, repoints the
 loader's lea and repairs the checksum, and the change shows on screen. The
 machinery is proven; only the target is wrong.
+
+## Genesis 3D view: where the wall art really lives
+
+Traced from the running game rather than guessed. Three corrections to earlier
+notes in this file:
+
+* `0x0F16AA` is **not** a wall-art table. It is twelve-plus wall *palettes*,
+  38 bytes each, reached through `0x0976C` (`lea $f16aa; asl #2,d0;
+  movea.l (a0,d0.w),a0`). The routine beside it, `0x0978C`, is the graphics
+  *free* call -- it fails with the string "Graphics freed out of order".
+* `0x0918A8` and `0x0EBE89` are the HUD panel, as the green flood-fill proved.
+  They are loaded at `0x084A2` / `0x084B0` into `[0xB53E]` / `[0xB542]`.
+* The engine does **not** compose wall tiles at runtime. It loads them like any
+  other resource; I had simply been looking at the wrong slots.
+
+### The graphics loader
+
+`0x09DD4` is the one generic "load resource into VRAM" call -- 55 sites call it.
+It takes `a0` = a ROM pointer to an LZW-compressed container (the format
+`tools/genwall.py` already decodes), uploads the tiles, and returns `a0` = a
+six-byte **handle**, not a resource address:
+
+```
+    handle: u16 vram_tile_base
+            u32 pointer to the relocated nametable in work RAM
+```
+
+Handles are pushed on a stack that starts at `0xFFB440`, with the top in
+`[0xB43C]`; freeing anything but the newest is the "out of order" error. After
+upload, `0x09DD4` walks the nametable and adds `vram_tile_base` to each word's
+low eleven bits, leaving the top five (priority/palette/flip) alone.
+
+### Reading the live handles
+
+On the Salvation dock, in the corridor view, the stack held six handles:
+
+```
+    0xB440  base  70   23 tiles, no nametable   <- 0x0647D7  (loaded at 0x0128A)
+    0xB446  base  93   19 tiles, 36-byte nt     <- 0x06B888  (0x084C2/E0/FE)
+    0xB44C  base 111   77 tiles, 528-byte nt
+    0xB452  base 188  248 tiles, 1360-byte nt
+    0xB458  base 436   55 tiles, 960-byte nt    <- 0x0918A8  (HUD)
+    0xB45E  base 491   32 tiles, 680-byte nt    <- 0x0EBE89  (HUD)
+```
+
+The identification method is worth keeping: take the tile base of each handle,
+and the nametable length as the gap to the next handle's pointer, then match
+that `(tile count, nametable length)` pair against every resource fed to
+`0x09DD4`. Only one resource in the ROM fits each handle, so the match is exact.
+
+### The renderer's three sources
+
+`0x00CFC0` caches three handles into the 3D view's stack frame:
+
+```
+    [0xB57E] -> handle 0xB44C   base 111
+    [0xB576] -> handle 0xB446   base  93
+    [0xB57A] -> handle 0xB452   base 188, plus a second region at +0x1D0
+```
+
+These three slots are never written by an absolute store, which is why grepping
+for `move.l a0,$b576.w` found nothing -- they are filled through a base address
+passed in `d6` (`move.l #$b57a,d6` at `0x00B54A`).
+
+### 0x06B888 is the wall decal pair
+
+It decodes to nineteen tiles and an eighteen-cell nametable: two 3x3 blocks,
+i.e. two 24x24 props, one on palette 1 and one on palette 0.
+
+```
+    cells  0-8   tiles 0,1,2, 7,8,9, 13,14,15   palette 1
+    cells  9-17  tiles 3,4,5, 10,11,12, 16,17,18 palette 0
+```
+
+All three branches at `0x084BC` / `0x084DA` / `0x084F8` load this same resource,
+each pairing it with a different bulk resource (`0x0ECFCE`, `0x09B47A`, or the
+routine at `0x15436`). So it is a shared prop set for the 3D view, and a 24x24
+prop is exactly the shape Matrix Cubed's courtesy console needs.
+
+To repoint it, patch the `lea.l $6b888.l, a0` operand at `0x084BE`, `0x084DC`
+and `0x084FA` (each `lea` sits six bytes before its `bsr`).
+
+### The five piece-set tables (this is the real answer)
+
+`0x06B888` was a red herring: it is nineteen tiles where the live handle wants
+eighteen, and fingerprinting proved it never loads on the dock. The 3D view's
+art comes from **five parallel ten-entry pointer tables**, all sitting together
+just past the wall palettes:
+
+```
+    0x0F16AA   25 entries   wall palettes, 38 bytes each
+    0x0F170E   10 entries   table A  528-byte nametable (264 cells)
+    0x0F1736   10 entries   table B  464-byte nametable (232 cells)
+    0x0F175E   10 entries   table C   36-byte nametable  (18 cells)
+    0x0F1786   10 entries   table D  324-byte nametable (162 cells)
+    0x0F17AE   10 entries   table E  540-byte nametable (270 cells)
+```
+
+Every table is indexed by the same **wall set number, 0-9**. Tile counts vary
+per entry but the nametable length is constant down each table, which is what
+makes the tables recognisable in the first place.
+
+Rendered with the live CRAM palettes, set 1 reads as:
+
+* **A** -- flat, front-facing wall faces: panels, machinery, lit fittings.
+* **B** -- the angled side faces, diagonal wedges for walls seen in perspective.
+* **C** -- two 3x3 props, 24x24 each. On the dock these are the gravel ground
+  and the brick face.
+
+`0x00CFC0` caches exactly three of them into the 3D view's stack frame:
+
+```
+    [0xB57E] -> table A nametable        -> -0x04(a6)
+    [0xB576] -> table C nametable        -> -0x0C(a6)
+    [0xB57A] -> table B nametable        -> -0x08(a6)
+                table B nametable+0x1D0  -> -0x3E(a6)
+```
+
+`0x1D0` is 464, the whole length of a table B nametable, so the second region is
+the copy that follows it. Tables D and E do not load on the dock; table D index
+6 turned up at VRAM 673 from some other view.
+
+### How to identify any loaded resource, reliably
+
+This is the technique that finally worked, after guessing at `lea` targets failed
+twice:
+
+1. Read the handle stack at `0xFFB440` out of a savestate. Each handle is
+   `u16 vram_tile_base, u32 nametable pointer`.
+2. A handle's tile count is the gap to the next handle's base; its nametable
+   length is the gap to the next handle's nametable pointer.
+3. Scan every 32-bit value in the ROM that looks like a pointer, try to read a
+   container at it, and keep the ones whose `(tiles, nametable bytes)` match.
+   The pairs are distinctive enough that this returns a handful.
+4. Confirm by **fingerprinting**: rebuild each candidate with every tile filled
+   with a unique byte, repoint the table entry, boot, and read VRAM back. The
+   byte that shows up at the handle's tile base names the entry exactly.
+
+Fingerprinting all 43 `lea`-reachable resources at once crashes the boot -- one
+of them is the font and the menu reader goes blind. Fingerprint the 50 table
+entries instead; those are all 3D art and are safe.
+
+### Salvation dock
+
+Wall set **1**: table A `0x0A0C33` (77 tiles), table B `0x06E0BA` (68), table C
+`0x08F032` (18). Confirmed by fingerprint, not inference.
