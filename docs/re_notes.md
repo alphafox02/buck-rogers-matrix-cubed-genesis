@@ -3930,3 +3930,47 @@ Matrix Cubed's. That needs the 214-byte monster record decoded, which
 roster at `0x9E77C` produced 27 records with unreadable names against the 54
 expected, so that offset or layout is wrong too and nothing should be concluded
 from it.
+
+### Where characters live, and why Notice checks kept failing
+
+The engine keeps characters as **214-byte records from 0xFFBA68** -- the base
+the skill check itself uses, `lea.l $ba68.w, a2` at `0x04F2E`. Within a record:
+
+```
+    +0x00   name, ASCII, NUL-terminated
+    +0x10   six attributes  (FLAVIUS: 17 16 18 15 17 14)
+    +0x19   level
+    +0x31   skills, one byte each, indexed by skill id
+```
+
+The skill offset is the engine's own: `move.b $31(a2, d1.w), d4` at `0x04FC6`,
+with `d1` the skill id. Genesis skill 5 is perception, so it is record+0x36.
+
+The shipped pregenerated team reads:
+
+```
+    FLAVIUS 0   CELESTE 0   PIERRE 2   NICHOLE 0   ROARKE 0   JANELLE 0
+```
+
+One character has the skill at all. Since a party skill check takes the best
+score in the party, every Notice roll in the game was Pierre's 2 against a die,
+which is why the coronation menu kept not appearing.
+
+A skill's contribution is capped at twice the character's level -- `move.b
+$19(a2),d0; asl.b #1,d0` at `0x04FCC` -- so at level 2 anything above 4 goes
+down a different scaling branch. 4 is the highest ordinary in-range score.
+
+**The team is editable.** It is stored compressed at `0x06BAAD`, 1920 bytes
+decompressed: six 214-byte records then two empty slots. One reference points
+at it, `lea.l $6baad.l, a0` at `0x001F32`. So the same decompress / edit /
+recompress / repoint pattern as the wall art applies, and
+`tools/boostparty.py` does it.
+
+Free space in this build, measured rather than assumed:
+
+```
+    0x1B2100-0x1B4000   0x1B4300-0x1B5000   0x1BBE00-0x1C0000
+    0x1D3500-0x1E0000   0x1F9600-0x1FA000   0x1FDB00-0x200000
+```
+
+`injectconsole.py` uses 0x1B5000; `boostparty.py` uses 0x1BBE00.
