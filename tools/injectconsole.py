@@ -33,7 +33,7 @@ the row of lights. At 24x32 the lettering cannot survive, but that is the same
 bargain the port's own numbered doors make.
 
 Usage:
-    injectconsole.py <in.gen> <out.gen> [piece col row w h]
+    injectconsole.py <in.gen> <out.gen> [piece col row w h] [drawn|dos]
 """
 
 import struct
@@ -56,14 +56,29 @@ CONSOLE = REPO / "art_preview/walls/console_cut_from_atlas.png"
 CROP = (96, 84, 244, 268)     # the console face alone -- no silver pillars
 
 
+# Wall palette line 2, measured off the screen.
+#
+# Do NOT try to read this out of a GENPLUS savestate: it does not keep CRAM as
+# raw Genesis colour words, so decoding 0000BBB0GGG0RRR0 at any offset gives
+# invented colours -- an earlier version of this file did exactly that and the
+# console came out muddy, with amber where the hardware draws grey.
+#
+# The honest way is to ask the machine. Flood one piece with a single colour
+# index, remap the common wall codes to that piece so it fills the view, boot,
+# and read the pixels back; repeat for all sixteen indices. Index 0 is
+# transparent on plane A, so it reports whatever is behind it.
+PALETTE = {
+    1: (0, 236, 0), 2: (0, 0, 0), 3: (232, 236, 64), 4: (168, 32, 0),
+    5: (232, 236, 64), 6: (200, 68, 32), 7: (136, 136, 136),
+    8: (96, 32, 32), 9: (96, 68, 64), 10: (200, 100, 64),
+    11: (232, 236, 232), 12: (200, 68, 32), 13: (168, 168, 0),
+    14: (200, 0, 0), 15: (136, 0, 0),
+}
+
+
 def cram(state: Path, line: int):
-    """One palette line as RGB, read from a savestate rather than guessed."""
-    st = state.read_bytes()
-    out = []
-    for i in range(16):
-        w = struct.unpack_from(">H", st, 0x22424 + (line * 16 + i) * 2)[0]
-        out.append((((w >> 1) & 7) * 36, ((w >> 5) & 7) * 36, ((w >> 9) & 7) * 36))
-    return out
+    """The wall palette. `state` is kept for the call signature only."""
+    return PALETTE
 
 
 def quantise(img, pal):
@@ -73,10 +88,73 @@ def quantise(img, pal):
     for y in range(img.height):
         for x in range(img.width):
             r, g, b = px[x, y][:3]
-            out.append(min(range(1, 16), key=lambda k:
+            out.append(min(pal, key=lambda k:
                            (pal[k][0] - r) ** 2 + (pal[k][1] - g) ** 2
                            + (pal[k][2] - b) ** 2))
     return out
+
+
+
+def drawn_console(w, h):
+    """The console drawn at native resolution, in the measured wall palette.
+
+    Scaling the DOS art down to 24x24 loses it: the lettering goes, the bezel
+    turns to mush, and every edge lands between pixels. This keeps the DOS
+    console's actual design -- metal bezel, dark screen, a spectrum bar, the
+    amber plate, a row of indicator lights -- and draws each element on the
+    pixel grid instead, which is what the port's own fittings do.
+    """
+    W, H = w * 8, h * 8
+    g = [[7] * W for _ in range(H)]
+
+    def rect(x0, y0, x1, y1, c):
+        for y in range(max(0, y0), min(H, y1 + 1)):
+            for x in range(max(0, x0), min(W, x1 + 1)):
+                g[y][x] = c
+
+    rect(0, 0, W - 1, H - 1, 2)            # black outline
+    rect(1, 1, W - 2, H - 2, 7)            # grey body
+    rect(1, 1, W - 2, 1, 11)               # lit top edge
+    rect(1, H - 2, W - 2, H - 2, 9)        # shadowed bottom edge
+
+    # the screen, inset behind a dark surround
+    sx0, sy0, sx1, sy1 = 2, 3, W - 3, H // 2 - 1
+    rect(sx0, sy0, sx1, sy1, 9)
+    rect(sx0 + 1, sy0 + 1, sx1 - 1, sy1 - 1, 2)
+
+    # a label across the top of the screen, lettering suggested by gaps
+    ly = sy0 + 2
+    rect(sx0 + 2, ly, sx1 - 2, ly + 1, 11)
+    for x in range(sx0 + 4, sx1 - 2, 3):
+        rect(x, ly, x, ly + 1, 2)
+
+    # the spectrum bar: green through yellow and orange to red
+    band = [1, 1, 13, 13, 3, 3, 10, 10, 6, 6, 14, 14, 15, 15]
+    by = ly + 3
+    span = sx1 - 2 - (sx0 + 2) + 1
+    for i in range(span):
+        rect(sx0 + 2 + i, by, sx0 + 2 + i, by + 1, band[i * len(band) // span])
+
+    # a green readout line under it
+    ry = by + 3
+    if ry < sy1:
+        for x in range(sx0 + 2, sx1 - 1, 2):
+            rect(x, ry, x, ry, 1)
+
+    # the amber plate
+    py0 = sy1 + 2
+    rect(2, py0, W - 3, py0 + 2, 2)
+    rect(3, py0 + 1, W - 4, py0 + 1, 3)
+
+    # the row of indicator lights
+    iy = py0 + 4
+    rect(2, iy, W - 3, iy + 1, 9)
+    for i, x in enumerate(range(3, W - 3, 3)):
+        rect(x, iy, x + 1, iy + 1, (14, 3, 1)[i % 3])
+
+    # a plinth along the bottom
+    rect(1, H - 4, W - 2, H - 3, 9)
+    return [v for row in g for v in row]
 
 
 def to_tiles(idx, w, h):
@@ -94,7 +172,8 @@ def to_tiles(idx, w, h):
     return tiles
 
 
-def build(rom: bytes, piece: int, region, state: Path, preview=None):
+def build(rom: bytes, piece: int, region, state: Path, preview=None,
+          style="drawn"):
     from PIL import Image
     entry = TABLE_A + WALL_SET * 4
     addr = struct.unpack_from(">I", rom, entry)[0]
@@ -106,9 +185,12 @@ def build(rom: bytes, piece: int, region, state: Path, preview=None):
     line = (struct.unpack_from(">H", nt, cells[0] * 2)[0] >> 13) & 3
     pal = cram(state, line)
 
-    art = Image.open(CONSOLE).convert("RGB").crop(CROP)
-    art = art.resize((w * 8, h * 8), Image.LANCZOS)
-    idx = quantise(art, pal)
+    if style == "dos":
+        art = Image.open(CONSOLE).convert("RGB").crop(CROP)
+        art = art.resize((w * 8, h * 8), Image.LANCZOS)
+        idx = quantise(art, pal)
+    else:
+        idx = drawn_console(w, h)
     if preview:
         out = Image.new("RGB", (w * 8, h * 8))
         for i, v in enumerate(idx):
@@ -136,10 +218,13 @@ def build(rom: bytes, piece: int, region, state: Path, preview=None):
 
 if __name__ == "__main__":
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
-    piece = int(sys.argv[3]) if len(sys.argv) > 3 else PIECE
-    region = tuple(int(a) for a in sys.argv[4:8]) if len(sys.argv) > 7 else REGION
-    state = Path(sys.argv[8]) if len(sys.argv) > 8 else REPO / "step.state"
-    out = integrity.repair(build(src.read_bytes(), piece, region, state,
-                                 REPO / "art_preview/walls/08_console_piece.png"))
+    nums = [a for a in sys.argv[3:] if a.isdigit()]
+    piece = int(nums[0]) if nums else PIECE
+    region = tuple(int(n) for n in nums[1:5]) if len(nums) >= 5 else REGION
+    style = next((a for a in sys.argv[3:] if a in ("drawn", "dos")), "drawn")
+    state = Path(sys.argv[-1]) if sys.argv[-1].endswith(".state") else None
+    out = build(src.read_bytes(), piece, region, state, style=style,
+                preview=REPO / "art_preview/walls/06_console_piece.png")
+    out = integrity.repair(out)
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'BAD'}; wrote {dst}")

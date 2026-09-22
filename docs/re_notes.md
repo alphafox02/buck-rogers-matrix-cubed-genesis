@@ -3764,3 +3764,43 @@ it meant in DOS, and piece 5 of set 1 is the right place for the console art.
 
 The eleven code-8 sides are DOS's own design, not a transplant artefact; the
 same eleven are in GEO1 block 17.
+
+### The wall palette, and why it looked muddy
+
+The first console build quantised against colours read out of a GENPLUS
+savestate at `0x22424`, decoding each word as `0000 BBB0 GGG0 RRR0`. That is
+wrong: GENPLUS does not store CRAM as raw Genesis colour words, so every offset
+tried gives invented colours. Scanning the whole savestate for a 128-byte run
+where every word satisfies `w & 0xF111 == 0` finds nothing, which confirms it.
+
+The consequence was not subtle. The invented line 2 had no grey in it at all,
+so the console's metalwork was being mapped onto ambers and browns more or less
+at random, and it read as a smear.
+
+The honest way is to ask the machine. Flood one piece with a single colour
+index, remap the common wall codes to that piece so it fills the view, boot,
+and read the pixels back; repeat for all sixteen indices. Wall palette line 2,
+measured that way:
+
+```
+     1 (  0,236,  0) green      2 (  0,  0,  0) black
+     3 (232,236, 64) pale yellow 4 (168, 32,  0) red-orange
+     6 (200, 68, 32) orange-red  7 (136,136,136) grey
+     8 ( 96, 32, 32) maroon      9 ( 96, 68, 64) dark grey
+    10 (200,100, 64) orange     11 (232,236,232) white
+    13 (168,168,  0) olive      14 (200,  0,  0) red
+    15 (136,  0,  0) dark red
+```
+
+Index 0 is transparent on plane A, so it reports whatever is behind it.
+
+There is a proper grey/white/green/amber range here -- enough for a console.
+
+### Drawing rather than downscaling
+
+Even with the right palette, scaling the 56x56 DOS console into 24x24 loses it:
+the lettering goes, the bezel turns to mush, and every edge lands between
+pixels. `drawn_console()` keeps the DOS design -- metal bezel, dark screen,
+spectrum bar, amber plate, a row of indicator lights -- and draws each element
+on the pixel grid, which is what the port's own fittings do. Pass `dos` instead
+of `drawn` to get the downscale back for comparison.
