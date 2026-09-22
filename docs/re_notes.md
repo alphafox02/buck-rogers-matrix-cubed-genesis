@@ -3407,3 +3407,42 @@ palette: the DOS art is 8-bit VGA with its own palette per deco, the
 Genesis is 4bpp with sixteen colours a tile from a shared palette, and
 quantising badly is how art ends up looking wrong even when every index is
 right.
+
+### How the Genesis actually picks wall art -- corrected
+
+Two separate things, and an earlier note here got their relationship wrong.
+
+**Which set.** [0xB52A] selects the case in the table at 0x083D8, and it is
+computed at 0x082AC from the view mode and the layout selector:
+
+```
+0082AC  move.b  $9bbc.w, d1      the view mode
+0082B0  cmp.b   #$6, d1   -> set 7      (the star map)
+0082BA  cmp.b   #$10, d1  -> set 9
+0082C4  move.b  $97dc.w, d0      the layout selector
+0082C8  cmp.b   #$a2, d0  -> set 1
+0082D2  cmp.b   #$a8, d0  -> set 2
+0082DC  otherwise -> set 3
+0082E6  move.w  d0, $b52a.w
+```
+
+So an area that sets neither gets **set 3**, and set 3 is a real wall set:
+its case at 0x08496 loads 0x0918A8 into [0xB53E] and 0x0EBE89 into
+[0xB542]. That is why the port's dock draws corridor walls at all, and why
+matching a dock screenshot finds tiles from exactly those two resources.
+
+The earlier claim here that the default "fills no piece tables" was wrong in
+an important way: it fills the WALL slots. What it does not fill are
+[0xB556]/[0xB55A], which only the terrain cases load -- and those are what
+0x97AD is computed from. So the 80 script sites that read 0x97AD are a
+TERRAIN problem, not a wall one, and the two are worth keeping apart.
+
+**Which piece.** LOADPIECES is the other half. Its handler at 0x158BC takes
+the argument, divides by 3, and uses that to pick one of ten 32-byte tables
+at 0x51836, kept as two 16-entry halves at [0xB41A] and [0xB41E]: wall code
+0-15 to piece number, 0xFF for nothing.
+
+The dock issues LOADPIECES 4, so table 1, whose entry for wall code 8 -- the
+courtesy console -- is piece 5. Whether piece 5 of set 3's library reads as
+a console is the open question, and it is a ten-way choice that can be
+tested rather than reasoned about.
