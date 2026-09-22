@@ -4283,3 +4283,43 @@ pieces on it and a party check takes the best score.
 This is the honest build. `--strong` (99 hp, 18s across the board, every skill
 at 10) remains for pushing through content to check it, and should not be used
 to judge difficulty.
+
+### The intro screen container, and the orphaned copyright screen
+
+**The layout was recorded wrongly.** The palette does not follow the tiles, it
+sits between the nametable and them:
+
+```
+    u16 tile count
+    u16 nametable length in bytes
+    u16 flag        4 on intro screens, meaning a palette is present
+        nametable
+        palette, 16 Genesis colour words      <- here, not at the end
+        tiles, 32 bytes each
+```
+
+The arithmetic settles it: `6 + 2000 + 32 + 95*32 = 5078`, which is the whole
+resource exactly. Reading the palette from the end gives sixteen blacks, which
+is what made the first render of a title screen come out unreadable.
+
+**What the intro's two full screens actually are.** Rendered properly:
+
+* `0x1FA000` -- the Buck Rogers logo, 268 tiles, with "SCIENCE FICTION
+  ROLE-PLAYING COMPUTER GAME, VOL. II" beneath it. It looks good; the colour
+  is fine.
+* `0x1FB708` -- **only the three copyright lines**, blue on black, 95 tiles
+  across 1000 cells of which 901 are the same blank tile.
+
+That second one is the screen a play session described as "the next screen but
+it's only got the text that should have been on the previous screen bottom",
+and the description is exact. DOS composites `TITLE.DAX` blocks 2 and 3 onto
+one screen -- the logo with the copyrights beneath it -- and the port draws
+them as two, so the copyright block appears alone on black.
+
+Fixing it means merging the three lines into the bottom rows of `0x1FA000`'s
+nametable, which the font machinery in `tools/introcredits.py` can already
+render, and then letting the freed second slot hold the credits. That would put
+the intro in DOS's order: logo with copyrights, then credits, then the title
+card. Not done -- it means rebuilding a 268-tile screen that currently works,
+and the engine expands these into whatever is free, so growing one is the part
+that needs care.
