@@ -159,6 +159,17 @@ def routine(addr):
     def at():
         return PATCH + len(code)
 
+    # The intro has already loaded three screens into -4/-8/-0xC(a6), and the
+    # graphics allocator is a STACK: 0x0978C refuses anything but the newest
+    # and calls the "Graphics freed out of order" handler. Loading a fourth
+    # over the -8 slot leaks that handle and makes the exit's frees illegal,
+    # which is what froze the machine. So the two screens this port never
+    # draws -- Countdown's subtitle banners -- are freed first, newest first,
+    # and the credits screen takes the slot that is now genuinely free.
+    code += b"\x41\xee\xff\xf4"                          # lea -$c(a6), a0
+    code += b"\x4e\xb9" + struct.pack(">I", 0x9784)      # jsr $9784  free
+    code += b"\x41\xee\xff\xf8"                          # lea -$8(a6), a0
+    code += b"\x4e\xb9" + struct.pack(">I", 0x9784)      # jsr $9784  free
     code += b"\x41\xf9" + struct.pack(">I", addr)        # lea.l addr, a0
     code += b"\x4e\xb9" + struct.pack(">I", 0x9DD4)      # jsr  $9dd4
     code += b"\x2d\x48\xff\xf8"                          # move.l a0, -8(a6)
