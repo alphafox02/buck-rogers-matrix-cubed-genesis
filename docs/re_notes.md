@@ -4145,3 +4145,47 @@ A note on writing a checker for this: `RETURN` between two prints means they are
 alternative branches of a subroutine and only one of them runs. Counting both
 invents overflows that are not there -- the first version of this file reported
 16 and most were that mistake.
+
+### The intro credits screen
+
+DOS shows a screen of names between the Buck Rogers logo and the Matrix Cubed
+card: CREATED BY: SSI SPECIAL PROJECTS TEAM, then programming, encounter code,
+graphic arts, music and playtest. The port had no such screen, and the
+thirty-odd people who made Matrix Cubed were nowhere in the ROM. The ROM does
+carry a credits roll -- a bytecode at `0x00632E` played from about `0x0061C4`,
+nine pages with a portrait each -- but it names *Countdown's* Genesis team, and
+nothing in either ROM appears to reach it.
+
+The port's intro, captured with no buttons pressed:
+
+```
+    EA logo -> Buck Rogers (with the VOL. II line) -> copyright -> Matrix Cubed
+```
+
+`tools/introcredits.py` adds the missing screen. Three things made it possible:
+
+**Room for the code.** `trim_intro.py` ends the intro by replacing
+`moveq #$6,d2 / moveq #$11,d3` at `0x001408` with `bra.w $15f0`, which leaves
+`0x00140C`-`0x0015F0` -- 484 bytes of Countdown's overlay code -- dead. No free
+space exists within a `bra.w` of the intro, so that dead region is what makes
+this a patch instead of a relocation. The new routine is 72 bytes.
+
+**The text and the typeface.** Both from the DOS game: the names out of
+`GAME.OVR`, where they sit as plain ASCII, and the glyphs from block 201 of
+`8X8D1.DAX`, the font `tools/dosocr.py` already reads screens with.
+
+**Three corrections the emulator had to teach me**, none of which were guessable:
+
+* *Index 0 is transparent.* A background of 0 let the Matrix Cubed card show
+  through and the result was unreadable. The background is now a non-zero index
+  that happens to be black.
+* *The palette line is 2.* Every intro screen's nametable words carry `0x4000`,
+  and the container's palette loads into that line. Writing line 0 drew the
+  text in whatever the previous screen had left there.
+* *The loader draws tile index + 1.* Found with a ramp screen -- row `r` filled
+  entirely with tile `r`, tiles holding A, B, C... in order -- which came back
+  showing B on row 0 and C on row 1. So a throwaway tile goes in front of the
+  list and every nametable word is written one below the tile it wants.
+
+The first attempt looked like scrambled text and sent me hunting for a stride
+bug. It was all three of the above at once.
