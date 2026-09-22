@@ -3838,3 +3838,40 @@ drawing of it: cut from WALLDEF1 at 56x56, scaled into a 40x32 block (five
 cells by four at column 2 of piece 5), and quantised against the extended
 palette. `drawn` is still available as a style and renders a cleaner, simpler
 console at any size; `dos` is now the default because it is the real thing.
+
+### The console shares a wall set -- a known cosmetic risk
+
+Wall set 1 is not the dock's alone. Every area whose script issues
+`LOADPIECES 4` lands on it, and that is at least `0x23`, `0x30`, `0x31` and
+`0x43`. Counting code-8 sides in their maps:
+
+```
+    0x11  the dock    11 sides
+    0x23              23 sides
+    0x30             110 sides
+    0x31              10 sides
+    0x43              53 sides
+```
+
+110 sides in `0x30` is a structural wall type, not a bank of terminals. So the
+console painted into set 1's piece 5 will also appear there. Matrix Cubed's own
+scripts confirm the codes are per-deco rather than global -- elsewhere in the
+game `COMPARE [0xC04E], 8` prints "THE STAIRS LEAD UP/DOWN. DO YOU CONTINUE?",
+so 8 is a staircase in some areas and the courtesy console on the dock.
+
+Two things keep this from being worse than it looks.
+
+**It is cosmetic only.** The value the scripts gate on, `0x9AF8`, is computed at
+`0x04244` from the map planes at `0xB5A4`/`0xB6A4` -- the wall nibble in the
+facing direction. It does not look at the art at all. So a console drawn over a
+staircase still behaves as a staircase; only the picture is wrong.
+
+**It cannot be settled by reading the scripts.** `01.ecl` issues
+`LOADPIECES [0x97F8]`, choosing the set from a variable at runtime, and the
+dock's own `11.ecl` carries `LOADPIECES 0x19` (which would be set 8) while the
+running game measures set 1. Which areas actually reach set 1 has to be
+measured per area, by reading the graphics handle stack in each.
+
+Isolating the dock would mean giving it a wall set of its own, but all ten
+entries behind `0x51836` are in use, so that needs an eleventh set rather than
+a spare one. Not done.
