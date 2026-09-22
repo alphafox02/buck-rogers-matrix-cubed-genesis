@@ -3663,3 +3663,69 @@ the match because it is transparent.
 The lettering does not survive 32x32, but the screen, the colour bar, the lit
 row and the pillars all read clearly, which is the same bargain the port's own
 numbered doors make.
+
+### How a map square chooses its wall art -- the whole chain
+
+This closes the question that has been open all session. Nothing here is
+inferred; each step was read out of the running game.
+
+```
+    map square -> wall code -> piece index -> atlas offset -> tiles
+```
+
+**The map.** Two 16x16 byte grids in work RAM hold the four sides of every
+square, one nibble each:
+
+```
+    0xB5A4  high nibble = NORTH      low nibble = EAST
+    0xB6A4  high nibble = SOUTH      low nibble = WEST
+```
+
+Established by matching against the DOS survey: the dock's code-8 sides are
+(3,0)N, (11,0)N, (0,4)W, (11,5)W and (12,7)E, and every one of those falls in
+the nibble the table above predicts.
+
+**The code.** `0x0B4EC` reads the map byte, keeps a nibble, and looks it up:
+
+```
+00B4EC  move.b  (a0, d1.w), d0     ; map byte at row*16 + col
+00B4F0  lsr.b   #$4, d0            ; the nibble for this side
+00B4FA  move.b  (a2, d0.w), d0     ; [0xB41A] -> the wall set's table
+00B4FE  bmi     ...                ; 0xFF: draw nothing
+00B50C  mulu.w  #$42, d1
+00B510  move.w  d1, -$e(a6)        ; piece * 0x42 -> byte offset into atlas A
+```
+
+**The table.** Sixteen bytes per wall set, mapping code 0-15 to piece 0-7,
+reached through the word offsets at `0x51836` -- the same table `LOADPIECES`
+indexes by its argument divided by three. Set 1, which the dock uses:
+
+```
+    code   0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+    piece FF  1  2  2  1  1  3  4  5  6  2  7  7  1  3  0
+```
+
+**The atlas.** `piece * 0x42` is 66 bytes, so 33 cells, and 8 x 33 = 264 --
+exactly table A's cell count. So table A is eight pieces of 33 cells, each nine
+cells wide. Piece 3 begins at cell 99, which is precisely where the dock's two
+green doors marked "1" live, confirming the arithmetic from the other end.
+
+So **wall code 8 is the courtesy console and in set 1 that is piece 5**, atlas
+cells 165-197. Countdown's piece 5 is striped panelling with a grey pipe
+junction; Matrix Cubed's console now sits in the middle of it.
+
+### Verifying it without playing to the console
+
+Piece 5 never draws on the part of the dock you can reach at the start. A real
+breadth-first walk of the area -- savestate per square, four buttons tried from
+each, backtracking by reloading -- reaches only **41 squares**, and none of them
+faces a code-8 wall. (11,5) is past the dock's stage gate, so the console is
+only visible after de Sade's summons, exactly as in DOS.
+
+To check the art without that, patch the set-1 table so the common codes
+(1-6, 13, 14) also point at piece 5, and the console appears on the nearest
+wall. That patch is a test fixture and is **not** in `roms/matrix_console.gen`,
+which keeps the correct mapping so the console appears where the map says.
+
+The grey in the console is not out of place: Countdown's own piece 5 already
+draws a grey pipe across the same wall.

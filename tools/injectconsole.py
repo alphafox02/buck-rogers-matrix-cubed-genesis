@@ -7,15 +7,25 @@ fittings that hang on the wall -- panels, pipes, ore faces, the green-bordered
 doors marked "1". Blanking that table on the Salvation dock makes exactly those
 fittings disappear, which is how it was identified; see docs/re_notes.md.
 
-Table A is not a list of pieces. It is one atlas, nine cells wide and thirty
-rows tall, and the renderer copies a window of it to the screen. The width was
-measured, not guessed: give every cell its own tile, boot, and read the plane
-back -- moving one row down the screen steps the cell index by exactly nine.
+Table A holds **eight pieces of 33 cells**, each piece nine cells wide, and the
+renderer reaches one with `piece * 0x42` -- see `0x0B504`. The stride of nine
+was measured rather than guessed: give every cell its own tile, boot, and read
+plane A back out of the savestate; moving one row down the screen steps the
+cell index by exactly nine.
 
-A console is a fitting, so it goes in the atlas. Rather than repaint tiles that
-other regions share, this appends fresh tiles to the resource and points the
-chosen atlas cells at them. The loader allocates VRAM bases in sequence, so
-growing a resource just shifts the ones after it and nothing else has to know.
+Which piece a wall draws is data. `0x0B4EC` takes the map byte at
+`0xB5A4 + row*16 + col`, keeps a nibble of it as the wall code, and looks the
+code up in a sixteen-byte table chosen by the area's wall set (the ten sets
+live behind the word offsets at `0x51836`). The dock issues LOADPIECES 4, so
+set 1, where **wall code 8 -- the courtesy console -- is piece 5**. Painting
+the console into piece 5 therefore puts it exactly where Matrix Cubed's own
+map says a console stands, rather than wherever some other fitting happens to
+be.
+
+Rather than repaint tiles that other pieces share, this appends fresh tiles to
+the resource and points the chosen cells at them. The loader allocates VRAM
+bases in sequence, so growing a resource just shifts the ones after it and
+nothing else has to know.
 
 The DOS art is far bigger than the slot -- the console cut out of WALLDEF1 is
 56x56 -- so only the informative face is kept: the screen, the colour bar and
@@ -23,7 +33,7 @@ the row of lights. At 24x32 the lettering cannot survive, but that is the same
 bargain the port's own numbered doors make.
 
 Usage:
-    injectconsole.py <in.gen> <out.gen> [col row w h]
+    injectconsole.py <in.gen> <out.gen> [piece col row w h]
 """
 
 import struct
@@ -38,11 +48,12 @@ import lzw_encode
 REPO = Path(__file__).resolve().parent.parent
 TABLE_A = 0x0F170E          # ten entries, one per wall set
 WALL_SET = 1                # what the Salvation dock uses
-ATLAS_W = 9
-REGION = (1, 11, 4, 4)     # the left numbered door, in atlas cells
+PIECE_W, PIECE_CELLS = 9, 33
+PIECE = 5                   # wall code 8 in set 1: the courtesy console
+REGION = (3, 0, 3, 3)       # where in the piece the console hangs
 FREE, FREE_LIMIT = 0x1B5000, 0x1C0000
 CONSOLE = REPO / "art_preview/walls/console_cut_from_atlas.png"
-CROP = (40, 84, 300, 340)     # the console face and its pillars, 260x256
+CROP = (96, 84, 244, 268)     # the console face alone -- no silver pillars
 
 
 def cram(state: Path, line: int):
@@ -83,14 +94,15 @@ def to_tiles(idx, w, h):
     return tiles
 
 
-def build(rom: bytes, region, state: Path, preview=None):
+def build(rom: bytes, piece: int, region, state: Path, preview=None):
     from PIL import Image
     entry = TABLE_A + WALL_SET * 4
     addr = struct.unpack_from(">I", rom, entry)[0]
     tiles, nt, _ = genwall.read(rom, addr)
 
     col, row, w, h = region
-    cells = [(row + y) * ATLAS_W + col + x for y in range(h) for x in range(w)]
+    cells = [piece * PIECE_CELLS + (row + y) * PIECE_W + col + x
+             for y in range(h) for x in range(w)]
     line = (struct.unpack_from(">H", nt, cells[0] * 2)[0] >> 13) & 3
     pal = cram(state, line)
 
@@ -116,7 +128,7 @@ def build(rom: bytes, region, state: Path, preview=None):
     out[FREE:FREE + len(packed)] = packed
     struct.pack_into(">I", out, entry, FREE)
     print(f"  wall set {WALL_SET} table A: 0x{addr:06X}, {len(tiles)} tiles"
-          f" -> {len(new_tiles)}; atlas cells {cells[0]}-{cells[-1]}"
+          f" -> {len(new_tiles)}; piece {piece} cells {cells[0]}-{cells[-1]}"
           f" ({w}x{h} at col {col}, row {row}) on palette {line}")
     print(f"  {len(packed)} bytes at 0x{FREE:06X}; table entry 0x{entry:06X} repointed")
     return bytes(out)
@@ -124,9 +136,10 @@ def build(rom: bytes, region, state: Path, preview=None):
 
 if __name__ == "__main__":
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
-    region = tuple(int(a) for a in sys.argv[3:7]) if len(sys.argv) > 6 else REGION
-    state = Path(sys.argv[7]) if len(sys.argv) > 7 else REPO / "step.state"
-    out = integrity.repair(build(src.read_bytes(), region, state,
+    piece = int(sys.argv[3]) if len(sys.argv) > 3 else PIECE
+    region = tuple(int(a) for a in sys.argv[4:8]) if len(sys.argv) > 7 else REGION
+    state = Path(sys.argv[8]) if len(sys.argv) > 8 else REPO / "step.state"
+    out = integrity.repair(build(src.read_bytes(), piece, region, state,
                                  REPO / "art_preview/walls/08_console_piece.png"))
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'BAD'}; wrote {dst}")
