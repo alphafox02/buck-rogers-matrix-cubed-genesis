@@ -3974,3 +3974,53 @@ Free space in this build, measured rather than assumed:
 ```
 
 `injectconsole.py` uses 0x1B5000; `boostparty.py` uses 0x1BBE00.
+
+### Picture ids are a sixth unmapped id space
+
+A play session noticed that the panel top right does not change to the
+character's portrait where the DOS game shows one -- at Dr. Romney on the
+opening dock, for instance.
+
+Two wrong explanations, ruled out first:
+
+* **The post-combat `VIEW 0, 0xFF` is not clearing the picture.** The port
+  inserts one after 210 of its 315 `COMBAT`s and stock Countdown never does,
+  which looks damning until you read `VIEW` at `0x03DD8`:
+
+  ```
+      003DE2  bsr.w  $404a        ; the picture argument
+      003DE6  tst.b  d0
+      003DE8  bmi.b  $3e10        ; high bit set -> skip setting the picture
+      003E0C  move.b d0, $b525.w  ; only reached for 0x00-0x7F
+  ```
+
+  `0xFF` is negative as a byte, so the call preserves the current picture and
+  only redraws. The insert is a deliberate fix for COMBAT leaving the display
+  disabled, and it is doing exactly what it should.
+
+* **`SETUPMONSTERS 0xFFFF` is not a mistranslation of DOS's
+  `SPRITE_START 255`.** The first argument is stored as a word
+  (`move.w d0, $b528.w`) and tested with `bmi` at `0x035A4`, so the DOS byte
+  sentinel 255 correctly becomes the Genesis word sentinel 0xFFFF.
+
+**What is actually wrong: the ids pass through unmapped.** DOS `PICTURE 86`
+becomes Genesis `PICTURE 0x56`, DOS 98 becomes 0x62, DOS 107 becomes 0x6B --
+the same number in hex, every time. But the two games index completely
+different picture sets:
+
+```
+    DOS   PIC1.DAX     46 blocks, ids 1-111      PICTURE n
+          BIGPIC1.DAX   6 blocks, ids 112-117    PICTURE2 1, n
+          CPIC1.DAX   108 blocks, ids 1-192      character/creature art
+    port  313 pictures, extracted by ROM address, indexed its own way
+```
+
+Note the DOS ranges overlap -- id 57 exists in both PIC1 and CPIC1 -- so which
+file an id means depends on the opcode that asks for it. `PICTURE` reaches
+PIC1, `PICTURE2 1, n` reaches BIGPIC1 (the Sun King's coronation portrait is
+BIGPIC1 114).
+
+So the port shows whatever Countdown happens to keep at that number. This is
+the same failure as monsters and skills, and it needs the same treatment: an
+explicit map, or DOS pictures injected at ids of their own. There is no
+`picmap.py` yet.
