@@ -3626,3 +3626,40 @@ entries instead; those are all 3D art and are safe.
 
 Wall set **1**: table A `0x0A0C33` (77 tiles), table B `0x06E0BA` (68), table C
 `0x08F032` (18). Confirmed by fingerprint, not inference.
+
+### Table A is one atlas, nine cells wide
+
+Not a list of 22 pieces -- that guess put the console on screen sideways and in
+fragments. Table A's 264 cells are a single sheet, **nine cells wide and thirty
+rows tall** (72 x 240 pixels), and the renderer copies a window of it onto plane
+A in oblique projection.
+
+The width was measured rather than guessed, and the technique generalises:
+rebuild the resource so that cell *i* uses tile *i* -- 264 tiles, one per cell,
+nametable words `(palette << 13) | i` -- boot, and read plane A back out of the
+savestate. The tile index minus the handle's VRAM base *is* the cell index, so
+no pixels need decoding. Moving one row down the screen steps the cell index by
+exactly nine; moving one column right steps it by one.
+
+Read at nine wide, the dock's atlas is legible: panels with portholes, striped
+panels and pipework, gold ore faces, chevrons, a machine with a green bed, and
+at rows 11-14 the two green-bordered doors marked "1" that are visible on the
+wall in game.
+
+Growing the resource is safe. `0x09DD4` allocates VRAM bases in sequence, so
+adding tiles to one resource simply shifts the bases of everything loaded after
+it, and each handle carries its own base. Table A set 1 went from 77 tiles to
+93 with nothing else touched.
+
+### The console, as shipped
+
+`tools/injectconsole.py` puts Matrix Cubed's courtesy console into the atlas at
+cells 100-130 -- a 4x4 block at column 1, row 11, which is the left numbered
+door on the Salvation dock wall. The DOS art is cut out of WALLDEF1 at 56x56 and
+the face plus its pillars is scaled into 32x32, quantised against palette line 2
+read from live CRAM rather than from a guessed table. Index 0 is excluded from
+the match because it is transparent.
+
+The lettering does not survive 32x32, but the screen, the colour bar, the lit
+row and the pillars all read clearly, which is the same bargain the port's own
+numbered doors make.
