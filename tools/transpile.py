@@ -581,6 +581,30 @@ def transpile(block: bytes, flags=None):
     # variable and used when that variable is printed. A WRITE_MEM of this
     # shape also no longer ENDS the run, which it used to, cutting the
     # simulation off before the two PRINTs it exists to set up.
+    # Instructions that touch neither the window nor the flow of text. The
+    # simulation used to end its run at any of these, which is wrong: the
+    # engine's window keeps accumulating across them. De Sade's payment
+    # speech on the opening dock is built as
+    #
+    #     PRINT_CLEAR  "CHANCELLOR DE SADE SHAKES YOUR HAND GRACIOUSLY. '"
+    #     AND / IF_NOT_EQUALS
+    #     PRINT        "WITH BERKELEY DEAD, ... NEVERTHELESS,"
+    #     IF_EQUALS
+    #     PRINT        "IT IS GOOD THAT YOU WERE HERE, ..."
+    #     PRINT        " HERE IS PAYMENT FOR YOUR SERVICES.'"
+    #
+    # and the AND ended the run before a single PRINT was counted, so no page
+    # break went in. Either branch overflows: 180 characters wraps to six
+    # lines and 145 to five, against a window of four, and the extra lines
+    # land back on the first two. The player reads "NEVERTHELESS, HERE IS
+    # PAYMENT FORND / YOUR SERVICES.'TH BERKELEY DEAD" -- the ND and TH being
+    # what is left of HAND and WITH underneath.
+    WINDOW_TRANSPARENT = {
+        "AND", "OR", "COMPARE", "ADD", "SUB", "WRITE_MEM", "SAVE",
+        "IF_EQUALS", "IF_NOT_EQUALS", "IF_LESS", "IF_GREATER",
+        "IF_LESS_EQUALS", "IF_GREATER_EQUALS",
+    }
+
     breaks = {}
     _line = _col = 0
     _active = False
@@ -625,6 +649,8 @@ def transpile(block: bytes, flags=None):
             else:
                 _line = _need
                 _col = _col + len(_rows[0]) if len(_rows) == 1 else len(_rows[-1])
+            continue
+        if _n in WINDOW_TRANSPARENT:
             continue
         _active = False
 

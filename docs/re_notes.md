@@ -4058,3 +4058,45 @@ skill to 10, for pushing through a scenario to reach the set pieces. It is not
 the default and should not become one: an inflated party hides the difficulty
 regressions this port needs to find, which is exactly the class of bug the
 monster roster still has outstanding.
+
+### Text overflowing its window: conditionals ended the run
+
+The Genesis text window is 35 columns by 4 lines and the engine does not clip
+-- a fifth line lands back on the first. `transpile.py` already simulates the
+window across a run of prints and inserts a page break before it overflows, but
+the simulation ended its run at **any** instruction that was not a print, and
+that is wrong: the window keeps accumulating across arithmetic and branches.
+
+De Sade's payment speech on the opening dock is built as
+
+```
+    PRINT_CLEAR  "CHANCELLOR DE SADE SHAKES YOUR HAND GRACIOUSLY. '"
+    AND / IF_NOT_EQUALS
+    PRINT        "WITH BERKELEY DEAD, ... NEVERTHELESS,"
+    IF_EQUALS
+    PRINT        "IT IS GOOD THAT YOU WERE HERE, ..."
+    PRINT        " HERE IS PAYMENT FOR YOUR SERVICES.'"
+```
+
+and the `AND` ended the run before a single `PRINT` was counted. Either branch
+overflows -- 180 characters wraps to six lines, 145 to five -- so lines five and
+six landed back on one and two:
+
+```
+    line 1  CHANCELLOR DE SADE SHAKES YOUR HAND
+            NEVERTHELESS, HERE IS PAYMENT FOR      over the top of it
+    line 2  GRACIOUSLY. 'WITH BERKELEY DEAD,
+            YOUR SERVICES.'                        over the top of that
+```
+
+which a play session read as "NEVERTHELESS, HERE IS PAYMENT FORND / YOUR
+SERVICES.'TH BERKELEY DEAD" -- the `ND` and `TH` being what is left of HAND and
+WITH underneath. A screenshot is what found it; the simulation thought the page
+was empty.
+
+The fix is a `WINDOW_TRANSPARENT` set -- AND, OR, COMPARE, ADD, SUB, WRITE_MEM,
+SAVE and the IF_* family -- which the simulation now passes over instead of
+treating as the end of a run. Across the whole scenario that adds **38 page
+breaks** and promotes 36 prints to clears, so this was not a one-off: it was
+wrong everywhere a conditional sat between two prints, which is the engine's
+normal idiom for anything with a variable in it.
