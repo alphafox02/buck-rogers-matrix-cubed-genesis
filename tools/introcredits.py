@@ -140,11 +140,32 @@ def container(tiles, nt):
 
 
 def routine(addr):
-    """Load the screen, draw it full-frame, hold it, then leave the intro."""
+    """Load the screen and show it, mirroring the EA logo's own draw exactly.
+
+    Copying the register setup was not optional. The first version set only
+    d0-d5 and the three 0xB5xx words, and blastem stopped with "machine freeze
+    due to write to address DFFFFE" -- the blitter writing into unmapped space
+    because the plane setup at 0x08594 had never run. The EA logo at 0x001338
+    is the working template and this follows it instruction for instruction:
+
+        move.w #$8000, d6 / moveq #2, d7 / bsr $8594     plane setup
+        d0-d5, $b510, $b512, $b50e                       blit parameters
+        jsr $95be                                        draw
+        move.b #$f, $9bbc.w                              view mode
+        jsr $860e                                        show
+    """
     code = bytearray()
+
+    def at():
+        return PATCH + len(code)
+
     code += b"\x41\xf9" + struct.pack(">I", addr)        # lea.l addr, a0
     code += b"\x4e\xb9" + struct.pack(">I", 0x9DD4)      # jsr  $9dd4
     code += b"\x2d\x48\xff\xf8"                          # move.l a0, -8(a6)
+    code += b"\x3c\x3c\x80\x00"                          # move.w #$8000, d6
+    code += b"\x7e\x02"                                  # moveq  #2, d7
+    here = at()
+    code += b"\x61\x00" + struct.pack(">h", 0x8594 - (here + 2))
     code += b"\x70\x00\x72\x02\x74\x00\x76\x00"          # d0=0 d1=2 d2=0 d3=0
     code += b"\x78\x28\x7a\x1c"                          # d4=40 d5=28
     code += b"\x31\xfc\xff\xff\xb5\x10"                  # move.w #$ffff,$b510
@@ -152,10 +173,11 @@ def routine(addr):
     code += b"\x42\x78\xb5\x0e"                          # clr.w $b50e
     code += b"\x20\x6e\xff\xf8"                          # movea.l -8(a6), a0
     code += b"\x4e\xb9" + struct.pack(">I", 0x95BE)      # jsr  $95be  draw
+    code += b"\x11\xfc\x00\x0f\xb9\xbc"                  # move.b #$f,$9bbc.w
     code += b"\x4e\xb9" + struct.pack(">I", 0x860E)      # jsr  $860e  show
     code += b"\x30\x3c\x01\x68"                          # move.w #$168, d0
     code += b"\x4e\xb9" + struct.pack(">I", 0x75FA)      # jsr  $75fa  hold
-    here = PATCH + len(code)
+    here = at()
     code += b"\x60\x00" + struct.pack(">h", EXIT - (here + 2))
     return bytes(code)
 
