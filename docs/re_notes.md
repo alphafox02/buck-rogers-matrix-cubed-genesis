@@ -3804,3 +3804,37 @@ pixels. `drawn_console()` keeps the DOS design -- metal bezel, dark screen,
 spectrum bar, amber plate, a row of indicator lights -- and draws each element
 on the pixel grid, which is what the port's own fittings do. Pass `dos` instead
 of `drawn` to get the downscale back for comparison.
+
+### Giving the wall palette the blue it was missing
+
+The reason the console could not simply be Matrix Cubed's own pixels is that
+the dock's wall palette has no blue and no cyan, and the DOS console's signature
+is a spectrum bar running blue - cyan - white - yellow - orange - red. Scaled
+into that palette, half the bar collapsed into grey.
+
+The palette is ordinary data. Entry 1 of the table at `0x0F16AA` points at an
+LZW-packed 38-byte block at `0x0A4584`: six bytes of header then sixteen
+Genesis colour words, `0000 BBB0 GGG0 RRR0`. Decoded, all fourteen visible
+colours match what the screen was measured to draw, which confirms both the
+entry and the decode.
+
+It also carries duplicates -- 3 and 5 are the same yellow, 6 and 12 the same
+orange -- and counting every pixel of all five set-1 tables shows the spares
+are barely used:
+
+```
+    index  1      0 pixels        index  5      4 pixels
+    index  6     11 pixels        index 12   1333 pixels
+```
+
+So indices 1, 5 and 6 are free for the cost of fifteen pixels elsewhere in the
+whole set. `injectconsole.py` repaints 5 to blue and 6 to cyan, rebuilds the
+38-byte block, and repoints the table entry, exactly as it does for the art.
+Palette entry 1 is selected by `[0x9AFB]`, which `LOADPIECES` sets alongside the
+wall set, so only set 1 is affected.
+
+With that done the console can be Matrix Cubed's actual art rather than a
+drawing of it: cut from WALLDEF1 at 56x56, scaled into a 40x32 block (five
+cells by four at column 2 of piece 5), and quantised against the extended
+palette. `drawn` is still available as a style and renders a cleaner, simpler
+console at any size; `dos` is now the default because it is the real thing.

@@ -50,7 +50,7 @@ TABLE_A = 0x0F170E          # ten entries, one per wall set
 WALL_SET = 1                # what the Salvation dock uses
 PIECE_W, PIECE_CELLS = 9, 33
 PIECE = 5                   # wall code 8 in set 1: the courtesy console
-REGION = (3, 0, 3, 3)       # where in the piece the console hangs
+REGION = (2, 0, 5, 4)       # where in the piece the console hangs
 FREE, FREE_LIMIT = 0x1B5000, 0x1C0000
 CONSOLE = REPO / "art_preview/walls/console_cut_from_atlas.png"
 CROP = (96, 84, 244, 268)     # the console face alone -- no silver pillars
@@ -74,6 +74,45 @@ PALETTE = {
     11: (232, 236, 232), 12: (200, 68, 32), 13: (168, 168, 0),
     14: (200, 0, 0), 15: (136, 0, 0),
 }
+
+# The dock's wall palette is entry 1 of the table at 0x0F16AA, an LZW-packed
+# 38-byte block at 0x0A4584: six bytes of header then sixteen Genesis colour
+# words. Decoding it matches all fourteen colours measured off the screen, so
+# it is the real thing and it is ours to edit.
+#
+# It carries no blue and no cyan, which is the half of Matrix Cubed's spectrum
+# bar that cannot otherwise be drawn. It does carry duplicates -- 3 and 5 are
+# the same yellow, 6 and 12 the same orange -- and counting every pixel of all
+# five set-1 tables shows how little the spares are used:
+#
+#     index  1   0 pixels        index  5   4 pixels
+#     index  6  11 pixels        index 12  1333 pixels
+#
+# So 1, 5 and 6 are free for the cost of fifteen pixels elsewhere in the set,
+# and repainting 5 and 6 gives the console its full blue-through-red ramp.
+PAL_ENTRY = 0x0F16AA + 1 * 4
+RECOLOUR = {5: (0, 0, 216), 6: (0, 216, 216)}
+
+
+def genesis_word(rgb):
+    r, g, b = (min(7, c // 36) for c in rgb)
+    return (b << 9) | (g << 5) | (r << 1)
+
+
+def repaint_palette(out: bytearray, cursor: int):
+    """Give wall palette entry 1 a blue and a cyan. Returns the new cursor."""
+    import genesis_ecl
+    addr = struct.unpack_from(">I", out, PAL_ENTRY)[0]
+    raw = bytearray(genesis_ecl.decompress(bytes(out[addr:]), limit=256))
+    for i, rgb in RECOLOUR.items():
+        struct.pack_into(">H", raw, 6 + i * 2, genesis_word(rgb))
+    packed = lzw_encode.compress(bytes(raw))
+    out[cursor:cursor + len(packed)] = packed
+    struct.pack_into(">I", out, PAL_ENTRY, cursor)
+    print(f"  wall palette entry 1: 0x{addr:06X} -> 0x{cursor:06X}"
+          f" ({len(packed)} bytes); "
+          + ", ".join(f"index {i} = {c}" for i, c in RECOLOUR.items()))
+    return cursor + len(packed) + 8
 
 
 def cram(state: Path, line: int):
@@ -173,7 +212,7 @@ def to_tiles(idx, w, h):
 
 
 def build(rom: bytes, piece: int, region, state: Path, preview=None,
-          style="drawn"):
+          style="dos", recolour=True):
     from PIL import Image
     entry = TABLE_A + WALL_SET * 4
     addr = struct.unpack_from(">I", rom, entry)[0]
@@ -185,6 +224,9 @@ def build(rom: bytes, piece: int, region, state: Path, preview=None,
     line = (struct.unpack_from(">H", nt, cells[0] * 2)[0] >> 13) & 3
     pal = cram(state, line)
 
+    pal = dict(pal)
+    if recolour:
+        pal.update(RECOLOUR)
     if style == "dos":
         art = Image.open(CONSOLE).convert("RGB").crop(CROP)
         art = art.resize((w * 8, h * 8), Image.LANCZOS)
@@ -209,6 +251,9 @@ def build(rom: bytes, piece: int, region, state: Path, preview=None,
     out = bytearray(rom)
     out[FREE:FREE + len(packed)] = packed
     struct.pack_into(">I", out, entry, FREE)
+    cursor = FREE + len(packed) + 8
+    if recolour:
+        cursor = repaint_palette(out, cursor)
     print(f"  wall set {WALL_SET} table A: 0x{addr:06X}, {len(tiles)} tiles"
           f" -> {len(new_tiles)}; piece {piece} cells {cells[0]}-{cells[-1]}"
           f" ({w}x{h} at col {col}, row {row}) on palette {line}")
@@ -221,7 +266,7 @@ if __name__ == "__main__":
     nums = [a for a in sys.argv[3:] if a.isdigit()]
     piece = int(nums[0]) if nums else PIECE
     region = tuple(int(n) for n in nums[1:5]) if len(nums) >= 5 else REGION
-    style = next((a for a in sys.argv[3:] if a in ("drawn", "dos")), "drawn")
+    style = next((a for a in sys.argv[3:] if a in ("drawn", "dos")), "dos")
     state = Path(sys.argv[-1]) if sys.argv[-1].endswith(".state") else None
     out = build(src.read_bytes(), piece, region, state, style=style,
                 preview=REPO / "art_preview/walls/06_console_piece.png")
