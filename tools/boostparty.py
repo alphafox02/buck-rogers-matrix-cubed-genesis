@@ -30,8 +30,26 @@ The engine caps a skill's contribution at twice the character's level
 is the highest value that still counts as an ordinary in-range score rather
 than an inflated one. That is the ceiling used here.
 
+There is also a `--strong` mode for testing rather than playing. Validating a
+transplanted scenario means getting deep enough into it to see the set pieces,
+and dying to the coronation ambush eight times does not test anything. It
+raises hit points, attributes and every skill together. It is deliberately not
+the default: an inflated party hides exactly the difficulty regressions this
+port needs to find.
+
+Record fields used here, all confirmed against the creation handlers
+documented in docs/re_notes.md (race at $17, career at $18, level at $19,
+exp-to-next at $1E, hit die at $26, and the race modifiers at $2A/$2C all read
+back correctly on the shipped team):
+
+    +0x10..0x14   attributes
+    +0x19         level
+    +0x2E         hit points -- [25, 23, 17, 15, 11, 11] on the shipped team,
+                  tracking the hit die exactly (warriors 4, the rest 2)
+    +0x31         skills, one byte each
+
 Usage:
-    boostparty.py <in.gen> <out.gen> [skill=value ...]
+    boostparty.py <in.gen> <out.gen> [--strong] [skill=value ...]
 """
 
 import struct
@@ -50,8 +68,17 @@ SKILLS = 0x31               # first skill byte within a record
 LEVEL = 0x19
 FREE, FREE_LIMIT = 0x1BBE00, 0x1C0000
 
+ATTRS = 0x10
+ATTR_COUNT = 5
+HP = 0x2E
+
 PERCEPTION = 5
 DEFAULT = {PERCEPTION: 4}   # the level-2 cap
+
+STRONG_HP = 99
+STRONG_ATTR = 18
+STRONG_SKILL = 10
+SKILL_COUNT = 19
 
 
 def records(raw):
@@ -62,10 +89,20 @@ def records(raw):
             yield k, off, name
 
 
-def boost(rom: bytes, want):
+def boost(rom: bytes, want, strong=False):
     raw = bytearray(genesis_ecl.decompress(rom[TEAM:], limit=0x8000))
     for _k, off, name in records(raw):
         cap = raw[off + LEVEL] * 2
+        if strong:
+            hp_before = raw[off + HP]
+            raw[off + HP] = STRONG_HP
+            for i in range(ATTR_COUNT):
+                raw[off + ATTRS + i] = max(raw[off + ATTRS + i], STRONG_ATTR)
+            for i in range(SKILL_COUNT):
+                raw[off + SKILLS + i] = max(raw[off + SKILLS + i], STRONG_SKILL)
+            print(f"  {name:10s} hp {hp_before} -> {STRONG_HP}, "
+                  f"attributes -> {STRONG_ATTR}, all skills -> {STRONG_SKILL}")
+            continue
         line = []
         for skill, value in want.items():
             at = off + SKILLS + skill
@@ -88,10 +125,12 @@ def boost(rom: bytes, want):
 
 if __name__ == "__main__":
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
+    strong = "--strong" in sys.argv[3:]
     want = dict(DEFAULT)
     for arg in sys.argv[3:]:
-        k, v = arg.split("=")
-        want[int(k)] = int(v)
-    out = integrity.repair(boost(src.read_bytes(), want))
+        if "=" in arg:
+            k, v = arg.split("=")
+            want[int(k)] = int(v)
+    out = integrity.repair(boost(src.read_bytes(), want, strong))
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'BAD'}; wrote {dst}")

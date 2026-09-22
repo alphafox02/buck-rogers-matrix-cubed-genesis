@@ -4024,3 +4024,37 @@ So the port shows whatever Countdown happens to keep at that number. This is
 the same failure as monsters and skills, and it needs the same treatment: an
 explicit map, or DOS pictures injected at ids of their own. There is no
 `picmap.py` yet.
+
+### More of the character record
+
+Found while building a validation party. All of these check out against the
+creation handlers already documented above -- race, career, level, exp-to-next,
+hit die and the race modifiers all read back correctly on the shipped team,
+which is what makes the rest trustworthy:
+
+```
+    +0x00   name, ASCII, NUL-terminated
+    +0x10   attributes, five bytes (a sixth at +0x15 is 14 on every character)
+    +0x16   sex          0 or 1
+    +0x17   race         1 human, 2 desert runner, 3 tinker
+    +0x18   career       1 rocket jock, 2 medic, 3 warrior, 4 rogue
+    +0x19   level
+    +0x1E   experience for the next level, a longword
+    +0x24   a race modifier   human 8, desert runner 10, tinker 6
+    +0x26   hit die           warrior 4, everyone else 2
+    +0x2A   race modifier
+    +0x2C   race modifier
+    +0x2E   hit points
+    +0x31   skills, one byte each
+```
+
+Hit points were identified by comparing the six shipped characters: 25, 23, 17,
+15, 11, 11 -- tracking the hit die at +0x26 exactly, warriors first. There is no
+separate maximum anywhere in the record, and raising +0x2E alone survives a
+party load and a walk, so the engine keeps only the one value.
+
+`boostparty.py --strong` sets hit points to 99, attributes to 18 and every
+skill to 10, for pushing through a scenario to reach the set pieces. It is not
+the default and should not become one: an inflated party hides the difficulty
+regressions this port needs to find, which is exactly the class of bug the
+monster roster still has outstanding.
