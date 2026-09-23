@@ -66,6 +66,21 @@ TEAM_LEA = 0x001F34         # the operand of `lea.l $6baad.l, a0`
 RECORD = 214
 SKILLS = 0x31               # first skill byte within a record
 LEVEL = 0x19
+
+# The blob holds TWO structures, and the loader at 0x001F3C reads them both:
+#
+#     0x6B0 bytes -> 0xFFBA68   eight 214-byte character records
+#     0xD0  bytes -> 0xFFC470   eight 26-byte entries
+#
+# 1712 + 208 = 1920, exactly the blob. The second array carries its own copy of
+# level and hit points, and editing only the records leaves it stating the old
+# ones -- which is how a "level 6" party still read level 2 at 0xC470.
+SUMMARY = 8 * RECORD        # where the 26-byte entries start
+SUMMARY_SIZE = 26
+# +14 is hit points. +16 looked like level -- it reads 2 on a level-2 team --
+# but writing 6 there changes nothing: the engine puts it back, so it is
+# something it derives rather than stores. Level lives only in the record.
+SUM_HP = 14
 FREE, FREE_LIMIT = 0x1BBE00, 0x1C0000
 
 ATTRS = 0x10
@@ -123,6 +138,13 @@ def records(raw):
             yield k, off, name
 
 
+def summary(raw, k, hp):
+    """Keep the 26-byte entry's hit points in step with its record."""
+    at = SUMMARY + k * SUMMARY_SIZE
+    if at + SUMMARY_SIZE <= len(raw):
+        raw[at + SUM_HP] = min(255, hp)
+
+
 def veteran(raw, off, name, level):
     """Bring one character up to `level`, keeping its own shape."""
     was = raw[off + LEVEL] or 1
@@ -142,6 +164,7 @@ def veteran(raw, off, name, level):
     raw[per] = max(raw[per], level)
     print(f"  {name:10s} level {was} -> {level}, hp {hp_was} -> {raw[off + HP]}, "
           f"{len(grown)} skills scaled, perception {raw[per]}")
+    return raw[off + HP]
 
 
 def boost(rom: bytes, want, strong=False, vet=False):
@@ -149,7 +172,8 @@ def boost(rom: bytes, want, strong=False, vet=False):
     for _k, off, name in records(raw):
         cap = raw[off + LEVEL] * 2
         if vet:
-            veteran(raw, off, name, VETERAN_LEVEL)
+            hp = veteran(raw, off, name, VETERAN_LEVEL)
+            summary(raw, _k, hp)
             continue
         if strong:
             hp_before = raw[off + HP]
@@ -158,6 +182,7 @@ def boost(rom: bytes, want, strong=False, vet=False):
                 raw[off + ATTRS + i] = max(raw[off + ATTRS + i], STRONG_ATTR)
             for i in range(SKILL_COUNT):
                 raw[off + SKILLS + i] = max(raw[off + SKILLS + i], STRONG_SKILL)
+            summary(raw, _k, STRONG_HP)
             print(f"  {name:10s} hp {hp_before} -> {STRONG_HP}, "
                   f"attributes -> {STRONG_ATTR}, all skills -> {STRONG_SKILL}")
             continue

@@ -4362,3 +4362,31 @@ of 131 alone. `--veteran` scales instead, shrank it to 12, and broke the party.
 Both now stop at fourteen, which is the same grouping `skillmap` uses: PILOT
 through PROGRAM is `range(14)`, and the weapon skills above that are kept
 somewhere else.
+
+### The party blob holds two structures, not one
+
+The loader at `0x001F3C` reads the blob at `0x06BAAD` into **two** places:
+
+```
+    0x6B0 bytes -> 0xFFBA68    eight 214-byte character records
+    0xD0  bytes -> 0xFFC470    eight 26-byte entries
+```
+
+1712 + 208 = 1920, exactly the blob. The second array is the one the ECL
+address resolver reaches through its second window (`0x04302`, `mulu #$1A`),
+and it carries **its own copy of hit points** at +14.
+
+Editing only the records leaves it stating the old ones: a team raised to 75
+hit points still read 25 at `0xC470`, which is where the live value comes from.
+`boostparty.py` now writes both.
+
+`+16` of that entry looked like level -- it reads 2 on a level-2 team -- but
+writing 6 there changes nothing, because the engine puts it back. It is
+derived, not stored; level lives only in the record at +0x19.
+
+Field notes for the 26-byte entry, from the six shipped characters:
+
+```
+    +2   character index        +14  hit points
+    +17  character index        +16  overwritten by the engine
+```
