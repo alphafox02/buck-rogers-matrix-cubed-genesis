@@ -4390,3 +4390,47 @@ Field notes for the 26-byte entry, from the six shipped characters:
     +2   character index        +14  hit points
     +17  character index        +16  overwritten by the engine
 ```
+
+### The starting kit, and where items live
+
+Raising the party's level left its equipment alone, because gear is not in the
+character record at all -- bytes 0x53-0xAD are zero on every pregen. It comes
+from a script.
+
+**Area 0x10 is the default-team loader**, and one line in it is the whole kit:
+
+```
+    00060  TREASURE  0x1F40, 0x14, 0x16,0x16,0x16,0x16, 0x17,0x17,
+                     0x21,0x21,0x21, 0x8,0x8, 0xF, 0x6,0x6,0x6,
+                     0x12, 0xA,0xA, 0x23,0x23
+```
+
+0x1F40 is 8000, which is the "THE TEAM HAS FOUND 8000 CREDITS" the opening
+prints, and the twenty-one bytes after it are item ids.
+
+`TREASURE` at `0x0392C` reads the money into `[0xBA34]`, the count into
+`[0xB9F3]`, and then filters each id: **anything above 0x5D is dropped**, and so
+is anything matching a 34-byte exclusion list at `0x03978`:
+
+```
+    01 02 04 31 07 0B 0C 0D 0F 13 1C 1D 1E 20 22 27 29
+    2C 2F 30 32 33 34 38 3A 3D 3F 42 40 45 47 49 4B 35
+```
+
+Note 0x0F is in that list and also in the kit, so at least one of the twenty-one
+never arrives. What survives is written to `0xB9F4`.
+
+So improving a veteran party's equipment is a one-line data edit, once the ids
+are known.
+
+**Still open: what the ids mean.** Item names are composed from a word table at
+`0x11DC4` -- 393 entries, each a 16-bit offset relative to the table's own
+start, so `0x11DC4 + 0x312` is the first string. Reading it gives the
+vocabulary: knife, mono, cutlass, sword, needle, gun, laser, pistol, rocket,
+rifle, spacesuit, battle armor, grenade, demo charge and so on.
+
+What is **not** established is the item id to name mapping. The table at
+`0x13866` is four bytes per entry, a string id and a word index, but it is
+indexed by a value `0x1388E` returns rather than by the item id -- feeding item
+ids into it yields prompt fragments like "Okay? yes~no", which is how I know it
+is the wrong table. Finding the right one is the remaining step.
