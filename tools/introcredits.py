@@ -45,11 +45,30 @@ TRIMMED = 0x001408                      # trim_intro's `bra.w $15f0`
 EXIT = 0x0015F0
 COLS, ROWS = 40, 28
 
+# Two constraints on which palette indices may be used, both from the engine.
+#
 # Index 0 is TRANSPARENT on a Genesis plane, so a background of 0 lets the
-# Matrix Cubed card show through and the credits come out unreadable on top of
-# it. The background here is a non-zero index that happens to be black.
-BG, INK, DIM = 15, 1, 2
-PALETTE = {BG: (0, 0, 0), INK: (0, 7, 0), DIM: (2, 6, 2)}   # 3-bit RGB
+# screen underneath show through and the credits come out unreadable on top of
+# it. The background must be a non-zero index that happens to be black.
+#
+# And the palette loader at 0x09D66 does not load all sixteen. With [0xB4BD]
+# clear it does `subq.l #$3,d1 / addq.l #$6,a0` -- twelve words starting at
+# entry 3 -- so only indices 3 to 14 ever reach CRAM. Colours at 1, 2 or 15 are
+# simply never uploaded, which is a black screen rather than a wrong one.
+BG, INK, DIM = 0, 1, 11
+# When the credits sit in the intro's second screen slot the container's own
+# palette mask is ignored: 0x09D70 takes the mask from [0xB4BE] when that is
+# non-zero, so whatever the previous screen loaded stays. So the indices are
+# chosen from what is actually live there, measured with a ramp screen -- one
+# palette index per row, read back off the rendered frame:
+#
+#     2  (0,236,0) green     12 (200,204,200) near-white
+#     4  (232,0,0) red       10 (232,204,32)  yellow
+#
+# Index 2 is the same green DOS draws its credits in. Index 0 is transparent
+# and shows the black plane behind. The PALETTE below is what a standalone
+# draw would upload, and is unused in this slot.
+PALETTE = {INK: (7, 7, 7), DIM: (5, 6, 4)}   # 3-bit RGB
 
 # Straight out of dos_game/matrix/GAME.OVR. `True` marks a bright line.
 LINES = [
@@ -106,10 +125,6 @@ def tiles_and_map():
         tiles.append(bytes(t))
         return cache[key]
 
-    # The loader draws tile index + 1: a ramp screen, row r filled with tile
-    # r, comes back showing B on row 0 and C on row 1. So the first tile in
-    # the list is never reachable, and one throwaway goes in front of it.
-    tiles.append(bytes([(BG << 4) | BG] * 32))
     blank = tile_for(" ", INK)
     nt = [blank] * (COLS * ROWS)
     for r, (text, bright) in enumerate(LINES):
@@ -130,21 +145,26 @@ def tiles_and_map():
 
 def container(tiles, nt):
     out = bytearray()
-    out += struct.pack(">HHH", len(tiles), len(nt) * 2, 4)
+    # Palette mask 0: carry no palette at all. Whether a container's palette
+    # is honoured depends on [0xB4BE] (0x09D70), so a screen that ships one is
+    # sometimes drawn in its own colours and sometimes in the previous
+    # screen's. Shipping none makes it always the latter, which is
+    # predictable, and the indices below are measured from what is live.
+    out += struct.pack(">HHH", len(tiles), len(nt) * 2, 0)
     # Every intro screen's nametable words carry 0x4000 -- palette line 2 --
     # and the palette the container ships is loaded into that line. Writing
     # line 0 instead leaves the text drawn in whatever the previous screen
     # happened to leave there, which is unreadable rather than merely wrong.
-    # ...and the word written is one BELOW the tile wanted, because the
-    # loader adds one. With the throwaway tile in front, every real tile sits
-    # at index >= 1, so `t - 1` is always in range.
     for t in nt:
-        out += struct.pack(">H", 0x4000 | (t - 1))
+        out += struct.pack(">H", 0x4000 | t)
+    # The palette goes BETWEEN the nametable and the tiles, not after them.
+    # 6 + 2000 + 32 + 95*32 is exactly the size of the shipped title screen,
+    # and reading it from the end yields sixteen blacks. Putting it last made
+    # the engine take the first tile as the palette, which shifted every tile
+    # by one -- the "loader draws index + 1" this file used to compensate for
+    # with a throwaway tile was that, not an engine quirk.
     for t in tiles:
         out += t
-    for i in range(16):
-        r, g, b = PALETTE.get(i, (0, 0, 0))
-        out += struct.pack(">H", (b << 9) | (g << 5) | (r << 1))
     return bytes(out)
 
 

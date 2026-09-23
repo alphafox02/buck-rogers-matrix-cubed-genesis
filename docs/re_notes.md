@@ -4323,3 +4323,42 @@ the intro in DOS's order: logo with copyrights, then credits, then the title
 card. Not done -- it means rebuilding a 268-tile screen that currently works,
 and the engine expands these into whatever is free, so growing one is the part
 that needs care.
+
+### Intro put back in DOS's order
+
+`tools/introfix.py` does two things to the intro at `0x012FC`:
+
+* **Merges the copyright lines onto the logo screen.** Rows 23-27 of
+  `0x1FA000` are a single uniform tile, so the four lines go there, which is
+  how DOS composites `TITLE.DAX` blocks 2 and 3. The screen grows from 268 to
+  294 tiles.
+* **Gives the freed second slot to the credits**, where DOS puts them. That
+  slot draws 40x25, so the credits screen is built to 25 rows.
+
+The order is now EA logo, Buck Rogers with the copyrights beneath it, the
+credits, the Matrix Cubed card, the menu -- which is DOS's.
+
+**Palette, the hard part.** A container's palette is only honoured when
+`[0xB4BE]` is zero (`0x09D70`), so a screen in that slot is sometimes drawn in
+its own colours and sometimes in the previous screen's. The credits therefore
+ship with palette mask **0** -- carrying none at all -- which makes the
+behaviour predictable, and the text indices are measured from what is live: a
+ramp screen, one palette index per row, read off the rendered frame. Index 1
+lands on the green DOS uses and 11 on a near-white, with 0 transparent over
+black.
+
+### A bug of my own: the skill array is fourteen, not nineteen
+
+`--veteran` hung the game in the opening briefing -- area 0x00, never reaching
+the dock. Bisecting its three changes separately (level, hit points, skills)
+showed only skills broke it.
+
+The record's skill array runs from +0x31, but **+0x42 is not skill 17**. It
+holds a per-character value that differs across the team -- 131, 133, 138, 135,
+129, 128 -- a portrait or figure id. Writing nineteen skills walks over it.
+
+`--strong` never noticed, because it uses `max(existing, 10)` and leaves a byte
+of 131 alone. `--veteran` scales instead, shrank it to 12, and broke the party.
+Both now stop at fourteen, which is the same grouping `skillmap` uses: PILOT
+through PROGRAM is `range(14)`, and the weapon skills above that are kept
+somewhere else.

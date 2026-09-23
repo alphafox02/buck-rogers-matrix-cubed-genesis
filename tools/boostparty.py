@@ -78,7 +78,19 @@ DEFAULT = {PERCEPTION: 4}   # the level-2 cap
 STRONG_HP = 99
 STRONG_ATTR = 18
 STRONG_SKILL = 10
-SKILL_COUNT = 19
+# Only the fourteen general skills live in the record's skill array. It runs
+# from +0x31, and +0x42 is NOT skill 17 -- it holds a per-character value that
+# differs across the team (131, 133, 138, 135, 129, 128), a portrait or figure
+# id. Writing 19 skills walks over it.
+#
+# --strong never noticed because it uses max(), which leaves a byte of 131
+# alone. --veteran scales instead, shrank that byte to 12, and the game then
+# hung in the opening briefing -- area 0x00, never reaching the dock. Bisecting
+# level, hit points and skills separately is what found it: only skills broke.
+#
+# skillmap groups them the same way: PILOT through PROGRAM is range(14), and
+# the weapon skills above that are kept elsewhere.
+SKILL_COUNT = 14
 
 # A party at the level Matrix Cubed actually assumes.
 #
