@@ -158,6 +158,13 @@ MUSIC = {2: ("BUCKA.XMI", 0)}
 MUSIC.update({slot: ("BUCKA.XMI", song)
               for slot, song in sorted(soundmap.SONGS.items())})
 
+# Slots whose track plays once and stops rather than looping -- the "!" the
+# injector reads. Only the title theme, because that is what DOS does: the
+# theme runs out during the title card and the intro goes quiet, where
+# Countdown's own intro track loops under the menu for ever. Everything else
+# is area music and should keep going.
+PLAY_ONCE = {2}
+
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
 # VIEW big pictures. 113 and 114 are NOT in the stock directory -- the
@@ -406,7 +413,8 @@ def main():
         step("demomode.py")
     if music:
         step("inject_music.py",
-             *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])
+             *[f"{slot}:{f}:{song}{'!' if slot in PLAY_ONCE else ''}"
+               for slot, (f, song) in sorted(MUSIC.items())])
 
     import romlayout
     if romlayout.main_from_text("".join(transcript)):

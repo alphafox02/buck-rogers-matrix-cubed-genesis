@@ -4826,3 +4826,47 @@ composer, the same driver, the same kind of tune — where before it was 79.6.
 
 Nine notes across the seven songs have a duration of one XMI tick and collapse
 to zero length. They are inaudible either way.
+
+## The title theme should stop, not loop
+
+The terminator is a pair, and the second byte decides: `0xFC 0x80` loops,
+`0xFC 0x00` stops. Countdown uses the stopping form on exactly one of its
+twelve tracks, so both are proven in the shipped driver.
+
+`xmi2seq.py` emitted the looping form for everything. In DOS the Matrix Cubed
+title theme plays once and the intro goes quiet — a play session watching both
+reported the port looping where DOS "reaches a stopping point not long after
+the cubed image appears" — and none of the seven songs in BUCKA.XMI carries an
+XMIDI loop controller (116-119), which is the same answer read off the file.
+So slot 2 alone gets `0xFC 0x00`; the rest is area music and keeps going.
+
+Verified that the driver does not wander off the end afterwards: the game
+plays normally 50 seconds in, past the 39.8-second track.
+
+## The demo runs, and then the graphics come apart
+
+DOS ECL1 block 24 is the attract-mode story demo, and it was already in the
+port as area `0x18` with nothing ever calling it. `tools/demomode.py` points
+the idle timeout at it, and it plays: the map loads, the party is placed at
+(13, 8) facing west, Buck's portrait comes up over the narration, and the
+first two captions are readable and correctly paced — `DELAY` is a real
+one-second wait on the Genesis (`0x03B74` -> `0x075F8`, `moveq #$3c` then 61
+frames), so the five and ten delay runs in the script hold as written.
+
+About fifteen seconds in the graphics start tearing: black diamonds over the
+portrait, then the status panel and the text box border break into
+checkerboard, then most of the screen.
+
+Two candidates are **ruled out** by sampling the handle stack every 150 frames
+through the whole run:
+
+* not VRAM tile exhaustion — the base peaks at 758 of the 1280 available
+  below plane A;
+* not a handle leak — the stack reaches depth 8 and unwinds again.
+
+So it is something else, and the demo stays behind `--no-demo` until it is
+found. Its script does three things ordinary play never does in this order:
+`LOADFILES 0x40` names a map the port does not have (softfail turns it into a
+no-op), `LOADPIECES 0x7` asks for a wall set, and it runs `COMBAT` with
+whatever party the menu happened to leave behind. Any of those is a better
+lead than the allocator.

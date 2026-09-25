@@ -54,6 +54,14 @@ MAX_DELTA = 0xFF
 # at the same moment. So 0xFC 0x80 is the loop, and it only works if the
 # region is a whole number of pages -- which tools/inject_music.py enforces.
 END = bytes((0xFC, 0x80))
+# ...and 0xFC 0x00 is the same terminator saying stop instead. Countdown uses
+# it on exactly one of its twelve tracks; Matrix Cubed's title theme needs it
+# too, because in DOS the theme plays once and the intro goes quiet -- a play
+# session watching both side by side reported the port looping where DOS
+# "reaches a stopping point not long after the cubed image appears". None of
+# the seven songs in BUCKA.XMI carries an XMIDI loop controller (116-119)
+# either, which is the same answer from the file.
+END_ONCE = bytes((0xFC, 0x00))
 # The lead-in delay is read at Z80 0x0866 as `LD A,(IY) / AND A / JP m` --
 # consumed only when it is positive. A value with bit 7 set is left in place
 # and then parsed as a status byte, which desynchronises the whole track.
@@ -172,7 +180,7 @@ def _remap(chan):
 TICK_SCALE = 0.5
 
 
-def convert(events, scale=TICK_SCALE):
+def convert(events, scale=TICK_SCALE, loop=True):
     """Return the driver's byte stream for one song."""
     patch = {}
     out = bytearray()
@@ -219,7 +227,7 @@ def convert(events, scale=TICK_SCALE):
             out += bytes((MAX_DELTA, 0xC0 | chan, patch.get(chan, DEFAULT_PATCH)))
             gap -= MAX_DELTA
         out.append(gap)
-    out += END
+    out += END if loop else END_ONCE
     return bytes(out)
 
 

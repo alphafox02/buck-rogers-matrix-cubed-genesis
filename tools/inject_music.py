@@ -87,6 +87,9 @@ def main():
     cursor = MUSIC_BASE
     for spec in specs:
         slot, path, song = spec.split(":")
+        # A trailing "!" on the song number means play once and stop.
+        loop = not song.endswith("!")
+        song = song.rstrip("!")
         slot, song = int(slot, 0), int(song, 0)
         data = (REPO / "dos_game" / "matrix" / path).read_bytes()
         got = xmi.songs(data)
@@ -94,7 +97,7 @@ def main():
             sys.exit(f"{path} has {len(got)} songs, asked for {song}")
         b, e = got[song]
         events = xmi.events(data, b, e)
-        seq = pad(xmi2seq.convert(events))
+        seq = pad(xmi2seq.convert(events, loop=loop))
         old = struct.unpack_from(">I", rom, MUSIC_TABLE + slot * 4)[0]
         at = cursor + END_POINTER
         struct.pack_into(">I", rom, cursor, at + len(seq))
@@ -102,7 +105,8 @@ def main():
         struct.pack_into(">I", rom, MUSIC_TABLE + slot * 4, at)
         notes = sum(1 for _, st, _ in events if st & 0xF0 == 0x90)
         print(f"  music[{slot}] <- {path} song {song}: {notes} notes, "
-              f"{len(seq)} bytes ({len(seq)//PAGE} pages) at 0x{at:06X}, "
+              f"{len(seq)} bytes ({len(seq)//PAGE} pages, "
+              f"{'loops' if loop else 'plays once'}) at 0x{at:06X}, "
               f"ends 0x{at + len(seq):06X} "
               f"(was 0x{old:06X})")
         cursor = at + len(seq) + 4
