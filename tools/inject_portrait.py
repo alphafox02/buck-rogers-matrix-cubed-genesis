@@ -265,7 +265,11 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
         if len(blob) <= budget:
             return blob, ntiles, PAL_COUNT
     # Only if merging cannot do it does the palette narrow.
-    for colours in (10, 8, 6, 4):
+    # One colour at a time, so a picture keeps the most it can fit. The old
+    # ladder stepped in twos and a portrait that needed eleven dropped
+    # straight to ten; with the palette now twelve rather than fifteen, the
+    # same coarse steps sent one face to four colours.
+    for colours in range(PAL_COUNT - 1, 3, -1):
         blob, ntiles = _encode_at(images, w, h, colours, 16, flags, palette)
         if len(blob) <= budget:
             return blob, ntiles, colours

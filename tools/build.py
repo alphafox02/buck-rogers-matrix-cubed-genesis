@@ -95,6 +95,12 @@ PORTRAITS = {
     0x56: "PIC1/086",   0x5B: "PIC1/091",   0x5C: "PIC8/092",
     0x5D: "PIC1/093",   0x5E: "PIC1/094",   0x5F: "PIC1/095",
     0x61: "PIC1/097",
+    # Named by the scripts, already in the directory, and DOS has the art --
+    # they were simply never listed. Surveying every id the scripts call
+    # against what we replace turned these up: 47 are named, and these were
+    # three of the ten still drawing Countdown's pictures. The other seven
+    # (0x79, 0x3E, 0x46-0x49) have no DOS source at all, so they stay.
+    0x2A: "PIC1/042",   0x59: "PIC1/089",   0x6F: "PIC1/111",
 }
 
 # Ids the stock directory does NOT hold, added by tools/expand_pictures.py.

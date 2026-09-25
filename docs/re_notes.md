@@ -4472,3 +4472,36 @@ Countdown's own art, which is untouched.
 
 Three colours fewer is a real cost on a face, and much cheaper than a third of
 it being drawn in whatever the last screen happened to use.
+
+### Which pictures the scripts actually name
+
+Surveying every `PICTURE` and `VIEW` id the transplanted scripts call, against
+what the build replaces:
+
+```
+    47  distinct picture ids named by the scripts
+    40  now carry Matrix Cubed art
+     7  still draw Countdown's, because no DOS source exists
+```
+
+The seven are `0x79`, `0x3E`, and `0x46`-`0x49`. None of them has a block in
+`PIC1.DAX` or `CPIC1.DAX`, so there is nothing to put in their place. Between
+them they are called eight times in the whole scenario.
+
+Three more -- `0x2A`, `0x59`, `0x6F` -- were named by the scripts, already in
+the directory, and DOS had the art; they had simply never been listed. They are
+now. Counting calls rather than ids is what made them worth finding: they are
+low-frequency, but so were most of the ids already covered.
+
+**Big pictures are a separate directory.** `VIEW` mode 1 uses the one behind
+the operands at `0x0B768`/`0x0B76E`, not the `PICTURE` directory at `0x0B7C2`.
+`0x70`-`0x75` are replaced from `BIGPIC1.DAX`; `0x79` is in that directory with
+real Countdown art behind it, so the "added id with no art" hazard the build
+warns about is not live here. A first count of what still needed replacing was
+wrong by four because it did not look at that directory at all.
+
+**One picture cannot hold twelve colours.** `0x2A` replaces a slot whose
+decompressed size is 3672 bytes, and the stream carries no length of its own --
+a blob larger than the original overruns whatever memory is free. It fits at
+four colours and nothing more. The colour ladder now steps one at a time
+instead of in twos, so every other picture keeps the full twelve.
