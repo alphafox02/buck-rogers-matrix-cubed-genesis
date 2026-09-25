@@ -4549,3 +4549,38 @@ trusting the change:
 
 Overflowing pages across the scenario: **10 before, 2 after**, and both
 survivors are stock Countdown's own text in area 0x43.
+
+### When the engine loads twelve colours and when it loads sixteen
+
+`[0xB4BD]` decides, and it is a **one-shot flag**:
+
+```
+    0088FE  st.b  $b4bd.w      before bsr $9dd4 -- the intro screens
+    00B782  st.b  $b4bd.w      before bsr $9dd4 -- the big-picture loader
+    009E66  clr.b $b4bd.w      0x09DD4 clears it at the end of every load
+```
+
+With it set, `0x09D66` uploads all sixteen entries of a palette line. With it
+clear it runs `subq.l #$3,d1 / addq.l #$6,a0` and uploads only entries 3 to 14.
+
+Only those two callers set it. The `PICTURE` loader at `0x0B7B4` does not, so
+**portraits always get twelve**, which is why they were the only thing the
+limit broke. Measured against the art:
+
+```
+    logo + copyright   45.9% of pixels in indices 0/1/2/15   draws correctly
+    credits            89.3%                                  draws correctly
+    portraits          up to 84%                              drew wrong
+```
+
+The intro screens lean on those indices heavily and are fine, because their
+path sets the flag. That is also the evidence that the limit is deliberate
+rather than a bug: entries 0 to 2 of a line are left alone so the interface
+drawn around the picture keeps its colours. Quantising portraits into 3..14, as
+`inject_portrait.py` now does, is therefore the right fix rather than a
+workaround -- setting the flag for portraits too would give them fifteen
+colours and repaint three the UI is using.
+
+Creatures are unaffected: `inject_creature.py` indexes a fixed hardware palette
+recovered by probing (`tools/figure_palette.json`) and ships none of its own, so
+no upload happens and the limit never applies.
