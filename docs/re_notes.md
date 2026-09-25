@@ -4434,3 +4434,41 @@ What is **not** established is the item id to name mapping. The table at
 indexed by a value `0x1388E` returns rather than by the item id -- feeding item
 ids into it yields prompt fragments like "Okay? yes~no", which is how I know it
 is the wrong table. Finding the right one is the remaining step.
+
+### Why every portrait was washed out
+
+A play session said Buck Rogers looked "really white looking and washed out" in
+the opening briefing. He did, and so did every other face in the game.
+
+The palette loader at `0x09D66` does not upload all sixteen entries. With
+`[0xB4BD]` clear it runs
+
+```
+    009DB8  tst.b  d3            ; [0xB4BD]
+    009DBC  subq.l #$3, d1       ; twelve words, not sixteen
+    009DBE  addq.l #$6, a0       ; starting at entry 3
+```
+
+so only indices **3 to 14** reach CRAM. Entries 0, 1, 2 and 15 keep whatever
+the previous screen left in them.
+
+`inject_portrait.py` quantised into 0..14 and put the backdrop at index 0, so
+real colours sat in slots that are never written. On Buck's portrait that was
+**34% of his pixels** -- index 1 alone, the tan of his armour, is 17%, and index
+15 held his skin tone. They drew in stale colours, which is the washout.
+
+The fix is to quantise into twelve colours and shift the tile indices to sit at
+3..14. Two things had to be got right:
+
+* `build_palette` prepends a backdrop entry, so it returns `colours + 1`. Asking
+  for one fewer keeps every index inside the range.
+* Only portraits are shifted. `inject_title.py` hands `encode` a palette of its
+  own with all sixteen entries in use, and those screens already draw correctly,
+  so that path passes `palette=` and is left unshifted.
+
+Measured across every picture in the directory, pixels sitting in
+never-uploaded slots went from **40.1% to 23.6%** -- the remainder being
+Countdown's own art, which is untouched.
+
+Three colours fewer is a real cost on a face, and much cheaper than a third of
+it being drawn in whatever the last screen happened to use.

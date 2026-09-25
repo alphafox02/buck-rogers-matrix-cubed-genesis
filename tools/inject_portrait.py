@@ -203,6 +203,38 @@ def nearest(px, rgb):
     return best
 
 
+# The palette loader at 0x09D66 does NOT upload all sixteen entries. With
+# [0xB4BD] clear it runs `subq.l #$3,d1 / addq.l #$6,a0` -- twelve words
+# starting at entry 3 -- so only indices 3 to 14 ever reach CRAM. Entries 0, 1,
+# 2 and 15 keep whatever the previous screen left in them.
+#
+# Every portrait shipped so far ignored that and quantised into 0..14, which
+# put real colours in slots that are never written. On Buck Rogers' briefing
+# portrait that was 34% of his pixels -- index 1 alone, the tan of his armour,
+# is 17% -- and they drew in stale colours. He came out white-haired and washed
+# out, which is what a play session reported.
+#
+# So the palette is twelve colours and the tile indices are shifted to sit at
+# 3..14. Three colours fewer is a real cost on a face, and much cheaper than a
+# third of it being whatever the last screen happened to use.
+PAL_FIRST, PAL_COUNT = 3, 12
+
+
+def _cram_words(words, shift):
+    """Sixteen CRAM words, the colours at 3..14 when the shift is on.
+
+    Only portraits are shifted. The intro screens come through
+    inject_title.py with a palette of their own and all sixteen entries in
+    use, and they already draw correctly, so that path is left alone.
+    """
+    if not shift:
+        return list(words)
+    out = [0] * 16
+    for i, w in enumerate(words[:PAL_COUNT]):
+        out[PAL_FIRST + i] = w
+    return out
+
+
 def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
            palette=None):
     """Build (blob, tile count, colours) for one picture, or None if it cannot fit.
@@ -220,20 +252,20 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
     while len(images) < frames:
         images.append(images[len(images) % len(images)] if images else images[0])
     images = images[:frames]
-    blob, ntiles = _encode_at(images, w, h, 15, 0, flags, palette)
+    blob, ntiles = _encode_at(images, w, h, PAL_COUNT, 0, flags, palette)
     if budget is None or len(blob) <= budget:
-        return blob, ntiles, 15
+        return blob, ntiles, PAL_COUNT
 
     # Over budget. Merging near-identical tiles costs far less than dropping
     # colours: a picture reduced to three colours is unrecognisable, where
     # sharing a tile whose neighbour differs in two pixels is invisible at
     # this size. Tolerance rises until it fits.
     for tol in range(1, 33):
-        blob, ntiles = _encode_at(images, w, h, 15, tol, flags, palette)
+        blob, ntiles = _encode_at(images, w, h, PAL_COUNT, tol, flags, palette)
         if len(blob) <= budget:
-            return blob, ntiles, 15
+            return blob, ntiles, PAL_COUNT
     # Only if merging cannot do it does the palette narrow.
-    for colours in (13, 11, 9, 7):
+    for colours in (10, 8, 6, 4):
         blob, ntiles = _encode_at(images, w, h, colours, 16, flags, palette)
         if len(blob) <= budget:
             return blob, ntiles, colours
@@ -241,7 +273,13 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
 
 
 def _encode_at(images, w, h, colours, tolerance=0, flags=FLAG_PALETTE, palette=None):
-    words, rgb = palette if palette else build_palette(images, colours)
+    # build_palette prepends a backdrop entry, so it returns colours + 1.
+    # Ask for one fewer and the list is exactly `colours` long, which keeps
+    # every index inside 3..14 once PAL_FIRST is added. A palette handed in by
+    # the caller is used as-is and not shifted.
+    shift = palette is None
+    words, rgb = palette if palette else build_palette(images, colours - 1)
+    first = PAL_FIRST if shift else 0
 
     tiles, order, nm = {}, [], []
     for im in images:
@@ -252,8 +290,8 @@ def _encode_at(images, w, h, colours, tolerance=0, flags=FLAG_PALETTE, palette=N
                 raw = bytearray()
                 for y in range(8):
                     for x in range(0, 8, 2):
-                        hi = idx[ty * 8 + y][tx * 8 + x]
-                        lo = idx[ty * 8 + y][tx * 8 + x + 1]
+                        hi = idx[ty * 8 + y][tx * 8 + x] + first
+                        lo = idx[ty * 8 + y][tx * 8 + x + 1] + first
                         raw.append((hi << 4) | lo)
                 key = bytes(raw)
                 if key not in tiles:
@@ -267,7 +305,7 @@ def _encode_at(images, w, h, colours, tolerance=0, flags=FLAG_PALETTE, palette=N
 
     blob = struct.pack(">HHH", len(order), len(nm) * 2, flags)
     blob += b"".join(struct.pack(">H", e) for e in nm)
-    blob += b"".join(struct.pack(">H", x) for x in words)
+    blob += b"".join(struct.pack(">H", x) for x in _cram_words(words, shift))
     blob += b"".join(order)
     return blob, len(order)
 
