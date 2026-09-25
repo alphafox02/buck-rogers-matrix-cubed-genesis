@@ -160,6 +160,13 @@ def patch(rom: bytes, ssi=True):
                          f" only {NEW_LIMIT - NEW} are dead")
     out[NEW:NEW + len(code)] = code
     out[HOOK:HOOK + 4] = _asm(HOOK, [("bra", NEW)])
+    n = len(RESTART_WAS)
+    if bytes(out[RESTART:RESTART + n]) == RESTART_WAS:
+        out[RESTART:RESTART + n] = NOP * (n // 2)
+        print(f"  music: restart at 0x{RESTART:05X} removed, one theme"
+              f" carries the intro and the card")
+    else:
+        print(f"  music: 0x{RESTART:05X} is not the restart, left alone")
     print(f"  logo block: {len(code)} bytes at 0x{NEW:05X}"
           f" (room for {NEW_LIMIT - NEW}), entered from 0x{HOOK:05X}")
     return bytes(out)
@@ -198,6 +205,24 @@ FIRST_WAIT = 0x01384        # operand of block 1's `move.w #$f0, d0`
 HOOK = 0x0139A              # `bsr.w $85da`, block 2's first instruction
 NEW = 0x0140C               # first byte trim_intro.py made unreachable
 NEW_LIMIT = 0x015F0
+
+# DOS plays ONE theme across the whole intro and lets it run out shortly after
+# the MATRIX CUBED card. The port restarted the music the moment the intro
+# returned: 0x012FC plays event 0x2E (the title theme) and comes back after
+# about seven seconds, and 0x0035C immediately starts event 0x36 (the menu
+# theme) and holds the card under it for up to 900 frames.
+#
+# So the title theme was never heard past its first seven seconds, and giving
+# it a stopping terminator changed nothing audible -- what plays over the card
+# is the other track. Taking the restart out instead lets the one theme carry
+# the intro, the card and the main menu, and stop on its own at 39.8 seconds,
+# which is what a play session watching DOS described.
+#
+# The cost is that 0x00352 -- coming back to the card after a game ends --
+# shares this code and is now silent. That is the same silence DOS has there.
+RESTART = 0x0035C
+RESTART_WAS = bytes.fromhex("303c00364eb90001b900")   # move.w #$36,d0; jsr
+NOP = bytes.fromhex("4e71")
 
 _REL = {"bsr": b"\x61\x00", "bra": b"\x60\x00", "bne": b"\x66\x00"}
 

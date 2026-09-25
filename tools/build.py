@@ -159,10 +159,16 @@ MUSIC.update({slot: ("BUCKA.XMI", song)
               for slot, song in sorted(soundmap.SONGS.items())})
 
 # Slots whose track plays once and stops rather than looping -- the "!" the
-# injector reads. Only the title theme, because that is what DOS does: the
-# theme runs out during the title card and the intro goes quiet, where
-# Countdown's own intro track loops under the menu for ever. Everything else
-# is area music and should keep going.
+# injector reads. DOS runs one theme across the whole intro and lets it end
+# shortly after the MATRIX CUBED card; Countdown loops instead, for ever.
+#
+# Only the title theme. introfix.py removes the restart at 0x0035C that used
+# to cut it off after seven seconds, so this one track now carries the intro,
+# the MATRIX CUBED card and the main menu before it ends.
+#
+# Slot 10 keeps looping: with the restart gone it is no longer the card's
+# music, and where it does still play (0x0DF30) a track that ends would leave
+# that screen silent.
 PLAY_ONCE = {2}
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is

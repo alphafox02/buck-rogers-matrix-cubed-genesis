@@ -4833,15 +4833,38 @@ The terminator is a pair, and the second byte decides: `0xFC 0x80` loops,
 `0xFC 0x00` stops. Countdown uses the stopping form on exactly one of its
 twelve tracks, so both are proven in the shipped driver.
 
-`xmi2seq.py` emitted the looping form for everything. In DOS the Matrix Cubed
-title theme plays once and the intro goes quiet — a play session watching both
-reported the port looping where DOS "reaches a stopping point not long after
-the cubed image appears" — and none of the seven songs in BUCKA.XMI carries an
-XMIDI loop controller (116-119), which is the same answer read off the file.
-So slot 2 alone gets `0xFC 0x00`; the rest is area music and keeps going.
+`xmi2seq.py` emitted the looping form for everything. In DOS one theme runs
+across the whole intro and ends shortly after the MATRIX CUBED card — a play
+session watching both reported the port looping where DOS "reaches a stopping
+point not long after the cubed image appears" — and none of the seven songs in
+BUCKA.XMI carries an XMIDI loop controller (116-119), which is the same answer
+read off the file. So slot 2 gets `0xFC 0x00`; the rest is area music and
+keeps going.
 
-Verified that the driver does not wander off the end afterwards: the game
-plays normally 50 seconds in, past the 39.8-second track.
+**And that alone changed nothing audible**, which is the part worth recording.
+The intro at `0x012FC` plays event `0x2E` (slot 2) and returns after about
+seven seconds. `0x0035C` then immediately starts event `0x36` (slot 10, the
+menu theme) and holds the cubed card under it for up to 900 frames:
+
+    0034C  bsr.w  $12fc        the intro
+    00350  bra.b  $35c
+    0035C  move.w #$36, d0     <- the restart
+    00360  jsr    $1b900.l
+    00366  jsr    $88c4.l      draw the MATRIX CUBED card
+    00370  move.l #$384, d2    900 frames, or until a button
+
+So the title theme was never heard past its first seven seconds, and what
+loops over the card is the other track. `introfix.py` NOPs the ten bytes at
+`0x0035C`, and the one theme then carries the intro, the card and the main
+menu and stops on its own at 39.8 seconds. Slot 10 stays looping: it is no
+longer the card's music, and where it does still play (`0x0DF30`) a track that
+ends would leave that screen silent.
+
+The cost is that `0x00352` — returning to the card after a game ends — shares
+this code and is now silent, which is the same silence DOS has there.
+
+Verified that the driver does not wander off the end: the game plays normally
+a minute in, well past the 39.8-second track.
 
 ## The demo runs, and then the graphics come apart
 
