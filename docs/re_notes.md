@@ -4505,3 +4505,47 @@ decompressed size is 3672 bytes, and the stream carries no length of its own --
 a blob larger than the original overruns whatever memory is free. It fits at
 four colours and nothing more. The colour ladder now steps one at a time
 instead of in twos, so every other picture keeps the full twelve.
+
+### Text in subroutines: the window simulation could not see it
+
+A play session caught "THEY ATTACK!" written over the middle of the Mercurians'
+line, leaving "THEY ATTACK!ETHING ABOUT DE SADE'S". The message is three lines
+and its subroutine is
+
+```
+    00D71  PRINT_RETURN x3
+    00D74  DELAY
+    00D75  PRINT  "THEY ATTACK!"
+```
+
+Three blank lines after a three-line message runs past a four-line window and
+wraps back onto line two. DOS had a taller box, so the spacing cost nothing.
+
+**Why neither the transpiler nor textcheck saw it.** Both walk the block in
+file order, and this is reached by `GOSUB`. In file order the instruction
+before it is a `GOTO`, which ends the simulated run, so the `PRINT_RETURN`s
+were skipped entirely and no break was considered.
+
+Following calls properly is the obvious answer and the wrong one: a subroutine
+can be called from several places with different window states, so a page break
+inserted inside it would be right for one caller and wrong for another. The
+safe assumption is the pessimistic one -- **text reached without a
+`PRINT_CLEAR` in front of it is treated as arriving on a full page**. Leading
+`PRINT_RETURN`s are then removed and the `PRINT` lands on the last line.
+
+There are **80 runs of two or more consecutive `PRINT_RETURN`** in the
+scenario, so this was not one scene.
+
+Two traps in implementing it, both caught by checking the output rather than
+trusting the change:
+
+* The existing `"drop"` emits a page break *in place of* the instruction. Using
+  it here turned three `PRINT_RETURN`s into three `CONTINUE`s -- three "press C"
+  prompts in a row, worse than the bug. A separate `"omit"` removes the
+  instruction and emits nothing.
+* An omitted offset still needs a `layout` entry. Without one the `GOSUB` that
+  targets it rebased to offset zero, and the subroutine became unreachable.
+  `"drop"` sets it; `"omit"` has to as well.
+
+Overflowing pages across the scenario: **10 before, 2 after**, and both
+survivors are stock Countdown's own text in area 0x43.

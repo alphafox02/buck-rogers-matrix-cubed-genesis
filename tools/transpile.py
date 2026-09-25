@@ -647,11 +647,30 @@ def transpile(block: bytes, flags=None):
                 _line, _col = len(_rows) - 1, len(_rows[-1])
             continue
         if not _active:
-            continue
+            # Text reached without a PRINT_CLEAR in front of it, which is what
+            # a subroutine looks like to a pass that walks the file in order.
+            # The window keeps whatever the caller left, and a subroutine can
+            # be called from several places, so the only safe assumption is
+            # the worst one: the page is already full.
+            #
+            # This is what put "THEY ATTACK!" on top of the Mercurians. Its
+            # subroutine is three PRINT_RETURNs and a PRINT -- spacing that
+            # cost DOS nothing in a taller box -- reached by GOSUB, so the
+            # simulation never saw it and the blank lines pushed the text off
+            # the bottom and back onto line two.
+            if _n in ("PRINT", "PRINT_RETURN"):
+                _active, _line, _col = True, LINES - 1, 0
+            else:
+                continue
         if _n == "PRINT_RETURN":
             if _line + 1 >= LINES:
-                breaks[_off] = "drop"
-                _active = False
+                # Remove it outright and stay on the last line. NOT "drop":
+                # that emits a page break in its place, and a subroutine
+                # beginning with three PRINT_RETURNs would become three
+                # "press C" prompts in a row, which is worse than the
+                # overflow it fixes. The following PRINT still has to land.
+                breaks[_off] = "omit"
+                _col = 0
             else:
                 _line += 1
                 _col = 0
@@ -752,6 +771,16 @@ def transpile(block: bytes, flags=None):
         if off in covered:
             continue                       # inside a table, not an instruction
         brk = breaks.get(off)
+        if brk == "omit":
+            # The address still has to resolve: a GOSUB may target exactly
+            # this instruction, and without a layout entry it rebases to
+            # offset zero. Point it at whatever is emitted next instead.
+            # Leaving that out sent the Mercurians' GOSUB to the top of the
+            # block.
+            layout.setdefault(off, pos)
+            report.append((off, "window",
+                           f"{found[off].name} removed: the window is full"))
+            continue
         if brk:
             cont, _ = gen["CONTINUE"]
             layout.setdefault(off, pos)
