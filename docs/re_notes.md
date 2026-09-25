@@ -4584,3 +4584,47 @@ colours and repaint three the UI is using.
 Creatures are unaffected: `inject_creature.py` indexes a fixed hardware palette
 recovered by probing (`tools/figure_palette.json`) and ships none of its own, so
 no upload happens and the limit never applies.
+
+### DOS hit points, and what the opening really asks for
+
+DOS keeps a monster's hit points at **+0x45** of its `MON0CHA.DAX` record. Found
+by comparing MER. H.S. ROBOT against its Genesis counterpart: both read 77, and
+the name is an exact match, so the field lines up.
+
+With that, the comparison by hit points rather than level:
+
+```
+    63 mapped creatures:  6 identical,  52 WEAKER on Genesis,  5 stronger
+```
+
+SID REFUGE falls from 105 to 42, WARRIOR from 63 to 14. So the transplanted
+creatures are mostly much softer than DOS's, which is the opposite of what a
+play session's difficulty suggested -- and the explanation is on the other side
+of the arithmetic.
+
+**The encounters themselves are faithful.** Every `LOAD_MON` in DOS block 17
+has a matching `LOADMONSTER` in the port, same counts, same order. The one a
+play session got stuck on -- heading back to the ship -- is six MER. WARRIOR at
+49 and three MER. H.S. ROBOT at 77, and the robots are among the six whose hit
+points are *identical* to DOS. That fight arrives at full strength.
+
+So the party has to be what DOS assumed. Six characters at level 6 field 306
+hit points against that encounter's 525. At level 8 they field 408, which is a
+hard fight rather than an arithmetic impossibility, and level 8 is what an
+imported Countdown party would plausibly be. `--veteran` now builds level 8.
+
+### The papers choice is faithful, not broken
+
+A play session reported that answering de Sade about Romney's papers changes
+nothing -- either way he "flashes a seductive smile" and leaves. DOS does
+exactly the same, instruction for instruction, including the `COMPARE 0, 0`
+that makes the following `IF_NOT_EQUALS` fall through:
+
+```
+    INPUT_YES_NO / IF_EQUALS / OR 16, [0x4C2E] / IF_EQUALS / COMPARE 0, 0 /
+    IF_NOT_EQUALS / WRITE_MEM 1, [0x4C03] / WRITE_MEM 0, [0x4C08]
+```
+
+The answer does something -- YES sets bit 0x10, which decides later whether de
+Sade is found examining the papers -- it simply does not change what he says at
+the time.

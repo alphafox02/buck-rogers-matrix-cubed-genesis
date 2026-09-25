@@ -127,7 +127,17 @@ SKILL_COUNT = 14
 # points scale each character by the same points-per-level they already have,
 # which keeps the team's internal balance (the warriors stay the tough ones)
 # instead of flattening everyone to one number the way --strong does.
-VETERAN_LEVEL = 6
+# Level 8, not 6. The first area's creatures are level 7, and comparing hit
+# points against DOS (which keeps them at +0x45 of a MON0CHA.DAX record) shows
+# 52 of 63 are WEAKER on the Genesis -- but not all of them. The Mercurian
+# encounter on the way back to the ship is six MER. WARRIOR at 49 and three
+# MER. H.S. ROBOT at 77, and the robots are one of six creatures whose hit
+# points are identical to DOS. So that fight arrives at full strength against a
+# party that DOS assumed would be imported from Countdown, several levels in.
+#
+# At 6 the team fields 306 hit points against that encounter's 525. At 8 it is
+# 408, which is a hard fight rather than an arithmetic impossibility.
+VETERAN_LEVEL = 8
 
 
 def records(raw):
