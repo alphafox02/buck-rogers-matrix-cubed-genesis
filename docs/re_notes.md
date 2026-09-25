@@ -4669,3 +4669,51 @@ not gear.
 is in `TREASURE`'s 34-byte exclusion list at `0x03978`, so the loader drops it.
 Twenty-one items are named and twenty are handed over. Whether DOS drops it too
 is not checked.
+
+### The DOS intro, frame by frame -- and a DEMO mode
+
+Captured from DOSBox by grabbing its window with `xwd` every 0.3s from launch
+(`xwininfo -root -tree` gives the window id; ffmpeg converts the xwd). The real
+sequence:
+
+```
+     1.2s   SSI logo and "STRATEGIC SIMULATIONS, INC. PRESENTS"
+     6.0s   BUCK ROGERS, the VOL. II line, and three copyright lines -- one screen
+    10.8s   the credits
+    30.3s   MATRIX CUBED over Jupiter, FULL SCREEN, with a bar along the bottom:
+            "MATRIX CUBED V1.0   PLAY   DEMO"
+```
+
+Two things the port does not have. It never shows an SSI "presents" screen at
+all. And **DOS has a DEMO mode**, offered as the second option on that bar --
+which is the "story mode with first-person map sections" a play session
+described. It is reached by choosing DEMO rather than by waiting, which is why
+it only turns up if you leave the title alone.
+
+### The title card cannot be improved by adding palettes -- a negative result
+
+The card behind the menu is the worst-looking art in the port: mean per-channel
+error 42 against the DOS original, the lettering's gradient dithered into noise
+and the starfield a checkerboard. The obvious fix is more colour -- a nametable
+word picks one of four palette lines per cell, and this card is one of only two
+loads that set `[0xB4BD]` first, so all sixteen entries of each line upload.
+
+It does not work, and the reason is size rather than colour:
+
+```
+    budget                    10086 bytes  -> room for about 279 tiles
+    two palettes, unmerged      568 tiles
+    two palettes, tolerance 36  264 tiles  -> fits
+    mean error before 42.1, after 42.3
+```
+
+Fitting two palettes needs tiles that differ in more than half their pixels to
+be merged, which discards exactly what the second palette bought. Rendered, the
+two-palette version is visibly *worse* -- the moon breaks up and Jupiter's bands
+go blotchy. The existing sixteen-colour version is already merged hard for the
+same reason, and that is where the checkerboarding comes from.
+
+`tools/titlecard.py` is kept as the worked experiment. It should not be shipped.
+Improving this card needs a bigger budget, not more palette lines, and the
+budget is the engine's: the stream carries no length and is expanded into
+whatever memory is free.
