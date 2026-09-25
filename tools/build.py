@@ -249,6 +249,8 @@ def main():
     # clean with the creatures on.
     creatures = "--no-creatures" not in sys.argv
     expand = "--no-expand" not in sys.argv
+    party = "--no-party" not in sys.argv
+    demo = "--no-demo" not in sys.argv
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path(argv[0]) if argv else DEFAULT_OUT
 
@@ -322,11 +324,23 @@ def main():
         # directory, so replacing them needs no table to grow.
         step("inject_title.py")
         step("trim_intro.py")
+        # DOS's order, which the port had lost: SSI presents, then the Buck
+        # Rogers logo with the copyright lines UNDER it rather than stranded
+        # on a screen of their own, then the credits. The third screen comes
+        # out of the code trim_intro.py just made unreachable.
+        step("introfix.py")
         if expand:
             step("expand_pictures.py", "--bigpic",
                  *[f"0x{p:02X}" for p in BIGPIC_ADDED])
         step("inject_portrait.py", "--bigpic",
              *[f"0x{p:02X}:BIGPIC1/{p:03d}" for p in BIGPIC_IDS])
+    # Room for both rosters. Harmless on its own -- it widens a stack buffer
+    # and nothing else -- and it is what any creature added later needs.
+    # Matrix Cubed's courtesy console, which the DOS map puts on the dock
+    # wall and Countdown's wall set has no piece for. Hand drawn at native
+    # resolution: the downscaled DOS pixels were tried and are worse.
+    if art:
+        step("injectconsole.py", "drawn", "--nopal")
     # Room for both rosters. Harmless on its own -- it widens a stack buffer
     # and nothing else -- and it is what any creature added later needs.
     step("monstercap.py")
@@ -381,6 +395,15 @@ def main():
         # ordinary play.
     else:
         step("rename_monsters.py")
+    # The pregenerated team at level 8 with perception. Countdown's own team
+    # is a level 1 party built for Countdown's first encounter; Matrix Cubed
+    # opens on robots that expect a party carried over from it.
+    if party:
+        step("boostparty.py", "--veteran")
+    # DOS block 24, the attract-mode demo, is already transplanted as area
+    # 0x18 and nothing has ever called it. This points the idle timeout at it.
+    if demo:
+        step("demomode.py")
     if music:
         step("inject_music.py",
              *[f"{slot}:{f}:{song}" for slot, (f, song) in sorted(MUSIC.items())])

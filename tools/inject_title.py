@@ -59,6 +59,25 @@ SCREENS = (
     (0x088FA, 36, 16, "menu"),
 )
 
+# What the menu card may spend, in unique tiles rather than bytes.
+#
+# The byte budget crushed this screen. Matrix Cubed's title art is a
+# photograph of Jupiter -- 210 colours, no flat areas -- so 566 of its 576
+# cells come out unique, and squeezing that into the 10086 bytes the
+# Countdown card decompressed to took merge tolerance 32: half the tiles
+# replaced by a neighbour differing in up to half its pixels. That is the
+# smeared lettering and the checkerboarded moon.
+#
+# Nothing was ever measuring the right thing. The loader streams tiles to
+# VRAM (see inject_portrait.encode), and this screen's tiles start at index
+# 93 -- VDP register 2 puts plane A at 0xA000, so there is room to 1280.
+# 1100 leaves margin for whatever the menu draws over the card.
+#
+# The card also gets all sixteen colours instead of the portraits' twelve:
+# 0x088FE sets the [0xB4BD] one-shot immediately before the load, so this is
+# one of the two screens whose whole palette reaches CRAM.
+MENU_TILES = 1100
+
 
 def compose_presents():
     """The Buck Rogers logo, centred and alone.
@@ -144,8 +163,12 @@ def main():
             flags = 0x0004
 
         img = BUILD[kind]()
-        pal = shared if kind in ("presents", "matrix") else None
-        got = ip.encode([img], 1, w, h, budget=len(was), flags=flags, palette=pal)
+        if kind == "menu":
+            pal, cap, budget = ip.build_palette([img], 15), MENU_TILES, None
+        else:
+            pal, cap, budget = shared, None, len(was)
+        got = ip.encode([img], 1, w, h, budget=budget, flags=flags,
+                        palette=pal, tiles=cap)
         if got is None:
             print(f"  {kind}: will not fit in {len(was)} bytes, left alone")
             continue

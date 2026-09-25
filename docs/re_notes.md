@@ -4717,3 +4717,74 @@ same reason, and that is where the checkerboarding comes from.
 Improving this card needs a bigger budget, not more palette lines, and the
 budget is the engine's: the stream carries no length and is expanded into
 whatever memory is free.
+
+## The picture loader streams — a blob's size was never the limit
+
+`0x09DD4` looks like "allocate a buffer, decompress into it, draw from it".
+It is not. It calls `0x09ED8` four times with a destination and a length, and
+`0x09ED8` pulls that many bytes off the LZW stream and puts them wherever it
+was told:
+
+    0x09D5A   6 bytes  -> -6(a6), the caller's stack: tiles, ntbytes, mask
+    0x09E12   ntbytes  -> the RAM nametable buffer named by the handle
+    0x09D7E   32 each  -> 0xFFFFD5AE, one per bit set in the mask
+    0x09E2E   tiles*32 -> the VDP data port
+
+`0x09ED8` decides which by the high word of `d0`: zero means VRAM and it
+points `a5` at `0xC00000`, otherwise `a5` is the address itself. Nothing ever
+holds the decompressed blob, so **the decompressed size is not a constraint**.
+What is:
+
+* the **nametable**, which is `w * h * 2` and fixed by the screen's shape;
+* the **tile count**, which climbs VRAM from the handle's base index until it
+  reaches plane A. VDP register 2 is `0x28` on the intro path, so plane A is
+  at `0xA000` — tile 1280.
+
+The handle stack entry at `0xFFB440` is six bytes and is now fully read:
+
+    +0  u16  first VRAM tile index
+    +2  u32  nametable buffer in RAM
+    +6  u16  the next entry's tile index   (this entry's +0 plus its tiles)
+    +8  u32  the next entry's buffer       (plus its nametable bytes)
+
+`0x09E4A` then walks the nametable it just loaded and adds the base tile index
+into bits 0-9 of every word. That is the "+1" that made the first credits
+screen unreadable: the base was 1, not 0.
+
+**What this changes.** `inject_portrait.encode` was capping replacements at the
+decompressed size of the picture being replaced, and meeting that cap by
+merging near-identical tiles. On the MATRIX CUBED title card — a photograph of
+Jupiter, 566 of its 576 cells unique — the cap forced merge tolerance 32, so
+more than half the tiles were replaced by a neighbour differing in up to half
+its pixels. That is the smeared lettering and the checkerboarded moon a play
+session reported. Encoding the same picture at tolerance 0 (19302 bytes, nearly
+double the old budget) boots, draws correctly, and leaves the dungeon
+pixel-identical. `encode` now takes `tiles=` for callers that know their base.
+
+The card also gets sixteen colours rather than the portraits' twelve, because
+`0x088FE` sets the `[0xB4BD]` one-shot immediately before its load — it is one
+of the two screens whose whole palette reaches CRAM.
+
+## The intro has room for a third screen
+
+DOS opens SSI presents (about a second), then the Buck Rogers logo with the
+copyright lines under it, then the credits, then the title card. The port had
+two screen slots and no SSI banner at all.
+
+`trim_intro.py` put a `bra.w $15f0` at `0x01408`, which strands everything from
+`0x0140C` to `0x015EF` — the two Countdown banner sequences. That is 484 bytes
+of dead code, and one load-and-draw block is 104. `introfix.py` now writes a
+third block there, points block 1's `lea` at the banner and shortens its wait
+to 72 frames, and replaces block 2's first instruction (`bsr.w $85da` at
+`0x0139A`) with `bra.w $140c`. The new block ends by running that displaced
+instruction and branching to `0x0139E`, so block 2 continues as it was.
+
+The new block frees with `bsr.w $1600` — the tail of `0x15fc`, which drops
+only `-4(a6)`. `0x09784` pops the handle stack and calls the error handler at
+`0x132A6` if the handle is not the top, so freeing the slots the block never
+took would fault. Block 1 gets away with `bsr.w $15fc` only because `0x01324`
+zeroed the other two and `0x09784` returns on a null.
+
+The banner is quantised against the **logo screen's** palette rather than one
+of its own: mean error 0.5, and the two screens then agree about entries 0, 1,
+2 and 15, which the second screen along never uploads.

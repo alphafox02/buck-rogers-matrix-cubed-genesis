@@ -236,13 +236,24 @@ def _cram_words(words, shift):
 
 
 def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
-           palette=None):
+           palette=None, tiles=None):
     """Build (blob, tile count, colours) for one picture, or None if it cannot fit.
 
-    `budget` is the DECOMPRESSED size of the picture being replaced. The
-    compressed stream carries no length of its own, so the engine expands it
-    into whatever memory happens to be free; a blob bigger than the original
-    overruns that, and BlastEm halts with a write above 0xDFFFFE.
+    Two ways to say how big the replacement may be.
+
+    `budget` is the DECOMPRESSED size of the picture being replaced -- the
+    conservative rule this started with, on the theory that the engine expands
+    the stream into whatever memory is free. It is a proxy, and a loose one.
+
+    `tiles` is a ceiling on unique tiles, which is what the hardware actually
+    limits. Prefer it where the tile base is known. Reading 0x09ED8 settles
+    the question: the loader STREAMS, taking six bytes of header to the stack,
+    the nametable to the RAM buffer the handle names, each palette to
+    0xFFFFD5AE, and the tile data straight out to the VDP data port. Nothing
+    holds the blob, so its length is not a limit at all; what binds is the
+    nametable (fixed by the screen's shape) and how far the tiles climb VRAM
+    before they reach plane A, which VDP register 2 puts at 0xA000 -- tile
+    1280.
 
     Fewer colours make more tiles come out identical and share, which shrinks
     the blob without cropping or scaling the picture. If even three colours
@@ -252,26 +263,41 @@ def encode(images, frames, w=SIDE, h=SIDE, budget=None, flags=FLAG_PALETTE,
     while len(images) < frames:
         images.append(images[len(images) % len(images)] if images else images[0])
     images = images[:frames]
-    blob, ntiles = _encode_at(images, w, h, PAL_COUNT, 0, flags, palette)
-    if budget is None or len(blob) <= budget:
-        return blob, ntiles, PAL_COUNT
+    colour_cap = 16 if palette else PAL_COUNT
+
+    # `tiles` measures the one resource that is actually scarce; `budget`
+    # measures a proxy for it that turns out not to bind. See the note above
+    # on the loader: 0x09ED8 STREAMS the decompressed blob -- six bytes of
+    # header to the stack, the nametable to RAM, each palette to 0xFFFFD5AE
+    # and the tiles straight out to the VDP data port. Nothing ever holds the
+    # whole thing, so its size is not a limit; the limits are the nametable,
+    # which a same-shaped screen cannot change, and how far the tiles reach up
+    # VRAM before they hit plane A.
+    def fits(blob, ntiles):
+        if tiles is not None:
+            return ntiles <= tiles
+        return budget is None or len(blob) <= budget
+
+    blob, ntiles = _encode_at(images, w, h, colour_cap, 0, flags, palette)
+    if fits(blob, ntiles):
+        return blob, ntiles, colour_cap
 
     # Over budget. Merging near-identical tiles costs far less than dropping
     # colours: a picture reduced to three colours is unrecognisable, where
     # sharing a tile whose neighbour differs in two pixels is invisible at
     # this size. Tolerance rises until it fits.
     for tol in range(1, 33):
-        blob, ntiles = _encode_at(images, w, h, PAL_COUNT, tol, flags, palette)
-        if len(blob) <= budget:
-            return blob, ntiles, PAL_COUNT
+        blob, ntiles = _encode_at(images, w, h, colour_cap, tol, flags, palette)
+        if fits(blob, ntiles):
+            return blob, ntiles, colour_cap
     # Only if merging cannot do it does the palette narrow.
     # One colour at a time, so a picture keeps the most it can fit. The old
     # ladder stepped in twos and a portrait that needed eleven dropped
     # straight to ten; with the palette now twelve rather than fifteen, the
     # same coarse steps sent one face to four colours.
-    for colours in range(PAL_COUNT - 1, 3, -1):
+    for colours in range(colour_cap - 1, 3, -1):
         blob, ntiles = _encode_at(images, w, h, colours, 16, flags, palette)
-        if len(blob) <= budget:
+        if fits(blob, ntiles):
             return blob, ntiles, colours
     return None
 
