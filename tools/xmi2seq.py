@@ -137,7 +137,42 @@ def _remap(chan):
     return MELODIC[(chan - 1) % len(MELODIC)]
 
 
-def convert(events, scale=1.0):
+# XMI ticks are 120 a second; the driver's are 60, so every delay halves.
+#
+# Neither number was guessed.
+#
+# The driver end: Z80 0x0038 is a bare RETI and 0x018D disables the YM2612
+# timers (`LD A,0x27` then data 0), so nothing on the sound chip paces it.
+# The 68000's per-frame service at 0x1B54C does:
+#
+#     addi.w  #$33, $d8f2.w     ; only when [0xD8E0] is set
+#     addi.w  #$100, $d8f2.w
+#     move.b  $d8f2.w, $a000e6.l
+#
+# -- a 16-bit accumulator whose HIGH byte is handed to the Z80, gaining
+# exactly one per frame. So one tick per frame, 60 a second. The conditional
+# 0x33 makes it 307/256 = 1.1992 ticks a frame, which is 50 x 1.1992 = 59.96:
+# that is the PAL correction, and it corrects TO sixty.
+#
+# The XMI end: the tempo meta events say what the music is notated at, and
+# the tick spacing says what it plays at, so the two together give the rate.
+# BUCKA.XMI song 0 is notated 714285 us/quarter (84 BPM) and changes to
+# 400000 (150 BPM) at tick 1371. Its quarter-note gaps measure 85 and 86
+# ticks in the first section and 48 in the second:
+#
+#     85.7 ticks / 0.714 s = 120        48 ticks / 0.400 s = 120
+#
+# Song 5, notated 500000 (120 BPM), has a 15-tick unit -- a sixteenth at
+# 120 BPM is 0.125 s, and 15 / 0.125 = 120 again.
+#
+# So the port was playing every track at half speed, which is what a play
+# session reported hearing. Scaling absolute times and re-differencing (which
+# `convert` already did, for no reason anyone recorded) keeps the total
+# length right instead of accumulating a rounding error per event.
+TICK_SCALE = 0.5
+
+
+def convert(events, scale=TICK_SCALE):
     """Return the driver's byte stream for one song."""
     patch = {}
     out = bytearray()

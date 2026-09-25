@@ -4788,3 +4788,41 @@ zeroed the other two and `0x09784` returns on a null.
 The banner is quantised against the **logo screen's** palette rather than one
 of its own: mean error 0.5, and the two screens then agree about entries 0, 1,
 2 and 15, which the second screen along never uploads.
+
+## The music was playing at half speed
+
+Two rates had to be measured, and neither was guessed.
+
+**The driver's.** Z80 `0x0038` is a bare `RETI`, and `0x018D` writes 0 to YM2612
+register `0x27`, which disables both its timers — so nothing on the sound chip
+paces the sequencer. The 68000's per-frame service does it, at `0x1B54C`:
+
+    addi.w  #$33, $d8f2.w      ; only when [0xD8E0] is set
+    addi.w  #$100, $d8f2.w
+    move.b  $d8f2.w, $a000e6.l
+
+`0xD8F2` is a 16-bit accumulator and `move.b` takes its HIGH byte, so the
+number handed to the Z80 gains exactly one per frame: **one tick per frame, 60
+a second**. The conditional `0x33` makes it 307/256 = 1.1992 ticks a frame,
+and 50 × 1.1992 = 59.96 — that is the PAL correction, and it corrects *to*
+sixty, which confirms sixty is the target.
+
+**XMI's.** The tempo meta events `xmi.py` skips are not decoration, and they
+are the key. BUCKA.XMI song 0 is notated at 714285 µs/quarter (84 BPM) and
+changes to 400000 (150 BPM) at tick 1371. Measuring its quarter-note onset
+gaps on either side of that change:
+
+    first section   85-86 ticks / 0.714 s = 120 ticks a second
+    second section  48 ticks    / 0.400 s = 120 ticks a second
+
+Song 5, notated 500000 (120 BPM), runs on a 15-tick unit; a sixteenth at 120
+BPM is 0.125 s, and 15 / 0.125 = 120 again. So XMI delays are 120 a second and
+the driver's are 60, and `xmi2seq.py` was passing them through unchanged.
+
+`TICK_SCALE = 0.5`, applied to absolute times before re-differencing so the
+error does not accumulate. The corroboration is that the title theme now
+measures 39.8 s against stock Countdown's own title theme at 37.6 s — the same
+composer, the same driver, the same kind of tune — where before it was 79.6.
+
+Nine notes across the seven songs have a duration of one XMI tick and collapse
+to zero length. They are inaudible either way.
