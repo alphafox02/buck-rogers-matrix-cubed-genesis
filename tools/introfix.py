@@ -145,7 +145,8 @@ def patch(rom: bytes, ssi=True):
         return at
 
     logo = place(merge_title(rom), "logo+copyright")
-    struct.pack_into(">I", out, SECOND_LEA, place(credits_screen(), "credits"))
+    creds = place(credits_screen(), "credits")
+    struct.pack_into(">I", out, SECOND_LEA, creds)
 
     if not ssi:
         struct.pack_into(">I", out, TITLE_LEA, logo)
@@ -153,10 +154,18 @@ def patch(rom: bytes, ssi=True):
 
     struct.pack_into(">I", out, TITLE_LEA, place(ssi_screen(rom), "ssi presents"))
     struct.pack_into(">H", out, FIRST_WAIT, SSI_FRAMES)
-    code = intro_block(NEW, logo, ROWS_FULL, 0xF0,
-                       [("bsr", 0x085DA), ("bra", 0x0139E)])
+    # Both remaining cards are built here rather than reusing the stock second
+    # block, whose wait is a `moveq` -- two bytes, so no value above 127 fits
+    # where it stands, and the credits need 1380 frames. The stock block goes
+    # dead along with the rest of what trim_intro.py stranded.
+    size = len(intro_block(NEW, logo, ROWS_FULL, 0, LOGO_SECONDS, []))
+    second = NEW + size + 4                     # room for the `bra.w` below
+    first = intro_block(NEW, logo, ROWS_FULL, 0, LOGO_SECONDS,
+                        [("bra", second)])
+    rest = intro_block(second, creds, 25, 1, CREDITS_SECONDS, [("bra", 0x015F0)])
+    code = first + rest
     if NEW + len(code) > NEW_LIMIT:
-        raise SystemExit(f"the logo block needs {len(code)} bytes,"
+        raise SystemExit(f"the two blocks need {len(code)} bytes,"
                          f" only {NEW_LIMIT - NEW} are dead")
     out[NEW:NEW + len(code)] = code
     out[HOOK:HOOK + 4] = _asm(HOOK, [("bra", NEW)])
@@ -167,8 +176,10 @@ def patch(rom: bytes, ssi=True):
               f" carries the intro and the card")
     else:
         print(f"  music: 0x{RESTART:05X} is not the restart, left alone")
-    print(f"  logo block: {len(code)} bytes at 0x{NEW:05X}"
-          f" (room for {NEW_LIMIT - NEW}), entered from 0x{HOOK:05X}")
+    print(f"  logo block {len(first)}B at 0x{NEW:05X} ({LOGO_SECONDS}s),"
+          f" credits {len(rest)}B at 0x{second:05X} ({CREDITS_SECONDS}s);"
+          f" {len(code)} of {NEW_LIMIT - NEW} dead bytes,"
+          f" entered from 0x{HOOK:05X}")
     return bytes(out)
 
 
@@ -200,10 +211,20 @@ def patch(rom: bytes, ssi=True):
 
 SSI_ART = REPO / "extracted/images/TITLE/001.png"
 ROWS_FULL = 28
-SSI_FRAMES = 72             # DOS holds it about 1.2 seconds
 FIRST_WAIT = 0x01384        # operand of block 1's `move.w #$f0, d0`
 HOOK = 0x0139A              # `bsr.w $85da`, block 2's first instruction
 NEW = 0x0140C               # first byte trim_intro.py made unreachable
+
+# How long each card holds. Measured off DOS frame by frame at period speed
+# (`cycles=fixed 3000`): the SSI banner appears at 1.2 s, the Buck Rogers logo
+# at 6.0, the credits at 10.8, the MATRIX CUBED card at 33.5. So the cards run
+# 4.8, 4.8 and 22.7 seconds, and the 39.8-second theme runs out a few seconds
+# after the cubed card arrives -- which is separately what a play session
+# watching DOS described. The port was doing all three in about seven seconds,
+# and the credits in particular "flashed quickly".
+SSI_FRAMES = 288            # 4.8 s, block 1's own `move.w` immediate
+LOGO_SECONDS = 5
+CREDITS_SECONDS = 23
 NEW_LIMIT = 0x015F0
 
 # DOS plays ONE theme across the whole intro and lets it run out shortly after
@@ -224,7 +245,8 @@ RESTART = 0x0035C
 RESTART_WAS = bytes.fromhex("303c00364eb90001b900")   # move.w #$36,d0; jsr
 NOP = bytes.fromhex("4e71")
 
-_REL = {"bsr": b"\x61\x00", "bra": b"\x60\x00", "bne": b"\x66\x00"}
+_REL = {"bsr": b"\x61\x00", "bra": b"\x60\x00", "bne": b"\x66\x00",
+        "dbra7": b"\x51\xcf"}
 
 
 def _asm(at, parts):
@@ -240,9 +262,19 @@ def _asm(at, parts):
     return bytes(out)
 
 
-def intro_block(at, art, rows, frames, tail):
-    """One load-and-draw, cut from the two the intro already has."""
+def intro_block(at, art, rows, row0, seconds, tail):
+    """One load-and-draw, cut from the two the intro already has.
+
+    The wait is a `dbra` over one-second chunks with the skip flag tested each
+    time round, not one long call. A 23-second credits screen that ignored the
+    button until it was over would be worse than one that flashes past; the
+    stock code only tests `0xFFFFD8FC` between screens, which is fine when no
+    screen is held for more than four seconds.
+    """
     b = bytes.fromhex
+    # 4 + 6 + 4 + 6 + 6 + 4 + 12 + 6 + 4 + 4 + 4 + 6 + 6 + 2 bytes in, which is
+    # the `move.w #$3c, d0` below and NOT its operand.
+    loop = at + 74
     return _asm(at, [
         ("bsr", 0x085DA),
         b("11fc000e9bbc"),                       # move.b  #$e, $9bbc.w
@@ -250,17 +282,19 @@ def intro_block(at, art, rows, frames, tail):
         b("41f9") + struct.pack(">I", art),      # lea.l   <art>.l, a0
         b("4eb900009dd4"),                       # jsr     $9dd4.l   decompress
         b("2d48fffc"),                           # move.l  a0, -$4(a6)
-        b("7000720274007600") + bytes([0x78, COLS, 0x7A, rows]),
+        b("700072027400") + bytes([0x76, row0, 0x78, COLS, 0x7A, rows]),
         b("31fcffffb510"),                       # move.w  #$ffff, $b510.w
         b("4278b512"), b("4278b50e"),
         b("206efffc"),                           # movea.l -$4(a6), a0
         b("4eb9000095be"),                       # jsr     $95be.l   draw
         b("4eb90000860e"),                       # jsr     $860e.l   show
-        b("303c") + struct.pack(">H", frames),
-        b("4eb9000075fa"),                       # jsr     $75fa.l   wait
-        ("bsr", 0x01600),                        # free -$4(a6), and only that
+        bytes([0x7E, seconds - 1]),              # moveq   #n-1, d7
+        b("303c003c"),                           # move.w  #$3c, d0     <- loop
+        b("4eb9000075fa"),                       # jsr     $75fa.l   one second
         b("4a39ffffd8fc"),                       # tst.b   $ffffd8fc.l  skipped?
         ("bne", 0x015F0),
+        ("dbra7", loop),
+        ("bsr", 0x01600),                        # free -$4(a6), and only that
     ] + list(tail))
 
 

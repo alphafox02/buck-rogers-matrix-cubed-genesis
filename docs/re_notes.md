@@ -4893,3 +4893,31 @@ found. Its script does three things ordinary play never does in this order:
 no-op), `LOADPIECES 0x7` asks for a wall set, and it runs `COMBAT` with
 whatever party the menu happened to leave behind. Any of those is a better
 lead than the allocator.
+
+## Intro card timings, measured off DOS
+
+The port ran its three cards in about seven seconds and a play session called
+the credits "flashing quickly". DOS, captured frame by frame at period speed
+(`cycles=fixed 3000`), shows the SSI banner at 1.2 s, the Buck Rogers logo at
+6.0, the credits at 10.8 and the MATRIX CUBED card at 33.5 — so the cards hold
+4.8, 4.8 and 22.7 seconds. That also puts the 39.8-second theme's end a few
+seconds after the cubed card arrives, which is separately what the same
+session described watching DOS.
+
+Block 1's wait is a `move.w` immediate and takes 288 frames directly. The
+other two could not: the stock second block's wait is a `moveq`, two bytes, so
+nothing above 127 fits where it stands and the credits need 1380 frames. Both
+cards are therefore built into the dead code instead — 106 bytes each, 212 of
+the 484 `trim_intro.py` stranded — and the stock second block goes dead with
+the rest.
+
+Each wait is a `dbra` over one-second calls to `0x075FA` with `0xFFFFD8FC`
+tested every time round, rather than one long call. The stock code only tests
+the skip flag *between* screens, which is fine when nothing is held for more
+than four seconds and not fine for a 23-second credits screen. Measured: START
+pressed 3 seconds into the credits leaves them within about a second.
+
+The resulting order, timed in the emulator: EA logo to 11.5 s (stock
+Countdown's, and the reason the port reaches the cubed card at 43 s where DOS
+reaches it at 33), SSI to 16.8, Buck Rogers to 21.5, credits to 43.0, then the
+card — with the music ending at about 51.
