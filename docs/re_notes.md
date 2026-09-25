@@ -4628,3 +4628,44 @@ that makes the following `IF_NOT_EQUALS` fall through:
 The answer does something -- YES sets bit 0x10, which decides later whether de
 Sade is found examining the papers -- it simply does not change what he says at
 the time.
+
+### The item table
+
+At **`0x0F17CC`**, ten bytes per record, indexed by item id -- `mulu.w #$a,d0 /
+lea.l $f17cc.l,a2 / adda.w d0,a2` at `0x01624E`, reached from the loop that
+walks the party's item list at `0xB9F4`.
+
+```
+    +0    the item's own id
+    +2    second word of the name
+    +3    first word of the name
+    +6    price, 16-bit
+```
+
+The name is `word[+3] + " " + word[+2]` against the word table at `0x11DC4`, so
+`0x08` is `mono sword`, `0x0D` `laser rifle`, `0x18` `battle armor w/fields`.
+A second table at `0x0A829` maps an id to a substitute when the first byte is
+non-zero, which is how racial variants chain.
+
+Two earlier guesses about where item names lived were wrong and are worth
+recording so they are not tried again: `0x13866` is the **prompt** table
+("yes~no", "press c to continue"), indexed by a prompt number, and `0x1388E`
+is text-window setup, not a lookup. Feeding item ids into either returns
+plausible-looking nonsense.
+
+**The starting kit is not the problem.** Decoded, area 0x10 hands out:
+
+```
+    4 x heavy body armor  1700     2 x battle armor     2500
+    2 x mono sword        1000     1 x rocket launcher  2000
+    2 x rocket pistol      400     3 x needle gun        210
+    1 x spacesuit          500     5 x grenades
+```
+
+That is an equipped party, not a beginner's. So the difficulty gap is levels,
+not gear.
+
+**One item never arrives.** The kit lists `0x0F`, the sonic stunner, and `0x0F`
+is in `TREASURE`'s 34-byte exclusion list at `0x03978`, so the loader drops it.
+Twenty-one items are named and twenty are handed over. Whether DOS drops it too
+is not checked.
