@@ -5089,3 +5089,45 @@ period speed, the frame where the demo begins shows its party roster as
 -- the same three characters, at the same square and facing the port now
 reaches. That is the mapping verified from the other side rather than argued
 from the tables.
+
+## Why the demo walks through space, and why it is not a wall-set problem
+
+Measured, in order, against a DOSBox capture of the original.
+
+**The map is not mangled.** The port's geo area `0x40` is byte-for-byte
+identical to DOS's `GEO1.DAX` map 64 across both wall planes.
+
+**It is not the wall set.** Forcing the set index (patching `divu.w #$3,d2`
+at `0x03ADE` to `moveq #n,d2 / nop`) and booting all ten shows they draw the
+same geometry in ten colour and texture schemes. None of them is "space".
+The `wallmap.py` docstring invites suspicion of the ten-to-ten ordering, and
+that suspicion is misplaced here.
+
+**It is not the code table either.** Each set carries a sixteen-byte
+code-to-piece table behind the word offsets at `0x51836`, and `0x0B4FA` skips
+a code whose entry is negative. Set 2's table is
+`ff 01 02 02 03 03 04 05 05 06 07 00 01 ff 04 00`, so the codes this map uses
+-- `B` and `C` -- resolve to pieces 0 and 1. Only code `D` is blanked.
+
+**The row the demo walks has no walls of its own.** Comparing the party's own
+row on each map:
+
+    dock, map 0x01, y=2     (0,2) NB..WB  (1,2) NC EB  (2,2) NC..WB  (3,2) NB EB
+                            (4,2) EC WB   (5,2) WC     (6,2) EB      (7,2) NB WB
+    demo, map 0x40, y=8     x=9, 10 and 12 are N0 E0 S0 W0 -- nothing at all
+
+Both maps have exactly 27 fully-empty squares out of 256, so map 64 is not
+unusually sparse; it is this corridor that is defined by walls one square
+further out. The port's view draws pieces for the walls a square carries, so
+a square carrying none draws as backdrop -- which is the starfield. DOS's
+first-person view composes a corridor out of the same sparse data, which is
+why `12,8 W` looks like a hallway there and like open space here.
+
+So this is a renderer difference, not a data or id-mapping fault, and fixing
+it means changing what the port draws for an empty square rather than
+repointing a table.
+
+Also worth recording from the capture: DOS puts its pictures **in the view
+panel**, replacing the corridor, and alternates the two. The port shows the
+map and the picture window side by side, so it draws a view at moments when
+DOS is not drawing one at all.
