@@ -5054,3 +5054,38 @@ Two things checked while here and found NOT to be wrong:
   so it is discarded. Only argument 0 reaches the roster search, as `d2`.
 * The demo's creatures are right: DOS 59 is GANG RECRUIT and DOS 22 is VENUS
   DINOSAUR, which is the "t rex" a play session saw.
+
+## The ADDNPC table lists roster ids, not pairs of id and record
+
+Correcting the note above, which was wrong in a way that shipped: `0x0488C`
+reads the table's second byte into `d4`, and `0x048E8` never uses `d4`. Its
+roster search at `0x04928` compares `d2` -- **the id itself**. So the id in an
+`ADDNPC` is a roster record id, and the table is only a list of which records
+are allowed to join a party.
+
+Countdown's own entries say so plainly once you look them up in the roster:
+
+    0x3B TUSKON     0x3C LEANDER      0x3D ZANE        0x3E BUCK ROGERS
+    0x6A BEOWULF SAND   0x6B JASON BRAGA   0x6C CARLOS RIOJA
+
+all seven are records at exactly those numbers. The second bytes (`0x8A`,
+`0x83`, `0x87`) cannot be record ids at all -- the roster's highest id is
+`0x6C`.
+
+Reading it the other way put roster record `0x1E`, RAM WARRIOR, into the demo
+party in place of Killer Kane, which a play session caught at once: "there was
+no Kane, just Buck and one other person". `npcmap` now maps `0x1E` to `0x42`,
+Kane's own roster id, and `npctable.py` adds `0x42` to the table so the scan
+accepts it.
+
+**Confirmed against the DOS original.** Capturing Matrix Cubed under DOSBox at
+period speed, the frame where the demo begins shows its party roster as
+
+    NAME          AC  HP
+    LEANDER       -4  46
+    KILLER KANE    6  53
+    BUCK ROGERS    6  63          13,8 W  00:00
+
+-- the same three characters, at the same square and facing the port now
+reaches. That is the mapping verified from the other side rather than argued
+from the tables.

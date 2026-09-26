@@ -356,6 +356,9 @@ def main():
         step("injectconsole.py", "drawn", "--nopal")
     # Room for both rosters. Harmless on its own -- it widens a stack buffer
     # and nothing else -- and it is what any creature added later needs.
+    # Room in the ADDNPC table for Matrix Cubed's own NPCs -- Killer Kane,
+    # who is in the roster already and had nowhere to be named.
+    step("npctable.py")
     step("monstercap.py")
     # A 48x48 creature size. Stock Countdown draws 24x24, 24x48 and 48x24.
     #
