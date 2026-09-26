@@ -103,26 +103,44 @@ SQUARES_END = 0x142EC
 OCCUPY = 0x1050C
 OCCUPY_END = 0x1052E
 
-# The frame index, and where a frame starts in the sheet:
+# A 48x48 creature dies and disappears, because nothing else would remove it.
 #
-#     0AE2A: move.b $11(a3), d0   ; animation step
-#     0AE2E: asl.b  #$2, d0       ; four units per step
-#     0AE60: add.b  d1, d0        ; plus the facing
-#     0AE68: add.b  d1, d0        ; twice, if the creature is large
-#     0AE74: mulu.w #$12, d0      ; a unit is 18 bytes -- nine cells
+# The combat board draws figures as PLANE A TILES, not sprites: d3 at 0x0AE1A
+# is a nametable address and the row loop steps it by 0x80, one tile row. So a
+# figure's pixels are only ever touched when that figure is drawn, and a
+# creature that stops being drawn simply stays on screen. Counting draws of the
+# Venus Dinosaur through the demo's fight shows it painted twice in the whole
+# combat and never again once it dies -- the dinosaur a play session sees
+# standing over the corpse is stale tilemap, with the engine's 24x24 corpse
+# painted over one corner of it.
 #
-# A 24x24 frame is nine cells and steps one unit; 24x48 and 48x24 are
-# eighteen and step two, which is what the second `add.b` buys. A 48x48
-# frame is thirty-six and has to step four, so its index is simply twice
-# the large one -- one shift, applied only for size 4.
+# 0x07608 is where a figure dies. It subtracts the damage from $E(a3), picks a
+# corpse kind by how far past zero the blow went, writes it to (a3), sets bit 7
+# -- which moves the figure to the first of the two draw loops at 0x0ACF4 --
+# and, in combat, releases the grid squares it stood on via 0x142A8. What it
+# never does is erase the tiles. For a 24x24 creature that does not matter: the
+# corpse frame is the same size as the pose and covers it. A 48x48 corpse is a
+# quarter of one, so three quarters of the creature is left behind.
 #
-# Size 4 is told apart by the flag at -2(a6): stock writes 0xFF for large
-# and 0 for normal, and every test on it in this routine is `tst`/`bne`, so
-# writing 1 instead behaves identically everywhere except where this asks
-# whether it is negative.
-INDEX = 0x0AE6A
-INDEX_END = 0x0AE7A
-INDEX_STOCK = bytes.fromhex("4880226800024a406706c0fc0012d2c0")
+# The engine already has the piece that is missing. 0x0F996 erases one figure's
+# tiles -- 0x0AD3E is the same draw routine with the row writer at 0x0AE92,
+# which fills with d7 = 0, and a plane A cell of zero is transparent, so the
+# floor on plane B comes back -- and releases its squares. 0x0F9A6, the
+# engine's own "take this figure off the board", is exactly that followed by
+# `bset #2, $1(a3)`, the bit both draw loops test and skip on. This does the
+# same three things for a size 4 creature.
+#
+# DOS flashes four skulls over the squares before the creature goes. Those are
+# not reproduced: there is no draw left to put them in, and a frame that
+# persists is not a flash. See docs/re_notes.md for the two frame-index
+# rewrites that were tried for that and backed out.
+DEATH = 0x07676
+DEATH_END = 0x0767E
+DEATH_STOCK = bytes.fromhex("244b4eb9000142a8")
+
+UNMARK = 0x142A8            # release the grid squares a figure stood on
+RECORD = 0x06F14            # d0 = $2(a3) -> a1 = that creature's record
+HIDE = 0x0F996              # erase one figure's tiles, release its squares
 
 
 def slots():
@@ -245,9 +263,31 @@ def index():
     return a.done() + b"\x4e\xf9" + struct.pack(">I", INDEX_END)
 
 
+def death():
+    """Erase a dead 48x48 creature and stop the board ever drawing it again.
+
+    The two stock instructions come first and unchanged -- a2 is the figure
+    and 0x142A8 frees its squares -- because the rest only makes sense once
+    the engine has decided this really is a combat death. Everything after
+    runs only when the creature's record says size 4.
+    """
+    a = Asm()
+    a.raw("244b")                                  # movea.l a3, a2   (stock)
+    a.raw("4eb9").raw(f"{UNMARK:08x}")             # jsr $142a8       (stock)
+    a.raw("102b0002")                              # move.b $2(a3), d0
+    a.raw("4eb9").raw(f"{RECORD:08x}")             # jsr $6f14  -> a1
+    a.raw("0c29").raw(f"{BIG:04x}").raw("0023")    # cmpi.b #4, $23(a1)
+    a.br(0x66, "out")
+    a.raw("4eb9").raw(f"{HIDE:08x}")               # jsr $f996   erase it
+    a.raw("08eb00020001")                          # bset.b #2, $1(a3)
+    a.label("out")
+    return a.done() + b"\x4e\xf9" + struct.pack(">I", DEATH_END)
+
+
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
-    for at, name, stock in ((SLOTS, "slot count", SLOTS_STOCK),):
+    for at, name, stock in ((SLOTS, "slot count", SLOTS_STOCK),
+                            (DEATH, "death", DEATH_STOCK)):
         if bytes(rom[at:at + len(stock)]) != stock:
             raise SystemExit(f"0x{at:05X} is not the {name}: "
                              f"{bytes(rom[at:at + len(stock)]).hex()}")
@@ -256,11 +296,15 @@ def apply(rom: bytes) -> bytes:
     for name, build, site, end in (("slot count", slots, SLOTS, SLOTS_END),
                                    ("frame shape", shape, SHAPE, SHAPE_END),
                                    ("grid squares", squares, SQUARES, SQUARES_END),
-                                   ("occupancy", occupy, OCCUPY, OCCUPY_END)):
+                                   ("occupancy", occupy, OCCUPY, OCCUPY_END),
+                                   ("death", death, DEATH, DEATH_END)):
         cursor += cursor & 1
         code = build()
         if cursor + len(code) > NEW_LIMIT:
             raise SystemExit("the new blocks do not fit")
+        if any(rom[cursor:cursor + len(code)]):
+            raise SystemExit(f"0x{cursor:06X}+{len(code)} is not free: "
+                             f"{bytes(rom[cursor:cursor + len(code)]).hex()[:32]}...")
         rom[cursor:cursor + len(code)] = code
         room = end - site
         if room < 6:
@@ -272,7 +316,7 @@ def apply(rom: bytes) -> bytes:
         cursor += len(code)
 
     print(f"  size {BIG} = 48x48: six rows by six columns, standing on "
-          f"two grid squares by two")
+          f"two grid squares by two, erased when it dies")
     return integrity.repair(bytes(rom))
 
 

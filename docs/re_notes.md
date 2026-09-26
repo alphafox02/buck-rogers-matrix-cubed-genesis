@@ -5632,5 +5632,46 @@ animated frame as `base + (step << 1)` for anything above size 1 and
 `base + (step << 2)` for 24x24 -- four units per step, which is one frame for
 a 48x48 and is therefore already right for it, unlike the facing.
 
+### Fixed: 0x07676, the combat branch of the death routine
+
+`0x07608` is where a figure dies. It takes the damage off `$E(a3)`, picks a
+corpse kind by how far past zero the blow went, writes it to `(a3)`, sets bit
+7 -- which moves the figure into the first of the two draw loops at `0x0ACF4`
+-- and then, only in combat (`[0x9BBC] == 2`), does
+
+    07676  movea.l a3, a2
+    07678  jsr     $142a8.l        ; release the grid squares it stood on
+
+and nothing else. The squares come back; the tiles do not.
+
+Everything needed was already in the ROM. `0x0F996` erases one figure's tiles
+and releases its squares -- `0x0AD3E` is the same draw routine with the row
+writer at `0x0AE92`, which fills with `d7` = 0, and a plane A cell of zero is
+transparent, so the floor on plane B comes back. `0x0F9A6`, the engine's own
+"take this figure off the board", is that followed by `bset #2, $1(a3)`, the
+bit both draw loops test and skip on. `bigcreature.py` now relocates those two
+stock instructions and adds, for a creature whose record says size 4:
+
+    jsr $f996          ; erase its tiles, release its squares
+    bset #2, $1(a3)    ; and never draw it again
+
+The size comes from `$23(a1)` after `move.b $2(a3), d0` / `jsr $6f14`, which
+is how every other reader of that byte gets to it.
+
+Measured on the demo's own fight, with the dinosaur at its real 42 hit points:
+standing at 125.00s, gone at 125.20s, clean floor where it was, no corpse, and
+every other figure on the board untouched. The two 24x24 creatures still lie
+down, which is what DOS does for anything man-sized.
+
+A full board repaint through `0x0AC9C` was tried first, to cover anything the
+48x48 erase might have clipped, and dropped: nothing stands on those squares,
+`bigplacement.py` sees to that, and the extra VDP traffic is not free.
+
+**The bug that hid this for a build:** `bigplacement.py` had `NEW = 0x0F1D00`
+with the comment "free: bigcreature.py's blocks end by 0x0F1CD6". Adding a
+fifth block pushed that cursor to `0x0F1D02` and the two overwrote each other.
+The ROM booted, played the logos, and then sat on the intro. Both tools now
+refuse to write over a byte that is not already zero.
+
 Anyone picking this up has the whole rig: one hit point, the frame-coloured
 probe sheet, the `a3` store, and the savestate RAM offset above.

@@ -42,7 +42,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import integrity
 
-NEW = 0x0F1D00              # free: bigcreature.py's blocks end by 0x0F1CD6
+NEW = 0x0F1D40              # free: bigcreature.py's blocks end by 0x0F1D02
+#
+# That figure is checked, not remembered. Adding a fifth block to
+# bigcreature.py pushed its cursor from 0x0F1CD6 to 0x0F1D02, straight over
+# the front of this one, and the ROM booted and then sat on the intro --
+# a collision this far from either tool's own output is not something a
+# build log makes obvious. Both tools now refuse to write over a byte that
+# is not already zero, so the next one fails loudly instead.
 NEW_LIMIT = 0x0F1FD0        # music starts at 0x0F2004
 
 HOOK = 0x14934              # cmp.b #$3, d0 / bne.b $14952
@@ -130,6 +137,9 @@ def patch(rom: bytes):
     code = a.done()
     if NEW + len(code) > NEW_LIMIT:
         raise SystemExit(f"{len(code)} bytes will not fit before 0x{NEW_LIMIT:05X}")
+    if any(out[NEW:NEW + len(code)]):
+        raise SystemExit(f"0x{NEW:05X}+{len(code)} is not free: "
+                         f"{bytes(out[NEW:NEW + len(code)]).hex()[:32]}...")
     out[NEW:NEW + len(code)] = code
     out[HOOK:HOOK + 6] = b"\x4e\xf9" + struct.pack(">I", NEW)
     print(f"  48x48 placement now tests all four squares; {len(code)} bytes at "
