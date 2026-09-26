@@ -5204,3 +5204,42 @@ Where to pick up: find what actually draws the overhead map -- NOT via
 `0x0B100` -- and compare it running under area `0x03` against area `0x18`.
 The two differ in something the scripts do, because the same engine draws one
 and not the other.
+
+## The demo's view: narrowed to the transplanted block itself
+
+The decisive experiment. Running **Countdown's own attract script** (area
+`0x03`) with our map and our wall set forced in --
+
+    0x0388A  move.l d0, d2   ->  moveq #$40, d2     LOADFILES always map 0x40
+    0x03ADE  divu.w #$3, d2  ->  moveq #$2, d2      LOADPIECES always set 2
+
+-- draws a correct corridor. **So the map and the wall set are not at fault**,
+which retires both for good.
+
+The converse also holds: building block 24 into area `0x03`, the slot the
+stock dispatch targets, and letting the attract timeout run it there still
+draws backdrop. **So it is not the area id either.** It is the block.
+
+Every visible difference between the two scripts was then equalised, one
+build each, and none of them is it:
+
+* `SAVE 0x1, [0x97A1]` and `NEWREGION 0, 1, 0, 0, 3, 4` before the first
+  `VIEW`, exactly as Countdown's attract has them;
+* opening on `VIEW 0x0, 0xFF` (the ordinary screen) with the picture drawn by
+  a separate `PICTURE`, instead of the `VIEW 0x0, 0x39` that DOS's
+  `PICTURE2 0, 57` transplants into;
+* a start square with walls on it -- map `0x40`'s one nine-square westward
+  run with a wall alongside every step, y = 4, x = 9 down to 1;
+* dropping the five leading engine writes (`0x4CFD`, `0x4BAB`, `0x7EC6`,
+  `0x4BE7`-`0x4BE9`) that Countdown's attract does not make.
+
+What is known for certain, and is the shape of the answer: a transplanted
+block draws the overhead view fine in NORMAL play -- the dock is block 1 --
+and Countdown's stock block draws it under ATTRACT. Only transplanted block
+under attract fails. So the attract path skips some setup that normal play
+does and that stock block 3 does for itself, and it is not any of the four
+things above.
+
+All four experiments were reverted rather than shipped. None showed a
+benefit, and two of them (the start square, the dropped writes) move the demo
+away from the DOS script's own data.
