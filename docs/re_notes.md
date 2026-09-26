@@ -5675,3 +5675,52 @@ refuse to write over a byte that is not already zero.
 
 Anyone picking this up has the whole rig: one hit point, the frame-coloured
 probe sheet, the `a3` store, and the savestate RAM offset above.
+
+## Parts of a 48x48 creature vanish while it is being shot at
+
+Reported from play: "when the t rex is getting hit and what not it has parts
+of itself disappear". Measured by counting the dinosaur's own two colours,
+(136,68,0) and (232,236,0), over every frame of the demo's fight. Whole, it is
+810 pixels. Three separate bites during the combat:
+
+    118.20 - 118.70s   657 px   (-153)
+    122.40 - 123.00s   657 px   (-153)
+    123.90 - 124.10s   595 px   (-215)
+
+each one a 24-pixel-wide column of floor where its tail and hind leg should be,
+healing again the next time anything repainted it.
+
+Two things it was NOT, both checked before patching anything:
+
+* **Not an erase.** A counter on `0x0AD3E` records four figure erases in the
+  entire combat, all of them the dinosaur's own square, at the moments it
+  walks and at its death. None line up with the bites.
+* **Not the post-move repair.** `0x0F9F4` redraws only a figure whose `$12`
+  matches the mover's as a word -- the same square -- so it cannot repair a
+  48x48 standing on four. Widening it to redraw every size 4 creature was
+  written, built and measured: the bites were unchanged, because nothing was
+  moving. It is kept anyway, being correct and nearly free.
+
+It is `0x0CC66`, which turns a figure into a tile rectangle for the attack
+animation -- d2, d3 the corner and d4, d5 the extent. The action dispatcher at
+`0x0CAEA` calls it twice, at `0x0CBF0` to blit an animation frame over the
+figure and at `0x0CC26`, right after `bset #2, $1(a3)` hides it, to blank the
+tiles it occupied. `0x0CC9A` starts both at 3 by 3 and widens one to 6 for a
+24x48 or a 48x24:
+
+    0CC9A  move.b $23(a2), d6
+    0CC9E  cmp.b  #$2, d6 / bne  -> moveq #$6, d5
+    0CCA6  cmp.b  #$3, d6 / bne  -> moveq #$6, d4
+
+A 48x48 matches neither and keeps 3 by 3, so an attack blits and blanks a
+quarter of the creature and leaves the rest to whatever was underneath.
+`bigcreature.py` adds the size 4 case, six by six. After it, all three bites
+are gone and the dinosaur holds 1066 to 1204 pixels through every attack.
+
+This is the site `bigcreature.py` claimed in its own header to have extended
+and had not. Two of the five it listed were real; `0x14552` and `0x15DD2` are
+still unchecked.
+
+What is left is a one- or two-frame artefact while the creature WALKS -- a
+trailing part-copy a square behind it, gone by the next frame. Different path,
+not chased.

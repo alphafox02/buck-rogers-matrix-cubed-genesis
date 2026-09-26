@@ -42,7 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import integrity
 
-NEW = 0x0F1D40              # free: bigcreature.py's blocks end by 0x0F1D02
+NEW = 0x0F1E00              # free: bigcreature.py's blocks end by 0x0F1D4C
 #
 # That figure is checked, not remembered. Adding a fifth block to
 # bigcreature.py pushed its cursor from 0x0F1CD6 to 0x0F1D02, straight over
