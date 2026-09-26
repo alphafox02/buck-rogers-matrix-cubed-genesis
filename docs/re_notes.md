@@ -5465,3 +5465,47 @@ row reuses the very tiles the names are drawn with -- both are colour index 1
 -- and simply points at line 0. No extra tiles, no palette shipped, and the
 `[0xB4BE]` hazard that makes a container's own palette unreliable in this slot
 is not touched.
+
+## The 48x48 death draw reads the sheet at the 24x24 stride
+
+Reproduced rather than argued. Patching VENUS DINOSAUR's roster record to one
+hit point (`0x2E` in the 214-byte record) makes it die on screen in the demo's
+fight, at about 113 s. Capturing every frame of that combat:
+
+    110.08s  gold=452   rex standing, "BUCK ROGERS ATTACKS / GANG RECRUIT"
+    112.78s  gold=452   "KILLER KANE ATTACKS / VENUS DINOSAUR TO HIT 85%"
+    113.33s  gold=125   "VENUS DINOSAUR ... DYING"  <- a QUARTER of the rex
+    115.47s             the board wipes out
+
+The skulls never appear and the creature does not vanish. Instead about a
+quarter of its pixels remain, which is what a play session described as "a
+human standing in the same spot as the t rex... and at that moment the human
+dies where it's supposed to be the t rex".
+
+A quarter is the tell. A 48x48 frame is 36 cells; a 24x24 frame is 9. Reading
+frame 16 with the small stride lands at cell 16 x 9 = 144, which is frame 4 of
+a 36-cell sheet -- a standing pose, and only the first 3x3 of it gets drawn.
+That is precisely a quarter of a standing rex.
+
+So the art is right (`inject_creature.py` writes skulls at 15 and nothing at
+16, verified in the shipped ROM for all five 48x48 figures) and the DEATH draw
+does not use the size-4 stride.
+
+`bigcreature.py` extended seven sites that read the size byte `0x23` --
+`0x098B0`, `0x0ADA6`, `0x0CC9A`, `0x1050C`, `0x142C4`, `0x14552`, `0x15DD2`,
+plus `0x14E86` and `0x148AA` examined and left alone. Five readers it never
+touched remain:
+
+    0x0CB1C   0x0CBAA   0x0FA5A   0x10E12   0x11B6E
+
+`0x0CBAA` is the shape of the bug even if it is not the site: under action
+`d7 == 2` it branches on `cmp.b #$1` only -- one path for 24x24 and one for
+everything larger -- where a 48x48 needs the step doubled again, exactly the
+asymmetry the `INDEX` patch at `0x0AE6A` was written for. Its action table at
+`0x0CC60` reads `[2,1,3,0,0,2,116,0]`, so action 2's base frame is 3, not 15
+or 16, which means it is not by itself the death path.
+
+Finding which of the five is on the death draw wants instrumentation, not
+more reading: give a 48x48 creature a sheet whose every cell is a distinct
+index (the `bigprobe.py` trick) and read back which cells the dying frame
+puts on screen.
