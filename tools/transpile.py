@@ -38,6 +38,7 @@ import ecl
 import soundmap
 import wallmap
 import monstermap
+import npcmap
 import skillmap
 import flagmap
 import genesis_disasm as G
@@ -957,6 +958,7 @@ def transpile(block: bytes, flags=None, walk_as_step=False):
         art_at = (0 if ins.name == "PICTURE" else
                   1 if ins.name == "PICTURE2" else None)
         mon_at = 0 if ins.name in ("LOAD_MON", "SPRITE_START") else None
+        npc_at = 0 if ins.name == "NPC_ADD" else None
         snd_at = 0 if ins.name == "SOUND_EVENT" else None
         wall_at = 0 if ins.name == "LOAD_AREA_DECO" else None
         # WHMENU prints engine string 0x2D, "what do you do?", before its
@@ -1034,6 +1036,20 @@ def transpile(block: bytes, flags=None, walk_as_step=False):
                     report.append((off, "monster",
                                    f"{monstermap.DOS_NAMES.get(arg.value, hex(arg.value))}"
                                    f" -> {monstermap.GENESIS.get(new, hex(new))}"))
+                args.append(("imm", new))
+                continue
+            if npc_at == k and arg.type == 0x00:
+                # The two games number NPCs independently too, and the
+                # handler's lookup at 0x048BE has NO terminator -- an id that
+                # is not in Countdown's seven-pair table scans on into 68000
+                # code and takes whatever byte follows as a character record.
+                # Countdown's ids and Matrix Cubed's do not intersect at all,
+                # so every ADDNPC in the port was doing that.
+                new, exact = npcmap.translate(arg.value)
+                if not exact:
+                    report.append((off, "npc",
+                                   f"{npcmap.DOS_NAMES.get(arg.value, hex(arg.value))}"
+                                   f" -> {npcmap.GENESIS.get(new, hex(new))}"))
                 args.append(("imm", new))
                 continue
             if art_at == k and arg.type == 0x00:

@@ -5008,3 +5008,49 @@ transplanted, area `0x40` is geo slot 23 with 525 non-zero bytes, and the
 handler at `0x03886` passes anything under `0x7F` straight to the map loader.
 The area variable `0x97E8` staying at `0x00` is expected; `LOADFILES` loads a
 map, it does not change which ECL area is running.
+
+## Every `ADDNPC` in the port was running off the end of a table
+
+Found by chasing the demo's fight, which arrived with one combatant. It is
+not a demo bug.
+
+`ADDNPC` (opcode `0x36`) reaches `0x0488C`, which finds the first empty slot
+in the eight-entry party array at `0xFFC470` and then looks the id up in a
+table of `(npc id, record id)` pairs at `0x048DA`:
+
+    048B8: lea.l   $48da.l, a0
+    048BE: cmp.b   (a0)+, d2
+    048C0: beq.b   $48c6
+    048C2: addq.l  #$1, a0
+    048C4: bra.b   $48be
+
+**The loop has no terminator.** The table is seven pairs and ends at
+`0x048E8`, which is the roster loader's own first instruction, so a miss
+scans on into 68000 code until a byte happens to equal the id and then takes
+the byte after it as a character record. No miss path, no message.
+
+Countdown's table holds `0x3B 0x3C 0x3D 0x3E 0x6A 0x6B 0x6C`. Matrix Cubed's
+scripts ask for `0x1E`, `0x37` and `0x39` at eight sites across blocks 1, 24,
+50 and 80. **The intersection is empty.** Block 1 is the opening dock, where
+`NPC_ADD 0x39` is Buck Rogers joining the party.
+
+The map is easy, because Matrix Cubed is the sequel and Countdown's own table
+already carries the cast by name:
+
+    0x37  LEANDER      -> 0x3C  LEANDER
+    0x39  BUCK ROGERS  -> 0x3E  BUCK ROGERS
+    0x1E  KILLER KANE  -> 0x3D  ZANE        (nearest in role)
+
+`tools/npcmap.py`, applied in `transpile.py` the way `monstermap` and
+`skillmap` are. The demo's fight now arrives with three. Because every
+emitted id is guaranteed to be in the table, the unterminated scan always
+terminates; the hazard itself is left alone rather than patched.
+
+Two things checked while here and found NOT to be wrong:
+
+* `LOADMONSTER`'s third argument looks like an unremapped monster id -- DOS's
+  `LOAD_MON 59, 1, 59` becomes `LOADMONSTER 0x3F, 0x1, 0x3B`. The handler at
+  `0x03544` reads it into `d0` and `0x048E8` overwrites `d0` before using it,
+  so it is discarded. Only argument 0 reaches the roster search, as `d2`.
+* The demo's creatures are right: DOS 59 is GANG RECRUIT and DOS 22 is VENUS
+  DINOSAUR, which is the "t rex" a play session saw.
