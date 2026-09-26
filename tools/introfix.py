@@ -127,8 +127,8 @@ def merge_title(rom):
 def credits_screen(rows=25):
     import introcredits as ic
     ic.ROWS, ic.TOP = rows, 1
-    tiles, nt = ic.tiles_and_map()
-    return ic.container(tiles, nt)
+    tiles, nt, rowline = ic.tiles_and_map()
+    return ic.container(tiles, nt, rowline)
 
 
 def patch(rom: bytes, ssi=True):

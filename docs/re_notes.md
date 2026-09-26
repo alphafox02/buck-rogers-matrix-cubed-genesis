@@ -5433,3 +5433,35 @@ colour key and this is the right reading of that one.
 
 Class 4 only. Sizes 2 and 3 are one square wide or one deep and keep the
 borrowed corpse, which is what DOS does for anything man-sized.
+
+## Credit colours, and the yellow that is not on the credits' own palette
+
+DOS colours its credits in three levels, counted off a DOSBox capture line by
+line:
+
+    title    (255,255,85)  yellow     CREATED BY: SSI SPECIAL PROJECTS TEAM
+    headings (255,255,255) white      GAME DEVELOPMENT:, MUSIC:, PLAYTEST:
+    names    (85,255,85)   green
+
+The port had it close to backwards -- headings green, names near-white -- so
+the two swap. The live palette on the credits' own CRAM line (2) is, measured
+with a ramp screen of one index per row on the current build:
+
+    1  (0,236,0)     green      9  (232,236,232) white
+    3  (168,0,0)     dark red  10  (136,100,32)  brown
+    5  (200,168,168) pink      11  (64,68,64)    dark grey
+    6  (136,236,232) cyan      13  (168,204,136) pale green
+    7  (232,32,32)   red       14  (96,168,32)   olive
+
+so green and white have good matches and **there is no yellow on that line**.
+
+Probing all four CRAM lines the same way finds it elsewhere: **line 0, index 1
+is (232,236,0)**, which is as near DOS's yellow as this hardware gets. (Line 1
+index 1 is red, line 3 holds only index 1, white; index 0 and 2 draw black on
+every line.)
+
+The palette line lives in the nametable WORD, not in the tile, so the title
+row reuses the very tiles the names are drawn with -- both are colour index 1
+-- and simply points at line 0. No extra tiles, no palette shipped, and the
+`[0xB4BE]` hazard that makes a container's own palette unreliable in this slot
+is not touched.

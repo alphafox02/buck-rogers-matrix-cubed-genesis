@@ -55,24 +55,45 @@ COLS, ROWS = 40, 28
 # clear it does `subq.l #$3,d1 / addq.l #$6,a0` -- twelve words starting at
 # entry 3 -- so only indices 3 to 14 ever reach CRAM. Colours at 1, 2 or 15 are
 # simply never uploaded, which is a black screen rather than a wrong one.
-BG, INK, DIM = 0, 1, 11
-# When the credits sit in the intro's second screen slot the container's own
-# palette mask is ignored: 0x09D70 takes the mask from [0xB4BE] when that is
-# non-zero, so whatever the previous screen loaded stays. So the indices are
-# chosen from what is actually live there, measured with a ramp screen -- one
-# palette index per row, read back off the rendered frame:
+# DOS colours its credits in three levels, measured off a DOSBox capture by
+# counting each line's pixels:
 #
-#     2  (0,236,0) green     12 (200,204,200) near-white
-#     4  (232,0,0) red       10 (232,204,32)  yellow
+#     the title line          (255,255,85)  yellow
+#     the headings            (255,255,255) white    GAME DEVELOPMENT:, MUSIC:
+#     every name              (85,255,85)   green
 #
-# Index 2 is the same green DOS draws its credits in. Index 0 is transparent
-# and shows the black plane behind. The PALETTE below is what a standalone
-# draw would upload, and is unused in this slot.
-PALETTE = {INK: (7, 7, 7), DIM: (5, 6, 4)}   # 3-bit RGB
+# and the port had it close to backwards: headings green, names near-white.
+#
+# The live palette in this slot, re-measured with a ramp screen on the current
+# build -- one index per row, read back off the rendered frame -- is
+#
+#     1  (0,236,0)     green      9  (232,236,232) white
+#     3  (168,0,0)     dark red  10  (136,100,32)  brown
+#     5  (200,168,168) pink      11  (64,68,64)    dark grey
+#     6  (136,236,232) cyan      13  (168,204,136) pale green
+#     7  (232,32,32)   red       14  (96,168,32)   olive
+#
+# index 0 and 2 draw as black. **There is no yellow**, so the title line takes
+# white with the headings rather than a wrong colour; DOS's green and white
+# both have good matches and those are what the rest of the screen uses.
+#
+# Giving the credits their own palette would buy the yellow, and is not done:
+# 0x09D70 takes the mask from [0xB4BE] when that is non-zero, so a container's
+# own palette is ignored in this slot, and getting that wrong is a black
+# screen. See the note below.
+# index 0 and 2 draw as black on every line. Line 3 has nothing but index 1.
+# **Line 0 index 1 is (232,236,0)** -- yellow, and as near DOS's (255,255,85)
+# as this hardware gets -- so the title line reuses the very tiles the names
+# are drawn with and simply points at a different CRAM line, because the line
+# lives in the nametable word and not in the tile.
+BG, NAME, HEAD = 0, 1, 9
+LINE, TITLE_LINE = 2, 0            # CRAM lines: the screen's, and the title's
+
+PALETTE = {HEAD: (7, 7, 7), NAME: (0, 7, 0)}   # 3-bit RGB, unused here
 
 # Straight out of dos_game/matrix/GAME.OVR. `True` marks a bright line.
 LINES = [
-    ("CREATED BY: SSI SPECIAL PROJECTS TEAM", True),
+    ("CREATED BY: SSI SPECIAL PROJECTS TEAM", "title"),
     ("", False),
     ("GAME DEVELOPMENT:      PROGRAMMING:", True),
     ("RHONDA GILBERT          RUSS BROWN", False),
@@ -125,25 +146,29 @@ def tiles_and_map():
         tiles.append(bytes(t))
         return cache[key]
 
-    blank = tile_for(" ", INK)
+    blank = tile_for(" ", NAME)
     nt = [blank] * (COLS * ROWS)
+    rowline = {}
     for r, (text, bright) in enumerate(LINES):
         row = TOP + r
         if row >= ROWS:
             raise SystemExit(f"credits need {TOP + len(LINES)} rows, screen has {ROWS}")
+        if bright == "title":
+            rowline[row] = TITLE_LINE       # same tiles, yellow line
+            bright = False
         split = None
         if bright is None:                  # name left, heading right
             split = text.rstrip().rfind("  ") + 2
         for c, ch in enumerate(text[:COLS]):
             if bright is None:
-                colour = INK if c >= split else DIM
+                colour = HEAD if c >= split else NAME
             else:
-                colour = INK if bright else DIM
+                colour = HEAD if bright else NAME
             nt[row * COLS + c] = tile_for(ch.upper(), colour)
-    return tiles, nt
+    return tiles, nt, rowline
 
 
-def container(tiles, nt):
+def container(tiles, nt, rowline=None):
     out = bytearray()
     # Palette mask 0: carry no palette at all. Whether a container's palette
     # is honoured depends on [0xB4BE] (0x09D70), so a screen that ships one is
@@ -155,8 +180,9 @@ def container(tiles, nt):
     # and the palette the container ships is loaded into that line. Writing
     # line 0 instead leaves the text drawn in whatever the previous screen
     # happened to leave there, which is unreadable rather than merely wrong.
-    for t in nt:
-        out += struct.pack(">H", 0x4000 | t)
+    rowline = rowline or {}
+    for n, t in enumerate(nt):
+        out += struct.pack(">H", (rowline.get(n // COLS, LINE) << 13) | t)
     # The palette goes BETWEEN the nametable and the tiles, not after them.
     # 6 + 2000 + 32 + 95*32 is exactly the size of the shipped title screen,
     # and reading it from the end yields sixteen blacks. Putting it last made
