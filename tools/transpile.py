@@ -466,7 +466,8 @@ def _split(text):
     return [" ".join(lines[i:i + LINES]) for i in range(0, len(lines), LINES)]
 
 
-def transpile(block: bytes, flags=None, walk_as_step=False):
+def transpile(block: bytes, flags=None, walk_as_step=False,
+              start_square=None, demo_map=None):
     """
     Translate one DOS ECL block.
 
@@ -841,6 +842,61 @@ def transpile(block: bytes, flags=None, walk_as_step=False):
             report.append((off, "window", f"page break before {found[off].name}"))
             if brk == "drop":
                 continue
+        if demo_map is not None and found.get(off) is not None \
+                and found[off].name == "LOAD_AREA_MAP" and found[off].args:
+            # Walk the demo somewhere the port can draw it walking.
+            #
+            # A square draws floor when its info byte has bit 7 set, and the
+            # engine will not step through a wall or a closed door. Map 0x40,
+            # which DOS's demo loads, has NO run of five lit squares open in
+            # any direction -- its long stretches are unlit (the "walking in
+            # space" a play session saw) and its lit row 15 is chopped into
+            # threes by doors, which is the wall the figure was stopping
+            # against. Searching every transplanted map for the longest open
+            # lit run puts area 0x11 first: fifteen steps west from (15, 1),
+            # against the nine this script takes. It is Matrix Cubed's own
+            # Mercury interior, the map the opening dock uses, and it renders
+            # correctly in play.
+            _op, _argc = gen["LOADFILES"]
+            _args = [("imm", demo_map), ("imm", 0x7F), ("imm", 0xFF)]
+            _size = 1 + sum(len(_encode_arg(k, v)) for k, v in _args)
+            layout.setdefault(off, pos)
+            pieces.append((off, _op, _args, _size))
+            pos += _size
+            report.append((off, "demo", f"map -> 0x{demo_map:02X}"))
+            continue
+        if start_square is not None and found.get(off) is not None \
+                and found[off].name == "WRITE_MEM" and len(found[off].args) == 2 \
+                and getattr(found[off].args[1], "value", None) in (0xC04B, 0xC04C):
+            # Start the demo on squares the engine draws a FLOOR for.
+            #
+            # The "walking in space" a play session reported is not empty
+            # backdrop -- that region measures 13 distinct colours, and the
+            # Genesis backdrop is one flat colour, so it is drawn tiles. It is
+            # the void tile the view uses for a square with no structure.
+            #
+            # A square gets floor when its info byte (map plane 2) has bit 7
+            # set. DOS starts the demo at (13, 8) and walks west along
+            # squares whose info reads 00, so every step is void. The squares
+            # that DO draw, on this same map, are the ones with bit 7 AND a
+            # wall -- which is the grey hatched floor visible in the corner of
+            # a play screenshot.
+            #
+            # Map 0x40 has exactly one westward run that is both structured
+            # and walkable for the nine steps the script takes: y = 15,
+            # x = 11 down to 3.
+            _which = found[off].args[1].value
+            _val = start_square[0] if _which == 0xC04B else start_square[1]
+            _op, _argc = gen["SAVE"]
+            _args = [("imm", _val),
+                     ("var", map_variable(_which, flags, report, off))]
+            _size = 1 + sum(len(_encode_arg(k, v)) for k, v in _args)
+            layout.setdefault(off, pos)
+            pieces.append((off, _op, _args, _size))
+            pos += _size
+            report.append((off, "demo",
+                           f"start {'x' if _which == 0xC04B else 'y'} -> {_val}"))
+            continue
         ins = found[off]
         if off in step_drop:
             # STEPFORWARD does the move itself, so the hand-written

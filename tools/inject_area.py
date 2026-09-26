@@ -48,6 +48,8 @@ import transpile
 
 GEO_ID_CAPACITY = 32   # the stack buffer at -0x22(a6) in the GEO loader
 DEMO_BLOCK = 24        # ECL1's attract-mode story demo, area 0x18
+DEMO_START = (15, 1)   # a fifteen-step lit corridor -- see transpile.py
+DEMO_MAP = 0x11        # Mercury interior; map 0x40 has no such corridor
 
 
 def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
@@ -72,7 +74,9 @@ def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
     # cannot be rewritten safely, because STEPFORWARD moves in the facing
     # direction and nothing checks the facing statically.
     code, text, report = transpile.transpile(
-        mc[block_id], flags, walk_as_step=(block_id == DEMO_BLOCK))
+        mc[block_id], flags, walk_as_step=(block_id == DEMO_BLOCK),
+        start_square=DEMO_START if block_id == DEMO_BLOCK else None,
+        demo_map=DEMO_MAP if block_id == DEMO_BLOCK else None)
     stubs = sum(1 for _, _, why in report if "counterpart" in why)
     unmapped = sum(1 for _, _, why in report if why.startswith("no Genesis mapping"))
     jumps = sum(1 for _, _, why in report if "not in layout" in why)

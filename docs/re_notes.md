@@ -5280,3 +5280,59 @@ needs a live 48x48 fight to judge, and the scripted driver cannot reach one.
 `bigprobe.py` forces one into the opening dock's first encounter, but
 `play.to_dungeon` then walks into the Dr. Romney scene and stops. Getting
 that driver past the scripted encounters is the prerequisite for the fix.
+
+## The demo: it was the floor flag and the doors, not the renderer
+
+Solved, and the earlier notes in this file chased the wrong thing. Two
+corrections first:
+
+**The "space" is drawn art, not empty backdrop.** A play session asked
+whether it might be "black gravel or something", and measuring settles it:
+that region has **13 distinct colours**, and the Genesis backdrop is one flat
+colour. So the view WAS being drawn all along, and every note above about
+`0x0B100` never running is about the combat board, not this.
+
+**A square draws floor when its info byte (map plane 2) has bit 7 set.**
+Everything else gets the void tile, which reads as a starfield. The grey
+hatched patch a play screenshot caught in the corner is exactly the boundary.
+
+So the demo was walking along unlit squares. Map `0x40`, which DOS's demo
+loads, cannot be fixed by moving within it:
+
+* its long open stretches are unlit -- row 8, where DOS starts, is `info=00`
+  the whole way;
+* its lit row 15 is chopped into threes by **doors** (`W=9` with door bits 1
+  at x=9 and x=6), and `STEPFORWARD` will not open one. That is the wall the
+  figure kept stopping against;
+* searching every direction, the map has **no run of five open lit squares
+  at all**.
+
+Searching every transplanted map for the longest open, lit, wall-free run
+puts area `0x11` first: **fifteen steps west from (15, 1)**, against the nine
+the script takes. It is Matrix Cubed's own Mercury interior -- the map the
+opening dock uses, known to render correctly. `transpile.py` rewrites the
+demo's `LOAD_AREA_MAP` and its two coordinate writes.
+
+Measured after: the party walks 15 to 10 on the first loop and 9 to 6 on the
+second, nine steps west, no blocking and no turning back -- and the combat
+that follows lands on the same lit floor, where the 48x48 Venus Dinosaur
+draws whole. The overlap reported earlier was the void tile too, not a
+draw-order fault.
+
+## Killer Kane was flagged as a monster
+
+Byte `0x52` of a roster record separates a character who may join a party
+from a creature: all seven of Countdown's joinable NPCs carry 1 there, and
+only seven of the other 83 records do. Kane arrives through
+`add_creatures.py`, which writes creatures, so his read 0 -- and a play
+session found what that means: "why is killer kane in the fight but appears
+to be on the bad guys side... buck and him are fighting against one another."
+
+He belongs on the party side. The DOSBox capture of the original shows its
+demo roster as
+
+    LEANDER  -4  46      KILLER KANE  6  53      BUCK ROGERS  6  63
+
+`npctable.py` now sets that byte for every id it adds. It runs after
+`add_creatures.py` and after `rename_monsters.py`, because Kane is not in the
+roster until the first and both rewrite the same compressed stream.

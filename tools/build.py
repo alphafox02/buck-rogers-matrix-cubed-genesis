@@ -356,9 +356,6 @@ def main():
         step("injectconsole.py", "drawn", "--nopal")
     # Room for both rosters. Harmless on its own -- it widens a stack buffer
     # and nothing else -- and it is what any creature added later needs.
-    # Room in the ADDNPC table for Matrix Cubed's own NPCs -- Killer Kane,
-    # who is in the roster already and had nowhere to be named.
-    step("npctable.py")
     step("monstercap.py")
     # A 48x48 creature size. Stock Countdown draws 24x24, 24x48 and 48x24.
     #
@@ -411,6 +408,11 @@ def main():
         # ordinary play.
     else:
         step("rename_monsters.py")
+    # Room in the ADDNPC table for Matrix Cubed's own NPCs -- Killer Kane.
+    # AFTER the creatures and after rename_monsters: he is not in the roster
+    # until add_creatures.py puts him there, and this also marks his record
+    # joinable, which means rewriting the stream rename_monsters rewrites.
+    step("npctable.py")
     # The pregenerated team at level 8 with perception. Countdown's own team
     # is a level 1 party built for Countdown's first encounter; Matrix Cubed
     # opens on robots that expect a party carried over from it.
