@@ -363,17 +363,23 @@ def apply(rom: bytes, specs) -> bytes:
 
         rec = bytearray(recs[index[fid]])
         struct.pack_into(">I", rec, 0, cursor)
-        # The sheet width matters for more than layout. The decoder remaps
-        # the nametable from packed tile numbers to VRAM ids and computes
-        # how many entries to rewrite as `d4 * width / 2` at 0x09C3E, with
-        # d4 fixed at 18 by the caller's frame list. That equals the total
-        # cell count only while the atlas is NINE rows deep, which every
-        # stock sheet is: 18x9 and 36x9. A 648-cell sheet at 36 wide is
-        # eighteen rows, so half of it keeps raw tile ids and draws whatever
-        # those happen to hit -- which is why a 48x48 creature came out with
-        # its head twice. Keep every atlas nine rows and the whole sheet is
-        # remapped.
-        rec[5] = (fw * fh * FRAMES) // 9
+        # Byte 5 is the FRAME STRIDE in bytes -- two per nametable cell --
+        # and the engine supplies the frame count itself, fixed at eighteen.
+        # The decoder uses the pair twice: 0x09C10 decompresses the sheet a
+        # frame at a time in `d3`-byte pages, and 0x09C3E remaps `d4 * d3 / 2`
+        # nametable entries from packed tile numbers to VRAM ids, with d4 the
+        # eighteen. A wrong stride therefore both cuts the remap short -- the
+        # tail keeps raw tile numbers and draws whatever VRAM those happen to
+        # hit, which is how a 48x48 creature once came out with its head twice
+        # -- and puts every frame after the first at the wrong offset.
+        #
+        # 9 cells -> 18, 18 cells -> 36, 36 cells -> 72. This was written as
+        # `fw * fh * FRAMES // 9`, which gives the same three numbers only
+        # because FRAMES is 18; widening a sheet to twenty frames to make room
+        # for frame indices past 17 wrote 80 instead of 72 and the 48x48
+        # creature stopped drawing at all. Eighteen is the engine's number,
+        # not a choice this makes, so say the stride directly.
+        rec[5] = fw * fh * 2
         rec[7] = (klass << 4) | (rec[7] & 0x0F)
         rom[at + index[fid] * 8:at + index[fid] * 8 + 8] = rec
 

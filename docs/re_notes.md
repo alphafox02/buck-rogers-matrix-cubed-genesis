@@ -5547,3 +5547,90 @@ So the remaining work is a multiplier, not a discovery: the half handling in
 `index()` is right and its scale is not. Anyone picking this up has the
 measurement rig -- frame-coloured probe sheet, one hit point, read the two
 halves -- to check a candidate in one build.
+
+## The 48x48 creature does not linger: it is never repainted
+
+Everything below is measured on the running machine, not argued. The rig:
+patch VENUS DINOSAUR's roster record to one hit point (`0x2E` in the 214-byte
+record) so it dies inside the demo's fight, then instrument the ROM and read
+work RAM out of the savestate. GENPLUS-GX puts 68000 work RAM at state offset
+`0x10`, **byte-swapped**, so RAM address `0xFFxxxx` is `state[0x10 + (xxxx ^ 1)]`.
+
+### The board draws combat figures as TILES
+
+`0x0AD92` is the per-figure draw and `d3` at `0x0AE1A` is a plane A nametable
+address -- `((y * 128) + x * 2) * 3 + 0xA000` -- stepped by `0x80`, one tile
+row, per row of the figure. Combat figures are not sprites. Which matters
+enormously: **nothing repaints a figure's tiles unless the figure is drawn
+again.**
+
+### Byte 5 of a figure record is the frame STRIDE
+
+`0x09C10` decompresses the sheet in `d3`-byte pages and `0x09C3E` remaps
+`d4 * d3 / 2` nametable entries from packed tile numbers to VRAM ids, with
+`d4` the engine's own frame count, fixed at 18. So `d3` -- the figure
+record's byte 5 -- is bytes per frame, two per cell: 18, 36, 72 for 9, 18 and
+36 cells. `inject_creature.py` wrote `fw * fh * FRAMES // 9`, which gives the
+same three numbers only because FRAMES is 18. Widening a 48x48 sheet to
+twenty frames wrote 80 instead, and the creature stopped drawing at all. It
+now writes `fw * fh * 2` and says why.
+
+### The frame index, and the multiplier that is not one multiplier
+
+    0AE2A: move.b $11(a3), d0   ; animation step
+    0AE2E: asl.b  #$2, d0       ; four units per step
+    0AE30: btst.b #$7, (a3)     ; a corpse?
+    0AE3C: addq.b #$3, d0       ; ...yes, +3, or +6 if the creature is large
+    0AE60: add.b  d1, d0        ; otherwise the facing, twice if large
+    0AE74: mulu.w #$12, d0      ; a unit is 18 bytes -- nine cells
+
+A probe sheet with one flat colour per HALF-FRAME (18 cells) reads the fetch
+straight off the screen. Standing, a 48x48 creature's top three tile rows
+come from half-frame block 1 and its bottom three from block 12. Those cannot
+both come from one 36-cell contiguous read, which is what the row writers at
+`0x0AE9E`/`0x0AEAE` do -- six cells a row, six rows, `-4(a6)` = 12 bytes = six
+cells of advance on the flipped path. The half-swap `inject_creature.py`
+applies to 48x48 art compensates for it and is load-bearing; removing it, or
+scaling the index by four (`asl.w #2` at `0x0AE6A`), makes the creature draw
+as furniture or not at all. Both were tried and backed out.
+
+### What actually happens when it dies
+
+Storing `a3` from inside the size-4 shape case and counting entries:
+
+    112.07s  size-4 draws = 1   rec = 01 c0 09 2e 38 36 ...
+    112.80s  size-4 draws = 2   rec = 01 c2 09 2e 38 36 ...
+    113.40s  size-4 draws = 2   rec = 83 c2 09 2e 38 36 ...   <- dead
+
+Byte 0 gains **bit 7** at the death. And the draw count never moves again: the
+figure is painted twice in the whole fight and **never repainted after it
+dies**. The dinosaur a play session sees "still standing" is stale tilemap.
+The human corpse beside it is a separate 24x24 figure the engine draws at the
+anchor square, over the top of those stale tiles.
+
+`btst.b #$7, (a3)` at `0x0AE30` is the routine's own test for that bit, so a
+"skip the draw for a dead 48x48" patch there assembles cleanly and is
+completely useless: a counter on that path stays at zero for the whole
+combat, for every figure. There is nothing to skip. Written, measured,
+removed.
+
+### So the fix is an erase, not a frame
+
+To make a 48x48 creature disappear, something has to repaint the four squares
+it stood on after the death. The engine has that machinery -- a creature that
+moves leaves floor behind -- and `bigcreature.py` already teaches `0x142C4`
+to walk all four squares of a size-4 creature. What is missing is the call:
+the death path drops the figure from the draw list without repainting. Five
+readers of the size byte `0x23` are still unextended and one of them is the
+likely site:
+
+    0x0CB1C   0x0CBAA   0x0FA5A   0x10E12   0x11B6E
+
+`0x0CAEA` is the action dispatcher those first two live in, with a base-frame
+table at `0x0CC60` and a per-kind table at `0x0CC36`. `0x0CBAA` computes the
+animated frame as `base + (step << 1)` for anything above size 1 and
+`base + (step << 2)` for 24x24 -- four units per step, which is one frame for
+a 48x48 and is therefore already right for it, unlike the facing.
+
+Anyone picking this up has the whole rig: one hit point, the frame-coloured
+probe sheet, the `a3` store, and the savestate RAM offset above.
