@@ -5409,3 +5409,27 @@ on the floor", and leaves it -- Countdown's own behaviour, and
 `inject_creature.py` has to synthesise that frame because a DOS sprite block
 carries two poses and neither is a corpse. Making large creatures vanish
 instead would be an engine change.
+
+## A 48x48 creature dies to skulls, not a corpse
+
+DOS does not lie a big creature down. Watching the Venus Dinosaur die under
+DOSBox, skulls appear over the four squares it stood on, briefly, and then
+the skulls and the creature are both gone. A play session put it as "I don't
+think he was ever intended to be shown laying down whereas smaller figures
+are", and what the port did instead was "depict a human laying on the ground
+and t rex still there" -- `borrow_death` had fitted the Countdown stand-in's
+man-shaped corpse to 48x48 and recoloured it, which reads as a brown blob.
+
+The engine's own frames map onto DOS exactly:
+
+    15  going down          brief      -> four skulls, one per square
+    16  flat on the floor   persists   -> nothing at all
+
+The skull is DOS's own art: **block 19 of COMSPR.DAX**, 24x24, a white skull
+and crossbones. `quantise` resolves its red field to index 0, so the skulls
+land on the floor rather than in red boxes. The other blocks in that archive
+are opaque -- explosions on black, a grey panel -- so the archive has no
+colour key and this is the right reading of that one.
+
+Class 4 only. Sizes 2 and 3 are one square wide or one deep and keep the
+borrowed corpse, which is what DOS does for anything man-sized.

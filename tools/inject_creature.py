@@ -92,6 +92,25 @@ SHAPE = {0: (3, 3), 2: (3, 6), 3: (6, 3), 4: (6, 6)}
 BIG = 4
 MONSTER_SIZE = {0: 1, 2: 2, 3: 3, 4: 4}
 
+# A 48x48 creature does not lie down. DOS shows skulls over the four squares
+# it stood on, briefly, and then the skulls and the creature are both gone --
+# a play session watching the Venus Dinosaur die described exactly that, and
+# added "I don't think he was ever intended to be shown laying down whereas
+# smaller figures are".
+#
+# The engine's own two death frames map straight onto it: 15 is "going down",
+# which is brief, and 16 is "flat on the floor", which persists. So 15 gets
+# four skulls, one per square, and 16 gets nothing at all.
+#
+# The skull is DOS's own: block 19 of COMSPR.DAX, 24x24, a white skull and
+# crossbones on solid red. The other blocks in that archive are opaque too --
+# explosions on black, a grey panel -- so the red is drawn, not a colour key.
+#
+# Only class 4. Sizes 2 and 3 are one square wide or one deep and keep the
+# borrowed corpse, which is what DOS does for anything man-sized.
+SKULL_ARCHIVE = "COMSPR.DAX"
+SKULL_BLOCK = 19
+
 
 def palette():
     import json
@@ -279,6 +298,12 @@ def sheet(frames, fw, fh):
     return struct.pack(">HHH", len(order), len(nt), 0) + nt + b"".join(order)
 
 
+def tile_skulls(skull, w, h):
+    """The skull repeated over every 24x24 square the creature covers."""
+    sh, sw = len(skull), len(skull[0])
+    return [[skull[y % sh][x % sw] for x in range(w)] for y in range(h)]
+
+
 def sprite_blocks():
     """Every creature sprite block. See ARCHIVES for why that is CPIC1 only."""
     here = Path(__file__).resolve().parent.parent / "dos_game" / "matrix"
@@ -292,6 +317,8 @@ def apply(rom: bytes, specs) -> bytes:
     rom = bytearray(rom)
     pal = palette()
     cpic = sprite_blocks()
+    here = Path(__file__).resolve().parent.parent / "dos_game" / "matrix"
+    skull = quantise(dax.load(str(here / SKULL_ARCHIVE))[SKULL_BLOCK], pal)
 
     at = struct.unpack_from(">I", rom, expand_figures.OPERANDS[0])[0]
     recs, _ = expand_figures.read(bytes(rom), at)
@@ -321,10 +348,14 @@ def apply(rom: bytes, specs) -> bytes:
             # reads them.
             poses = [p[fh * 4:] + p[:fh * 4] for p in poses]
         frames = [poses[n % len(poses)] for n in range(FRAMES)]
-        death = borrow_death(rom, fid, fw * 8, fh * 8, poses[0])
-        if death is None:
-            death = [lie_down(poses[0], fw * 8, fh * 8)] * 2
-        frames[DYING], frames[DEAD] = death
+        if klass == BIG:
+            frames[DYING] = tile_skulls(skull, fw * 8, fh * 8)
+            frames[DEAD] = [[0] * (fw * 8) for _ in range(fh * 8)]
+        else:
+            death = borrow_death(rom, fid, fw * 8, fh * 8, poses[0])
+            if death is None:
+                death = [lie_down(poses[0], fw * 8, fh * 8)] * 2
+            frames[DYING], frames[DEAD] = death
         packed = lzw_encode.compress(sheet(frames, fw, fh))
         if cursor + len(packed) > ART_LIMIT:
             raise SystemExit("creature art does not fit")
