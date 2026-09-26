@@ -5131,3 +5131,36 @@ Also worth recording from the capture: DOS puts its pictures **in the view
 panel**, replacing the corridor, and alternates the two. The port shows the
 map and the picture window side by side, so it draws a view at moments when
 DOS is not drawing one at all.
+
+## Matrix Cubed's maps are row major too — no transpose
+
+The demo's corridor looks like a corridor when read as a COLUMN and like
+scattered rubble when read as a row:
+
+    first coord 13->4, second coord 8
+      as row 8, columns 13..4   #.#..#....
+      as column 8, rows 13..4   ####.###.#
+
+which is a tempting explanation for the empty floor, and it is wrong. Running
+the same wall-consistency test the note above used for Countdown -- a wall
+between two squares must appear in both of them -- over all 25 maps in
+`GEO1.DAX`:
+
+    mean agreement   as y*16+x  56.7%     as x*16+y  14.3%
+
+and map 64 itself scores 81.5% against 8.0%. Both games store maps row major,
+`DUNGEON_X` is `0x9AF7` and `DUNGEON_Y` is `0x9AF6`, and no transpose is
+wanted. The column only *looks* like a corridor by coincidence.
+
+So the demo really does walk a row whose squares carry no walls, in both
+games, and DOS still draws a hallway there. Ruled out so far, each by
+measurement rather than argument: the map data (byte-identical), the wall set
+(all ten are colour variants, checked on the demo itself as well as the
+dock), the set's code-to-piece table (`B` and `C` both resolve), the info bit
+at `0x0B396` (its piece `0x12` is a wall face -- forcing it on made brick
+grow over the ground, it did not fill the void), and the coordinate order.
+
+What is left is the renderer: `0x0B238` builds a per-cell code from four
+neighbour flags and `0x0B2E4` writes it out, and the question is what that
+produces for a square with no structure anywhere near it. That is where to
+pick this up.
