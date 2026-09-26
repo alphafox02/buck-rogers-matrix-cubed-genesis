@@ -5509,3 +5509,41 @@ Finding which of the five is on the death draw wants instrumentation, not
 more reading: give a 48x48 creature a sheet whose every cell is a distinct
 index (the `bigprobe.py` trick) and read back which cells the dying frame
 puts on screen.
+
+## The 48x48 frame index: the patch exists, was never applied, and is wrong
+
+Instrumented rather than reasoned. `bigprobe.py` gives a figure a sheet whose
+every tile is a flat palette index; colouring it by **frame** instead of by
+cell -- `idx = ((cell // 36) % 15) + 1` -- makes the drawn frame readable
+straight off the screen. With the Venus Dinosaur at one hit point so it dies
+in the demo, reading the top and bottom 24 rows of its sprite separately:
+
+    109.00s  top half = frame 4   bottom half = frame 7
+    113.18s  top half = frame 4   bottom half = frame 6      the death
+    113.68s  top half = frame 4   bottom half = frame 7
+
+Three faults at once. The top half **never changes**. The two halves are
+**three frames apart** when they are two halves of one frame. And neither ever
+reaches 15 or 16, so the skulls and the blank are never fetched. In sheet
+units of nine cells the top sits at unit 12 and the bottom at 24 -- exactly
+double, not plus two.
+
+The cause is that `bigcreature.py` defines `index()`, `INDEX`, `INDEX_END` and
+`INDEX_STOCK`, and **never puts it in the apply loop** -- four entries, and it
+is the missing fifth. `0x0AE6A` in the shipped ROM is still the stock
+`ext.w d0 / movea.l $2(a0), a1 / tst.w d0`. Unscaled, frame 16 reads cell
+16 x 9 = 144, which is frame 4 of a 36-cell sheet: a quarter of a standing
+pose, which is what a play session saw as "a human standing in the same spot
+as the t rex".
+
+**But the patch as written is also wrong.** Adding it to the loop and
+rebuilding makes the two halves agree -- both read the same frame, which is
+the half-sync fixed -- and the creature then draws as black and pink blocks
+from the moment combat opens, before anything dies. Its `add.w d0, d0`
+overshoots: the index runs past the frame into whatever follows. Reverted
+rather than shipped.
+
+So the remaining work is a multiplier, not a discovery: the half handling in
+`index()` is right and its scale is not. Anyone picking this up has the
+measurement rig -- frame-coloured probe sheet, one hit point, read the two
+halves -- to check a candidate in one build.
