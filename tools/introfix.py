@@ -52,7 +52,10 @@ REPO = Path(__file__).resolve().parent.parent
 TITLE = 0x1FA000            # the Buck Rogers logo screen
 TITLE_LEA = 0x00133A        # operand of `lea.l $1fa000.l, a0`
 SECOND_LEA = 0x0013AA       # operand of `lea.l $1fb708.l, a0`
-FREE, FREE_LIMIT = 0x1D3500, 0x1E0000
+# Was 0x1E0000. The portraits start at 0x1D8000 now -- giving them a tile
+# budget cost about 1.2 KB and ran their tail into the title art -- and the
+# three intro screens need under 10 KB of the 18 this leaves.
+FREE, FREE_LIMIT = 0x1D3500, 0x1D8000
 COLS = 40
 
 COPYRIGHT = [

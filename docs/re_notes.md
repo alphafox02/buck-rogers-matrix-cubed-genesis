@@ -4921,3 +4921,39 @@ The resulting order, timed in the emulator: EA logo to 11.5 s (stock
 Countdown's, and the reason the port reaches the cubed card at 43 s where DOS
 reaches it at 33), SSI to 16.8, Buck Rogers to 21.5, credits to 43.0, then the
 card — with the music ending at about 51.
+
+## The same wrong budget was costing two portraits
+
+With the loader understood (it streams; the limit is tiles, not bytes) the
+obvious question is how much else the byte budget was spending. Answer: less
+than feared, but one picture badly.
+
+Encoding all thirty-seven replaced portraits at twelve colours and merge
+tolerance 0 and comparing against each one's budget, only two do not fit:
+
+    0x2A  PIC1/042  1 frame   needs 4152 bytes / 121 tiles, budget 3576
+    0x51  PIC1/081  1 frame   needs 4024 bytes / 117 tiles, budget 3768
+
+`0x51` was merging 117 tiles down to 109, which is small. `0x2A` ran off the
+end of the merge ladder and down the colour one to **four colours** — a
+creature portrait reduced to two-tone purple and beige, unrecognisable next to
+its source. Both are single frames of 11x11, so neither can ask for more than
+121 tiles, and the largest any other portrait needs is 136.
+
+`PORTRAIT_TILES = 160` covers all of them. Measured against what is free: the
+deepest the graphics stack gets in ordinary play is **973 of the 1280 tiles
+below plane A** (the party screen; the dungeon holds the same), so a portrait
+has about 307 to spend and the worst of these wants 121.
+
+**Big pictures deliberately do not get this.** They run to about 500 tiles,
+and 500 does not fit in 307 — that they work at all means they load when the
+stack is shallower, and raising them would be spending VRAM that has not been
+accounted for. Three of them sit exactly at their byte budget and can stay
+there; the merging is slight.
+
+Letting those two portraits have their tiles cost about 1.2 KB and pushed the
+last portrait past `0x1FA000`, where the title art starts. `romlayout.py`
+caught it, which is what it is for. `PORTRAIT_BASE` moves from `0x1E0000` to
+`0x1D8000` and `introfix.py`'s ceiling comes down to match; big pictures end
+around `0x1D1143` and the three intro screens need under 10 KB of the 18 they
+now have.

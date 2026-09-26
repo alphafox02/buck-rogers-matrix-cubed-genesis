@@ -65,7 +65,12 @@ SIDE = 11
 # cannot overrun the other, which happened once and left the pointers
 # reading nonsense.
 ART_BASE = 0x1C0000        # big pictures
-PORTRAIT_BASE = 0x1E0000   # portraits
+# Was 0x1E0000, which left 0x1A000 for portraits and they now want a little
+# more than that: letting the two that were being merged have their tiles
+# pushed the last one over 0x1FA000, where the title art starts, and
+# romlayout.py caught it. Big pictures end at about 0x1D1143 and the intro
+# screens now stop at 0x1D8000, so this is free space either way.
+PORTRAIT_BASE = 0x1D8000   # portraits
 # The flag bit does not merely say "a palette follows" -- it says WHICH CRAM
 # line that palette is loaded into. Bit 2 means line 2, bit 3 means line 3.
 # The nametable has to reference the same line in bits 13-14 or the picture
@@ -218,6 +223,23 @@ def nearest(px, rgb):
 # 3..14. Three colours fewer is a real cost on a face, and much cheaper than a
 # third of it being whatever the last screen happened to use.
 PAL_FIRST, PAL_COUNT = 3, 12
+
+# A portrait's ceiling in unique tiles, which is the thing the hardware
+# actually limits -- see `encode`. Only two of the thirty-seven replaced
+# portraits ever hit the old byte budget, and both are single frames of
+# 11x11 = 121 cells, so neither can ask for more than 121 tiles; the largest
+# any of the rest needs is 136. 160 covers every one of them with room over.
+#
+# Measured against what is free: the deepest the graphics stack gets in
+# ordinary play is 973 tiles of the 1280 below plane A -- the party screen,
+# and the dungeon holds the same -- so a portrait has about 307 to spend and
+# the worst of these wants 121.
+#
+# Big pictures deliberately do NOT get this. They run to about 500 tiles, and
+# 500 does not fit in 307; that they work today means they load when the
+# stack is shallower, and raising them would be spending VRAM this has not
+# accounted for. They are only slightly merged and can stay that way.
+PORTRAIT_TILES = 160
 
 
 def _cram_words(words, shift):
@@ -412,7 +434,7 @@ def main():
             got = encode(crop, 1, BIG_W, BIG_H, budget)
         else:
             frames = was_frames
-            got = encode(imgs, frames, budget=budget)
+            got = encode(imgs, frames, budget=budget, tiles=PORTRAIT_TILES)
         if got is None:
             print(f"  picture 0x{pid:02X}: {path} will not fit in {budget} bytes, left alone")
             continue
