@@ -5243,3 +5243,40 @@ things above.
 All four experiments were reverted rather than shipped. None showed a
 benefit, and two of them (the start square, the dropped writes) move the demo
 away from the DOS script's own data.
+
+## Combat overlap with a 48x48 creature: what is and is not wrong
+
+A play session: "the t rex half being seen as well as the good characters
+half hidden... do they need to stand further away?"
+
+Facts established:
+
+* **Size 4 is a class this port added.** Stock Countdown draws 24x24, 24x48
+  and 48x24 only; `bigcreature.py` added 48x48. Exactly five of the 90 roster
+  records use it -- AMALTH SEC BOT, CARNIFERN, STAGE 5 ECG, STORMRIDER and
+  VENUS DINOSAUR, which is the "t rex".
+* **Its footprint is right.** `occupy()` gives size 4 an extra row and an
+  extra column, so it claims two squares by two -- exactly the four 24x24
+  cells a 48x48 sprite covers. The art does not overhang its own footprint.
+* **Its VRAM budget is right.** A 24x24 frame is nine cells and one slot;
+  24x48 and 48x24 are eighteen and two; 48x48 is thirty-six and `slots()`
+  gives it four.
+* **Occupancy is not ignored.** The array at `0xFFFFCACA` is read at
+  nineteen sites, so placement and movement do consult it.
+
+So nothing is missing or mis-sized. What decides who covers whom is the order
+of the display list, which `0x0C440` walks straight through from `0xB0B4`,
+entry 0 to entry n-1, with no depth rule:
+
+    0C436  move.w $b0b2.w, d7     entry count
+    0C440  lea.l  $b0b4.w, a2     and iterate in list order
+
+A 24x24 figure standing in one of the four cells a 48x48 creature covers is
+therefore drawn over it or under it purely by list position. That is the
+overlap, and "standing further away" would indeed avoid it.
+
+NOT yet fixed, and not attempted blind: which way the ordering should go
+needs a live 48x48 fight to judge, and the scripted driver cannot reach one.
+`bigprobe.py` forces one into the opening dock's first encounter, but
+`play.to_dungeon` then walks into the Dr. Romney scene and stops. Getting
+that driver past the scripted encounters is the prerequisite for the fix.
