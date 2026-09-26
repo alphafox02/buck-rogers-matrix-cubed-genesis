@@ -47,6 +47,7 @@ import transpile
 
 
 GEO_ID_CAPACITY = 32   # the stack buffer at -0x22(a6) in the GEO loader
+DEMO_BLOCK = 24        # ECL1's attract-mode story demo, area 0x18
 
 
 def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
@@ -65,7 +66,13 @@ def transplant(rom, blocks, geo, area, block_id, map_id, mc, maps, flags):
           f"{f', map {map_id}' if map_id is not None else ''}"
           f"{'  (new)' if added else '  (replacing)'}")
 
-    code, text, report = transpile.transpile(mc[block_id], flags)
+    # Block 24 is the attract demo, and only there is a hand-written
+    # coordinate change followed by a redraw a scripted WALK rather than a
+    # teleport. See the note in transpile.py: the general form of that idiom
+    # cannot be rewritten safely, because STEPFORWARD moves in the facing
+    # direction and nothing checks the facing statically.
+    code, text, report = transpile.transpile(
+        mc[block_id], flags, walk_as_step=(block_id == DEMO_BLOCK))
     stubs = sum(1 for _, _, why in report if "counterpart" in why)
     unmapped = sum(1 for _, _, why in report if why.startswith("no Genesis mapping"))
     jumps = sum(1 for _, _, why in report if "not in layout" in why)

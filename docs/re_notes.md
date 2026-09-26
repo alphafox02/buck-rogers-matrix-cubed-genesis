@@ -4957,3 +4957,54 @@ caught it, which is what it is for. `PORTRAIT_BASE` moves from `0x1E0000` to
 `0x1D8000` and `introfix.py`'s ceiling comes down to match; big pictures end
 around `0x1D1143` and the three intro screens need under 10 KB of the 18 they
 now have.
+
+## The demo was never corrupt — it was tearing
+
+The attract demo looked like "a dude just standing in space with really fast
+flashes of the same image". Three things were true at once and only the third
+mattered.
+
+**It is not corruption.** Capturing every frame rather than every fifteenth
+shows the garbage frames are transient: the screen settles clean between them.
+
+**It is not the allocator.** Sampling the handle stack every ten frames across
+the failure shows depth 6 and next-tile 517 throughout, with one push and pop
+per redraw. No leak, no VRAM growth. (An earlier coarser sample had already
+ruled out tile exhaustion at 758 of 1280.)
+
+**The party does move.** `DUNGEON_X` goes 13, 12, 11, 10, 9, 8 in the first
+loop and 7, 6, 5, 4 in the second, exactly as the script says.
+
+What is actually wrong is that `CALL 0x2DCB` becomes `VIEW 0, 0xFF`, and
+`VIEW` rebuilds the entire layout through `0x0AF00` **with the display on**.
+Measured: each pass leaves the screen visibly torn for about 70 frames, in a
+loop whose period is 1.95 seconds. So the screen is garbage for 1.2 s, clean
+for 0.75, then garbage again — and the walk is invisible underneath it. A
+normal walk, measured the same way, does not disturb the screen at all.
+
+`STEPFORWARD` is the engine's own move-and-redraw: `0x03EB2` -> `0x053B6`,
+which reads the direction table at `0x146E0` and takes the cheap path. So in
+the demo the pair
+
+    SUBTRACT 1, [0xC04B], [0xC04B]
+    SOUND_EVENT 5
+    CALL 0x2DCB
+
+collapses to `SOUND` + `STEPFORWARD`. The coordinate write has to go or the
+party moves twice. Measured after: 13 to 44 frames of disturbance per step
+instead of 70, and the figure is visibly walking.
+
+**Scoped to block 24 only.** The idiom appears at five sites in ECL1 — blocks
+17, 24 twice, 50 and 113 — and `STEPFORWARD` moves in the FACING direction,
+which cannot be checked statically. It is safe in the demo because the script
+sets facing 3 (west) and decrements X, so the two agree, and the corridor it
+walks is open: map `0x40`, row y=8, every west wall from x=13 down to x=4
+reads 0. The other three are ordinary gameplay, where a step the wrong way
+would be a real bug and one slow `VIEW` is not a problem.
+
+`LOADFILES 0x40` was a red herring — an earlier note here guessed the port
+lacked that map. It does not: ECL block 64 and GEO map 64 are both
+transplanted, area `0x40` is geo slot 23 with 525 non-zero bytes, and the
+handler at `0x03886` passes anything under `0x7F` straight to the map loader.
+The area variable `0x97E8` staying at `0x00` is expected; `LOADFILES` loads a
+map, it does not change which ECL area is running.

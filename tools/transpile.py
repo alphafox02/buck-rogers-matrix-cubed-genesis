@@ -465,7 +465,7 @@ def _split(text):
     return [" ".join(lines[i:i + LINES]) for i in range(0, len(lines), LINES)]
 
 
-def transpile(block: bytes, flags=None):
+def transpile(block: bytes, flags=None, walk_as_step=False):
     """
     Translate one DOS ECL block.
 
@@ -724,6 +724,57 @@ def transpile(block: bytes, flags=None):
     hoisted = {call_off for call_off, _ in redraw_first.values()}
     redraw_pos = {}
 
+    # A scripted walk: move the party one square by hand, then redraw.
+    #
+    #     SUBTRACT 1, [0xC04B], [0xC04B]     ; DUNGEON_X -= 1
+    #     SOUND_EVENT 5
+    #     CALL 0x2DCB                        ; redraw
+    #
+    # `CALL 0x2DCB` becomes `VIEW 0, 0xFF`, which is right everywhere else
+    # and wrong in a loop: VIEW rebuilds the whole layout through 0x0AF00,
+    # and that takes about a second WITH THE DISPLAY ON. Measured in the
+    # attract demo, each pass leaves the screen visibly torn for 70 frames
+    # out of a 1.95-second cycle -- so the party appears to stand still in a
+    # flickering mess rather than walk. A play session described exactly
+    # that: "a dude just standing in space with really fast flashes".
+    #
+    # `STEPFORWARD` is the engine's own move-and-redraw (0x03EB2 -> 0x053B6,
+    # which reads the direction table at 0x146E0 and does the cheap redraw
+    # ordinary walking uses). Measured over a normal step it does not disturb
+    # the screen at all.
+    #
+    # ONLY where the caller asks. The idiom appears at five sites across
+    # ECL1 -- blocks 17, 24 twice, 50 and 113 -- and STEPFORWARD moves in the
+    # FACING direction, which cannot be checked statically. In the demo the
+    # script sets facing 3 (west) and decrements X, so the two agree, and the
+    # corridor it walks (map 0x40, y=8, x=13 down to x=4) has no west wall
+    # anywhere along it. The other three are ordinary gameplay, where a step
+    # the wrong way would be a real bug and one slow VIEW is not.
+    step_drop, step_call = set(), set()
+    if walk_as_step:
+        _coords = {a for a in (0xC04B, 0xC04C)}
+        for _i, _off in enumerate(order):
+            _ins = found.get(_off)
+            if _ins is None or _ins.name not in ("SUBTRACT", "ADD"):
+                continue
+            if len(_ins.args) < 3:
+                continue
+            _v = [getattr(a, "value", None) for a in _ins.args]
+            if _v[1] not in _coords or _v[2] not in _coords or _v[1] != _v[2]:
+                continue
+            for _j in range(_i + 1, min(_i + 4, len(order))):
+                _nxt = found.get(order[_j])
+                if _nxt is None:
+                    break
+                if (_nxt.name == "CALL" and _nxt.args
+                        and _nxt.args[0].value == 0x2DCB):
+                    if order[_j] not in jump_targets and _off not in jump_targets:
+                        step_drop.add(_off)
+                        step_call.add(order[_j])
+                    break
+                if _nxt.name not in ("SOUND_EVENT", "DELAY"):
+                    break
+
     # COMBAT leaves the display DISABLED and the script has to switch it back
     # on. The engine blanks through 0x085D6 -- `move.w #$8124,(a4)`, VDP
     # register 1 with the display bit clear -- and only 0x0860E turns it on
@@ -790,6 +841,24 @@ def transpile(block: bytes, flags=None):
             if brk == "drop":
                 continue
         ins = found[off]
+        if off in step_drop:
+            # STEPFORWARD does the move itself, so the hand-written
+            # coordinate change has to go or the party moves twice.
+            layout.setdefault(off, pos)
+            report.append((off, "walk",
+                           "coordinate write dropped: STEPFORWARD moves"))
+            continue
+        if off in step_call:
+            opcode, argc = gen["STEPFORWARD"]
+            if argc:
+                raise SystemExit("STEPFORWARD is supposed to take no arguments")
+            layout.setdefault(off, pos)
+            pieces.append((off, opcode, [], 1))
+            pos += 1
+            report.append((off, "walk",
+                           "CALL 0x2DCB -> STEPFORWARD, so the redraw is the "
+                           "cheap one and the screen does not tear"))
+            continue
         if off in hoisted:
             # Already emitted, in front of the PICTURE just before it.
             layout.setdefault(off, pos)
