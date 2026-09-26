@@ -5336,3 +5336,36 @@ demo roster as
 `npctable.py` now sets that byte for every id it adds. It runs after
 `add_creatures.py` and after `rename_monsters.py`, because Kane is not in the
 roster until the first and both rewrite the same compressed stream.
+
+## The combat board already depth-sorts — do not reorder the sprite emission
+
+Written down because a patch to do exactly that was built and thrown away.
+
+The board's second loop (`0x0C576`-`0x0C612`) writes the sprite table in
+display-list order, which looks like the reason a 48x48 creature and a
+character hide each other: on the Genesis an earlier sprite covers a later
+one. It is not the reason. Between the two loops, `0x0C67A` runs a **linked
+list insertion sort by y**:
+
+    0C6CC  move.w $2(a2), d2        this entry's y
+    0C6DE  cmp.w  -$2(a6), d2       against the running head
+    0C6E2  bcs.b  $c706             smaller: walk on down the chain
+    0C6EA  move.b d0, $f(a2)        else splice in -- $f is next, $e is prev
+    0C742  cmp.w  $2(a4), d2        compare against each link in turn
+
+and sprite priority on this hardware follows the LINK CHAIN, not the table
+index. So the order the emit loop writes entries in does not decide anything,
+and banding that loop by y -- which is what the discarded patch did, in 92
+bytes at `0x0F1D00` with hooks at `0x0C56C`, `0x0C576` and `0x0C612` -- would
+have changed where sprites sit in the table while leaving the chain, and the
+priority, exactly as before.
+
+The sort is guarded by `[0xB4BC]`, which `0x0C3F0` sets on entry and
+`0x0C3F8` (the other entry point) does not, so it does not run on every
+redraw. That is the thing to check first if depth ever does look wrong.
+
+Which means a party member invisible behind a 48x48 creature is **not** a
+draw-order fault: it is a figure standing in one of the four cells that
+creature covers, correctly occluded by something two squares wide and two
+deep. The question to chase is placement -- whether the initial combat
+placement consults the occupancy array at `0xFFFFCACA` the way movement does.
