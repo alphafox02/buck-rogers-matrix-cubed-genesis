@@ -5164,3 +5164,43 @@ What is left is the renderer: `0x0B238` builds a per-cell code from four
 neighbour flags and `0x0B2E4` writes it out, and the question is what that
 produces for a square with no structure anywhere near it. That is where to
 pick this up.
+
+## The demo's empty floor: what the next attempt should NOT re-try
+
+Still unfixed. Recording the dead ends so they are not walked again.
+
+**Countdown's own attract demo renders correctly in the port.** Pointing the
+timeout at area `0x03` instead of `0x18` (the stock dispatch value) gives a
+proper corridor with a floor. So the engine, the attract path and the
+transplanted-map machinery are all capable of it; the difference is in the
+demo's own setup.
+
+**The open-square theory is dead.** Countdown's attract map has 25 squares
+with walls out of 256 -- far sparser than map `0x40`'s 229 -- and draws a
+corridor. Placing our demo on the one 9-square westward run in map `0x40`
+that has a wall alongside every step (y = 4, x = 9 down to 1) changed
+nothing: still backdrop.
+
+**The wall set is dead**, twice over. Ten sets on the dock, and 0, 1, 5, 8, 9
+on the demo itself. Sets 8 and 9 draw *nothing at all* there.
+
+**`NEWREGION` is not the missing piece.** Countdown's attract block has
+`SAVE 0x1, [0x97A1]` and `NEWREGION 0, 1, 0, 0, 3, 4` before its first
+`VIEW`, and no transplanted script has them because DOS has no such concept.
+Emitting both for block 24, in the same position, changes nothing visible.
+
+**`0xFFFFCACA` is the COMBAT board, not the dungeon view.** A long chase --
+`[0xB52A] == 6` at `0x150A4` gating the builder at `0x0B100`, `[0x9BBC] == 2`
+set at `0x15044`, `[0xB4CA]` reading back the wall set -- ends at `0x0E394`,
+whose only caller is `0x038CE`, inside `COMBAT`. The dock's array was
+populated because `to_dungeon` fights on the way in. None of that chain is
+the overhead view, and the flag readings taken from it prove nothing.
+
+Both unproven changes (the region prologue and a relocated start square) were
+reverted rather than shipped: neither showed a benefit, and the start square
+moves the demo off the DOS script's own coordinates.
+
+Where to pick up: find what actually draws the overhead map -- NOT via
+`0x0B100` -- and compare it running under area `0x03` against area `0x18`.
+The two differ in something the scripts do, because the same engine draws one
+and not the other.
