@@ -5369,3 +5369,43 @@ draw-order fault: it is a figure standing in one of the four cells that
 creature covers, correctly occluded by something two squares wide and two
 deep. The question to chase is placement -- whether the initial combat
 placement consults the occupancy array at `0xFFFFCACA` the way movement does.
+
+## A 48x48 creature was placed without testing its own footprint
+
+The routine that CHOOSES a combat square, `0x14840`, stashes the creature's
+size at `-$202(a6)` (`0x148AA`) and branches on it two hundred bytes later:
+
+    1490E  move.b -$202(a6), d0
+    14912  cmp.b  #$2, d0     24x48: also test the square one row down  (+$15)
+    14916  bne.b  $14934
+    14934  cmp.b  #$3, d0     48x24: also test the square one col right (+$1)
+    14938  bne.b  $14952      anything else: ACCEPT, with no extra test
+
+`bigcreature.py` added the 48x48 class and extended the sites that draw it,
+mark its four squares and move it, but not this one -- its own notes write
+`0x148AA` off as "stashes the size, no branch, needs nothing", and the branch
+is not there, it is at `0x1490E`. So a 48x48 was placed having tested only
+its anchor, and the other three squares could already hold party members.
+
+That is what a play session saw: "you can't even see Buck here at the start
+of the fight." He was not mis-ordered -- the board's sprites are already
+depth sorted by y -- he was standing inside the Venus Dinosaur and correctly
+hidden by it.
+
+`tools/bigplacement.py` adds the size 4 case: squares `+$01`, `+$15` and
+`+$16`, each tested the way the stock cases test theirs, rejecting on bit 7
+(occupied) or on `0x144EA` returning terrain 4 or worse. Only the four
+squares the creature actually covers are refused, so a character may still
+stand on any of the eight around it and attack -- which was the constraint,
+since moving everyone away would break melee.
+
+Confirmed against DOS, which a capture shows doing exactly this: the Venus
+Dinosaur with two figures beside it and no overlap anywhere. The same session
+noticed the two sides also start further apart there, which follows.
+
+**Known difference, not fixed:** DOS removes a big creature on death and
+shows skulls over its four squares. The Genesis engine draws frame 16, "flat
+on the floor", and leaves it -- Countdown's own behaviour, and
+`inject_creature.py` has to synthesise that frame because a DOS sprite block
+carries two poses and neither is a corpse. Making large creatures vanish
+instead would be an engine change.

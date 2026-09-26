@@ -365,6 +365,10 @@ def main():
     # board reads the MONSTER record's byte 0x23, and bigcreature.py extends
     # the three routines that were measured taking that path in a live fight.
     step("bigcreature.py")
+    # ...and keep a 48x48 creature from being placed on top of somebody. The
+    # routine that CHOOSES a square handles the two oblong classes and not
+    # this one, so it tested only the anchor. See tools/bigplacement.py.
+    step("bigplacement.py")
     # Matrix Cubed's own creatures, each with a slot, a name and a figure of
     # its own. The figure directory grows first: monster id and figure id are
     # the same number, and a monster with no figure takes the miss path.
