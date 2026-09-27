@@ -5878,3 +5878,45 @@ running alongside the tile one.
 
 All four attempts are reverted. The shipped ROM animates the creature as a
 fragment while it walks and is correct the rest of the time.
+
+## Found: a moving combat figure is SPRITES, and that is a second renderer
+
+This closes the "24x24 fragment while it moves" hunt. A figure that is
+standing is plane A tiles through `0x0AD92`. A figure that is MOVING is
+hardware sprites, and `0x0FA52` is the whole of it:
+
+    0FA5A  move.b $23(a2), d7        ; the monster size
+    0FA5E  move.b d7, -$1(a6)        ; kept, because d7 is cleared at 0x0FB82
+    0FADE  move.b d7, d0
+    0FAE4  movea.l $b586.w, a0
+    0FAEC  bsr.w  $b58a              ; blit its cells into VRAM
+    0FB0E  cmp.b  #$2, d7 ... movem.w d0-d1, $12(a2)   ; 24x48: a second entry
+    0FB20  cmp.b  #$3, d7 ... movem.w d0-d1, $12(a2)   ; 48x24: a second entry
+    0FB32  st.b   $1c(a2)                              ; everything else: one
+    0FB6C  lea $b0b4.w, a2 ... advance entries 1 and 2 every step
+
+Two separate things were wrong for a 48x48, and the first is FIXED:
+
+* **The blit.** `0xB59A` switches on the size in d0 and had no case for 4, so
+  it fell through to nine cells read in the 3x6 order -- a gold squiggle.
+  `bigfigures.py` was written for exactly this in an earlier round and never
+  wired into the build, because it also patches the figure record's class
+  nibble and the STANDING draw ignores that. The standing draw is not what it
+  is for. Wired in, relocated to 0x0F1DE0 and given the same free-space guard
+  the other tools have, the slide loads 36 cells through a quadrant table and
+  the creature reads as itself.
+
+* **The entry count.** Still one of four. `tools/bigslide.py` writes the other
+  three and positions them right, and they draw the wrong quadrants: which
+  group of nine VRAM tiles an entry shows is assigned by `0x0C0DC`, out of the
+  template copied to `$8(a3)`, not by the position write. It is written up and
+  deliberately NOT in the build.
+
+The template format, for whoever picks this up: `0x0FBC2` takes the figure
+record's byte 7 LOW nibble -- an animation set, nothing to do with size --
+times 8, into a table at `0xFBF8` of four words, one per facing. Each word is
+an offset from `0xFBF8` to a template: a word pointer followed by entry bytes
+until one with bit 7 set. `0x0FB94` adds `slot * 4` to a byte with bit 6 set,
+and only the first two bytes are offered to it. Template length does not track
+the size class -- class 0 uses sets of 2, 3 and 4 bytes and so does class 3 --
+so the quadrant assignment is somewhere in `0x0C0DC`.

@@ -372,6 +372,12 @@ def main():
     # until combatgap.py gave it room to walk at all. Both are needed, and they
     # answer different questions about the same creature.
     step("bigfigures.py")
+    # NOT bigslide.py, and read its header before wiring it in: it writes the
+    # other three display entries a sliding 48x48 needs and positions them
+    # correctly, and they come out holding the wrong quadrants, because the
+    # tile group an entry draws is assigned by 0x0C0DC and not by the position
+    # write. Measured side by side it is more of the creature and still not
+    # one creature.
     step("bigcreature.py")
     # ...and keep a 48x48 creature from being placed on top of somebody. The
     # routine that CHOOSES a square handles the two oblong classes and not
