@@ -6120,3 +6120,22 @@ its table had no pattern for the line `injectconsole.py` prints. It has one
 now, and the same build reports 84 regions instead of 83. Any injector added
 later must print what it wrote in a shape that table matches, or it is not
 being checked at all.
+
+## 0x0DF30 is a follow-on chain, not the menu's music
+
+`0x0DF18` runs periodically and reads the requested song from `0xD806`:
+
+    0DF1C  move.b  $d806.w, d0
+    0DF20  cmp.b   #$33, d0        ; slot 7?
+    0DF24  bne.b   $df3a
+    0DF26  jsr     $1b752          ; is anything still sounding?
+    0DF2C  tst.w   d0
+    0DF2E  bne.b   $df3a
+    0DF30  move.w  #$36, d0        ; no -- start slot 10
+    0DF34  jsr     $1b900
+
+So slot 10 is what plays *after* slot 7 runs out, which matters as soon as any
+track is made to end: leaving slot 10 looping hands the endless loop straight
+down the chain. An earlier note in build.py called slot 10 the menu's theme.
+It is not -- the title theme carries the intro, the MATRIX CUBED card and the
+main menu, and stops on its own shortly after the card.

@@ -176,9 +176,15 @@ MUSIC.update({slot: ("BUCKA.XMI", song)
 # area tracks for ever, and the transplant inherited that, so one short cue
 # played over and over for the whole level.
 #
-# Slot 10 still loops. It is the menu's theme as well as cue 0x86, and where
-# it plays at 0x0DF30 a track that ended would leave that screen silent.
-PLAY_ONCE = {2, 3, 5, 6, 7, 9}
+# Slot 10 ends too. An older note here called it the menu's theme, and it is
+# not: 0x0DF30 is a follow-on chain. The routine at 0x0DF18 runs periodically,
+# reads the requested song from 0xD806, and if it is 0x33 -- slot 7 -- asks
+# the driver at 0x1B752 whether anything is still sounding. When slot 7 runs
+# out it starts 0x36, slot 10. So leaving slot 10 looping would have handed
+# the endless loop straight down the chain the moment slot 7 was made to end.
+# The title theme already carries the intro, the MATRIX CUBED card and the
+# main menu, and stops on its own shortly after the card.
+PLAY_ONCE = {2, 3, 5, 6, 7, 9, 10}
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
