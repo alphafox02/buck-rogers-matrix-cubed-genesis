@@ -22,23 +22,28 @@ same stride `0x0C2xx` uses, and the size is read back from `-1(a6)`, where
 `0x0FA5E` already saved it, because d7 is cleared at `0x0FB82` before the
 movement loop comes round again.
 
-NOT WIRED INTO THE BUILD, and do not wire it in without reading this.
+NOT WIRED INTO THE BUILD. What it does works; what it needs does not exist
+yet. Four attempts, each built and watched frame by frame:
 
-The three extra entries appear and move correctly -- side by side against the
-shipped ROM the creature covers its whole footprint instead of a quarter of it
--- but each entry draws the WRONG QUADRANT. Which group of nine VRAM tiles an
-entry shows is assigned by `0x0C0DC` (called from `0x0FB36`) out of the
-template copied to `$8(a3)`, and `0x0FABC` fixes up only its first two bytes.
-Positioning an entry does not give it art. On screen that is two mismatched
-pieces of dinosaur side by side, which is more of the creature and still not
-one creature, so it is not an improvement worth shipping.
+  four entries, positions only   the extra sprites appear and move, drawing
+                                 whatever quadrant the first one does
+  four entries, count raised     `[0xB0B2]` set to 4, at the placement and
+                                 again at 0x0F9BE where the two are reserved:
+                                 the creature vanishes outright, both times
+  two entries, group written     writing the group into byte 0x0A of the
+                                 second entry changes nothing
+  two entries, side chosen by
+  the first entry's group        likewise nothing, and for the same reason
 
-What is left to do is `0x0C0DC` and the template format at `0xFBF8`: sets are
-eight bytes, four words, one offset per facing, and each template is a word
-pointer followed by entry bytes to a terminator with bit 7 set. Template
-length does NOT track the size class -- class 0 figures use sets of 2, 3 and 4
-bytes and class 3 figures use the same spread -- so the entry count is not in
-there and the quadrant assignment is what has to be found.
+The reason is `0x0C142`. It writes `d7 & $C0` -- the flip bits ALONE -- into
+byte 0x0A of an entry and puts the group in `$8(a3)`, the FIGURE record the
+entry points at through `$b(a2)`. Two entries pointing at one record therefore
+draw one quadrant, and nothing written into the entry survives. Giving a
+48x48's four sprites four quadrants means four records, which is a structural
+change to how a figure is registered at `0x09870`, not a patch here.
+
+What IS shipped is `bigfigures.py`, which fixes the blit those sprites read
+from, so what slides is a clean quarter of the creature instead of a scramble.
 
 Usage:
     bigslide.py <in.gen> <out.gen>
@@ -62,12 +67,26 @@ PLACE_STOCK = bytes.fromhex(
     "be3c0002660c0641001848aa000300126016"
     "be3c0003660c0640001848aa00030012600450ea001c")
 
+# How many display entries the engine will read. 0x0F9A6 sets it to two when
+# it takes a figure off the board to slide it, and that has to be four before
+# anything looks at the list -- setting it later, from the placement block,
+# makes the creature disappear entirely.
+SLOTS = 0x0F9BE
+SLOTS_END = 0x0F9C4
+SLOTS_STOCK = bytes.fromhex("31fc0002b0b2")
+RECORD = 0x06F14             # d0 = $2(a3) -> a1 = that creature's record
+
 ADVANCE = 0x0FB6C
 ADVANCE_END = 0x0FB7E
 ADVANCE_STOCK = bytes.fromhex("45f8b0b4d552d76a0002d56a0012d76a0014")
 
-NEW = 0x0F1F20               # free: combatgap.py's block ends by 0x0F1F18
-NEW_LIMIT = 0x0F1FD0         # music starts at 0x0F2004
+# Two regions, because what is left of the 1024 zero bytes at 0x0F1BD8 is not
+# contiguous: bigfigures.py ends at 0x0F1EC4 and combatgap.py sits at 0x0F1F00.
+PLACE_NEW = 0x0F1F20         # 184 bytes, up to the music at 0x0F2004
+PLACE_NEW_LIMIT = 0x0F1FD8
+ADVANCE_NEW = 0x0F1EC4       # 60 bytes, between bigfigures.py and combatgap.py
+ADVANCE_NEW_LIMIT = 0x0F1F00
+COUNT = 0xB0B2               # how many display entries the engine will read
 
 
 class Asm:
@@ -93,6 +112,11 @@ class Asm:
         self.code += b"\x4e\xf9" + struct.pack(">I", target)
         return self
 
+    def dbra(self, reg, label):
+        self.code += bytes((0x51, 0xC8 | reg))
+        self.code += struct.pack(">h", self.labels[label] - len(self.code))
+        return self
+
     def done(self):
         for slot, name, pc in self.fix:
             d = self.labels[name] - pc
@@ -103,17 +127,34 @@ class Asm:
 
 
 def place():
-    """The stock two cases unchanged, and four entries for a 48x48."""
+    """The stock two cases unchanged, and four whole entries for a 48x48.
+
+    d0 and d1 are the first entry's position and stay that way; d2, a0 and a1
+    are scratch -- d2 is reloaded from `[0xB3F4]` at 0x0FB3E, and both address
+    registers are set again by the routines this returns into.
+    """
     a = Asm()
-    a.raw("be3c0002").br(0x66, "n2")                  # 24x48
+    a.raw("be3c0002").br(0x66, "wide")                # 24x48: a second below
     a.raw("06410018").raw("48aa00030012").br(0x60, "out")
-    a.label("n2").raw("be3c0003").br(0x66, "n3")      # 48x24
+    a.label("wide").raw("be3c0003").br(0x66, "big")   # 48x24: a second right
     a.raw("06400018").raw("48aa00030012").br(0x60, "out")
-    a.label("n3").raw("be3c").raw(f"{BIG:04x}").br(0x66, "one")
-    a.raw("06400018").raw("48aa00030012")             # entry 2: one square right
-    a.raw("04400018").raw("06410018")                 # back left, one square down
-    a.raw("48aa00030024")                             # entry 3
-    a.raw("06400018").raw("48aa00030036")             # entry 4: right again
+    a.label("big").raw("be3c").raw(f"{BIG:04x}").br(0x66, "one")
+    # Which half of the art the engine gave the first entry decides which side
+    # the second one goes. Groups come in pairs, left half then right half of
+    # a frame, and the creature animates while it slides, so the first entry
+    # lands on either. An even group is a left half and its partner is the
+    # group after it, drawn to the right; an odd group is a right half and its
+    # partner is the group before it, drawn to the left. Adding one and always
+    # going right gets it correct half the time and leaves the other half
+    # showing two left halves side by side.
+    a.raw("142a000a")                                 # move.b $a(a2), d2
+    a.raw("08020000").br(0x66, "rightside")           # btst #0, d2 / bne
+    a.raw("06400018").raw("5202").br(0x60, "put")     # left half: partner right
+    a.label("rightside")
+    a.raw("04400018").raw("5302")                     # right half: partner left
+    a.label("put")
+    a.raw("48aa00030012")                             # the second entry's place
+    a.raw("1542").raw(f"{ENTRY + 0x0A:04x}")          # and its half
     a.br(0x60, "out")
     a.label("one").raw("50ea001c")                    # 24x24: end the list
     a.label("out")
@@ -133,20 +174,35 @@ def advance():
     return a.done() + b"\x4e\xf9" + struct.pack(">I", ADVANCE_END)
 
 
+def slots():
+    """Two display entries for a figure being slid, four for a 48x48."""
+    a = Asm()
+    a.raw("102b0002")                                 # move.b $2(a3), d0
+    a.raw("4eb9").raw(f"{RECORD:08x}")                # jsr $6f14 -> a1
+    a.raw("7002")                                     # moveq #2, d0
+    a.raw("0c29").raw(f"{BIG:04x}").raw("0023")       # cmpi.b #4, $23(a1)
+    a.br(0x66, "set")
+    a.raw("7004")                                     # moveq #4, d0
+    a.label("set").raw("31c0").raw(f"{COUNT:04x}")    # move.w d0, $b0b2.w
+    return a.done() + b"\x4e\xf9" + struct.pack(">I", SLOTS_END)
+
+
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
-    sites = ((PLACE, PLACE_END, "sprite placement", PLACE_STOCK, place),
-             (ADVANCE, ADVANCE_END, "sprite advance", ADVANCE_STOCK, advance))
+    sites = ((PLACE, PLACE_END, "sprite placement", PLACE_STOCK, place),)
     for at, _end, name, stock, _build in sites:
         if bytes(rom[at:at + len(stock)]) != stock:
             raise SystemExit(f"0x{at:05X} is not the {name}: "
                              f"{bytes(rom[at:at + len(stock)]).hex()}")
-    cursor = NEW
+    where = {PLACE: (PLACE_NEW, PLACE_NEW_LIMIT),
+             SLOTS: (PLACE_NEW + 0x80, PLACE_NEW_LIMIT),
+             ADVANCE: (ADVANCE_NEW, ADVANCE_NEW_LIMIT)}
     for at, end, name, _stock, build in sites:
-        cursor += cursor & 1
+        cursor, limit = where[at]
         code = build()
-        if cursor + len(code) > NEW_LIMIT:
-            raise SystemExit("the new blocks do not fit")
+        if cursor + len(code) > limit:
+            raise SystemExit(f"{name} is {len(code)} bytes and 0x{cursor:06X} "
+                             f"has {limit - cursor}")
         if any(rom[cursor:cursor + len(code)]):
             raise SystemExit(f"0x{cursor:06X}+{len(code)} is not free: "
                              f"{bytes(rom[cursor:cursor + len(code)]).hex()[:32]}...")
@@ -156,7 +212,6 @@ def apply(rom: bytes) -> bytes:
                        + b"\x4e\x71" * ((room - 6) // 2))
         print(f"  0x{at:05X} {name}: jmp 0x{cursor:06X} ({len(code)} bytes), "
               f"rejoins 0x{end:05X}")
-        cursor += len(code)
     print(f"  a 48x48 creature slides as four sprites, {STEP} pixels apart")
     return integrity.repair(bytes(rom))
 

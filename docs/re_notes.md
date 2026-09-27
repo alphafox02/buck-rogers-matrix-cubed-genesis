@@ -5920,3 +5920,34 @@ until one with bit 7 set. `0x0FB94` adds `slot * 4` to a byte with bit 6 set,
 and only the first two bytes are offered to it. Template length does not track
 the size class -- class 0 uses sets of 2, 3 and 4 bytes and so does class 3 --
 so the quadrant assignment is somewhere in `0x0C0DC`.
+
+## Why a sliding 48x48 is one sprite, and what it would take to be four
+
+`0x0FB0E` writes one display entry for a moving figure, two for the oblong
+sizes, and the entries live at `[0xB0B4]` 0x12 bytes apart. Adding the other
+two and positioning them is easy and `tools/bigslide.py` does it. Giving them
+their own quadrant of the art is the part that does not work, and this is why:
+
+    0C142  move.w $b0b2.w, d0 / subq / mulu #$12 / a2 = $b0b4 + d0
+    0C15E  move.b $b(a2), d0 / mulu #$12 / a3 = $b018 + d0
+    0C16C  move.b d7, d0 / andi.b #$c0, d0 / move.b d0, $a(a2)
+    0C17A  move.b d7, d0 / andi.b #$3f, d0 / move.b d0, $8(a3)
+
+Byte 0x0A of an entry gets the FLIP BITS ONLY. The group of nine VRAM tiles it
+draws -- the quadrant -- goes into `$8(a3)`, the figure record the entry points
+at through `$b(a2)`. So entries sharing a record draw the same quadrant, and
+anything written into byte 0x0A from outside is overwritten. The `st.b $1c(a2)`
+that ends a one-entry list is that same byte on entry 2, which is what made it
+look like the group lived there.
+
+Four measured attempts, all reverted: positions only (extra sprites appear,
+all the same quadrant); `[0xB0B2]` raised to four at the placement and again at
+`0x0F9BE` where the pair is reserved (the creature vanishes outright, both
+times); the group written into byte 0x0A of the second entry (no effect); and
+the second entry's side chosen from the first's group (no effect, same cause).
+
+Doing it properly means four figure RECORDS at `0xB018`, one per quadrant,
+which is a change to how `0x09870` registers a figure rather than a patch at
+the placement. Until then a 48x48 slides as one clean quarter of itself --
+which is what `bigfigures.py` bought, the blit it reads from having previously
+had no case for size 4 at all.
