@@ -169,7 +169,16 @@ MUSIC.update({slot: ("BUCKA.XMI", song)
 # Slot 10 keeps looping: with the restart gone it is no longer the card's
 # music, and where it does still play (0x0DF30) a track that ends would leave
 # that screen silent.
-PLAY_ONCE = {2}
+# Slot 2 is the title theme. Slots 3, 5, 6, 7 and 9 are the five script
+# music cues -- what an area plays when you walk into it -- and DOS ends
+# them: start the first level, talk to Buck, reach the treasure area, and by
+# the time you are walking around the dock it is silent. Countdown loops its
+# area tracks for ever, and the transplant inherited that, so one short cue
+# played over and over for the whole level.
+#
+# Slot 10 still loops. It is the menu's theme as well as cue 0x86, and where
+# it plays at 0x0DF30 a track that ended would leave that screen silent.
+PLAY_ONCE = {2, 3, 5, 6, 7, 9}
 
 # VIEW big pictures, 288x120. The ids ARE the DOS BIGPIC1 numbers: 0x70 is
 # 112 in decimal, which is what the archive calls it.
