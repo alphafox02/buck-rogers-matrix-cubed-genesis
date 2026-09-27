@@ -6442,3 +6442,66 @@ never from the ROM it is patching.
 
 Verified: after the opening, `0x9867` reads 0x04 and `0x976B` reads 0x01, and
 returning to the start square no longer replays the greeting.
+
+## The ship's systems are allocated as story flags, and they are bytes
+
+Space travel and docking misbehave, and this is the most likely reason.
+
+Block 18's port menu writes the ship's state directly:
+
+    REPAIR  WRITE_MEM 600, [0x4D16]   WRITE_MEM 150, [0x4D18]
+            WRITE_MEM 150, [0x4D1A]   WRITE_MEM 300, [0x4D1C]
+            WRITE_MEM 450, [0x4D20]   WRITE_MEM 2, [0x4D3E] ...
+    FUEL    WRITE_MEM 450, [0x4D1E]
+    MED SUP WRITE_MEM 10,  [0x4C63]
+
+None of `0x4D16`-`0x4D4A` is in `VARIABLE_MAP`, `PROBABLE_MAP` or any
+`WINDOW_MAP` range, so every one of them fell through to `flagmap` and was
+handed a **story-flag byte**:
+
+| DOS | what | got |
+|-----|------|-----|
+| 0x4D16 | hull, written 600 | 0x989E |
+| 0x4D18 | written 150 | 0x96FF |
+| 0x4D1A | written 150 | 0x98C8 |
+| 0x4D1C | written 300 | 0x970D |
+| 0x4D1E | fuel, written 450 | 0x98C3 |
+| 0x4D20 | written 450 | 0x9704 |
+
+Two things follow, and both are wrong.
+
+**They are bytes.** A story flag is one byte, so `WRITE_MEM 600` stores 88 and
+`WRITE_MEM 450` stores 194. Refuelling the ship sets fuel to 194 of whatever
+unit the script means by 450, and repairing the hull sets it to 88 of 600.
+
+**Nothing reads them.** The Genesis engine keeps its own ship state -- the
+gauges the space screen draws, the ones ship-to-ship combat damages -- and
+these flags are not it. So REPAIR and FUEL at the port write numbers the
+engine never looks at, while the script's own gates (`"YOU HAVE NO FUEL TO
+RUN."`) read them back and see the truncated values it wrote.
+
+This is the same failure as monsters, skills, pictures and wall codes: an id
+space passed through without an explicit map. Finding the engine's own ship
+variables and mapping these onto them is the fix. Until then the port's
+repair and refuel options do nothing the ship can feel.
+
+### Not a bug: "failed at jury rigging"
+
+DOS **Astrogation** (skill 46) and **Pilot Rocket** (51) both map to Genesis
+skill index 0, which is named `pilot rocket/juryrig` -- one string covering
+both trades. So a failed astrogation roll while plotting a course reports
+itself as failing at jury rigging. The mapping is right; the shared name just
+reads oddly.
+
+Travel gates on it at block 19 `0x01527`:
+
+    01527  PARTY_SKILL_CHECK 51, [0x7F7B], [0x7F7C]
+    01530  COMPARE [0x7F7C], 2
+    01536  IF_LESS -> failure
+
+The handler is sound: `PRINTSKILL` (0x23) and `SKILL` (0x22) are the same
+routine at `0x04E52` distinguished by `d4`, the result comes back 0-3, and
+`0x04F04` writes it to the third operand. Worth noting for later that when the
+second operand is zero the routine resolves against the **selected** character
+(`0x9DA7`, via `0x04E80`) rather than the best of the party, and the script
+presets it to zero.
