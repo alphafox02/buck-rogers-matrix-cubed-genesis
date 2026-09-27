@@ -5746,3 +5746,64 @@ drawn. Do not widen the rectangle again without fixing the fetch first.
 `0x0CC9A` is the site `bigcreature.py` claimed in its own header to have
 extended and had not. Two of the five it listed were real; `0x14552` and
 `0x15DD2` are still unchecked.
+
+## The half-frame error: `$11(a3)` is a SLOT, not a frame
+
+This is the root of the 48x48 draw, and it explains the half-swap, the bites
+during an attack, and why every attempt to scale the frame index failed.
+
+`0x09870` walks the board handing every figure a slot in a shared block table:
+
+    09878  move.b $42(a1), d0     ; the creature's art id
+    ...    scan a list for it
+    09894  move.b (a2), $11(a3)   ; found -- reuse that slot
+    098A2  move.b d6, $11(a3)     ; new -- take the next one
+    098AE  addq.w #1, d6
+    098B0  move.b $23(a1), d0 / cmp.b #1 / bls -> addq.w #1, d6   ; large: two
+
+`0x09934` then builds the table and `0x098D0` keeps its address in `[0xB582]`.
+The draw reaches it as `$2(a0)` and indexes it in nine-cell units:
+
+    0AE2A  move.b $11(a3), d0     ; the figure's FIRST SLOT
+    0AE2E  asl.b  #$2, d0         ; FOUR UNITS A SLOT -- one per facing
+    0AE60  add.b  d1, d0          ; the facing
+    0AE68  add.b  d1, d0          ; twice, if the creature is large
+    0AE74  mulu.w #$12, d0
+
+Four units a slot is the entire structure, and everything follows from it:
+
+| size  | slots | units | a facing is | |
+|-------|-------|-------|-------------|-|
+| 24x24 | 1     | 4     | 1 unit  =  9 cells | its whole frame |
+| 24x48 | 2     | 8     | 2 units = 18 cells | its whole frame |
+| 48x24 | 2     | 8     | 2 units = 18 cells | its whole frame |
+| 48x48 | 4     | 16    | **4 units = 36 cells** | its whole frame |
+
+`bigcreature.py` already gave a 48x48 its four slots at `0x098B0`. What it did
+not do was tell the draw that a facing is now four units, so stock added the
+facing twice and a 48x48 at facing 1 was fetched **two units in** -- the back
+half of one frame followed by the front half of the next.
+
+Every consequence measured earlier falls out of that one fact:
+
+* The half-frame-coloured probe reading blocks 1 and 12 for the two halves of
+  one creature. Not two draws: one draw, starting half a frame early.
+* `inject_creature.py`'s half-swap, which stored a 48x48's lower three tile
+  rows first. It cancelled the error at facing 1 and was wrong at every other
+  facing. Removed with the fix.
+* The bites during an attack. The animation blits a frame of the creature's
+  own sheet over it, fetched through the same index, so it painted a pose half
+  a frame out on top of a correct one.
+
+`FACING` at `0x0AE62` adds the facing four times for a 48x48. Measured over
+600 frames of the demo's fight, with the creature at its real hit points:
+
+                        before          after
+    frames with a bite   16, up to 0.6s  4, one frame each
+    worst missing        215 of 810 px   102 of 810 px
+    frames blank         11              1 (mid-walk)
+
+and the death still erases it cleanly. Do not reintroduce the half-swap, and
+do not widen the animation rectangle at `0x0CC9A` -- with the fetch correct,
+every frame of the sheet holds the same pose, so the blit paints the creature
+over itself and nothing moves.

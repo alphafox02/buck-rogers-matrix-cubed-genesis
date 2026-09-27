@@ -134,6 +134,38 @@ OCCUPY_END = 0x1052E
 # not reproduced: there is no draw left to put them in, and a frame that
 # persists is not a flash. See docs/re_notes.md for the two frame-index
 # rewrites that were tried for that and backed out.
+# The facing, and why a 48x48 was drawn half a frame out.
+#
+# `0x09870` hands every figure a SLOT in a shared block table: `$11(a3)` is the
+# index, `d6` counts them, and a creature bigger than 24x24 takes a second one
+# (the `0x098B0` site this tool already widens to four for a 48x48). The table
+# is built at `0x09934` and its address kept in `[0xB582]`; the draw reaches it
+# as `$2(a0)` and indexes it in NINE-CELL units:
+#
+#     0AE2A  move.b $11(a3), d0    ; the figure's first slot
+#     0AE2E  asl.b  #$2, d0        ; four units a slot -- one per facing
+#     0AE60  add.b  d1, d0         ; the facing
+#     0AE68  add.b  d1, d0         ; twice, if the creature is large
+#     0AE74  mulu.w #$12, d0       ; eighteen bytes a unit
+#
+# Four units a slot is the whole structure. A 24x24 owns one slot, so its four
+# facings are one unit apart and a facing is nine cells -- its frame. A 24x48 or
+# 48x24 owns two, eight units, so its facings are two apart: eighteen cells.
+# A 48x48 owns four, sixteen units, and its facings are FOUR apart -- thirty-six
+# cells. Stock adds the facing twice whatever the size, so a 48x48 at facing 1
+# was fetched two units in: the second half of one frame followed by the first
+# half of the next.
+#
+# That is the half-frame error `inject_creature.py` used to paper over by
+# storing the art with its halves swapped, which looked right at facing 1 and
+# wrong everywhere else, and it is what made an attack on the creature blit a
+# mangled pose over it. Adding the facing four times for a 48x48 fixes the
+# fetch, and the half-swap comes out with it.
+FACING = 0x0AE62
+FACING_END = 0x0AE6A
+FACING_STOCK = bytes.fromhex("4a2efffe6702d001")
+
+
 DEATH = 0x07676
 DEATH_END = 0x0767E
 DEATH_STOCK = bytes.fromhex("244b4eb9000142a8")
@@ -263,6 +295,19 @@ def index():
     return a.done() + b"\x4e\xf9" + struct.pack(">I", INDEX_END)
 
 
+def facing():
+    """One more facing for a 48x48, so four in all: one whole frame."""
+    a = Asm()
+    a.raw("0c6e0005fffa").br(0x66, "notbig")   # cmpi.w #5, -$6(a6) / bne
+    a.raw("0c6e0005fff8").br(0x66, "notbig")   # cmpi.w #5, -$8(a6) / bne
+    a.raw("d001").raw("d001").raw("d001").br(0x60, "out")   # three more facings
+    a.label("notbig")
+    a.raw("4a2efffe").br(0x67, "out")          # tst.b -$2(a6) / beq
+    a.raw("d001")                              # large: one more facing
+    a.label("out")
+    return a.done() + b"\x4e\xf9" + struct.pack(">I", FACING_END)
+
+
 def death():
     """Erase a dead 48x48 creature and stop the board ever drawing it again.
 
@@ -287,7 +332,8 @@ def death():
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
     for at, name, stock in ((SLOTS, "slot count", SLOTS_STOCK),
-                            (DEATH, "death", DEATH_STOCK)):
+                            (DEATH, "death", DEATH_STOCK),
+                            (FACING, "facing", FACING_STOCK)):
         if bytes(rom[at:at + len(stock)]) != stock:
             raise SystemExit(f"0x{at:05X} is not the {name}: "
                              f"{bytes(rom[at:at + len(stock)]).hex()}")
@@ -297,7 +343,8 @@ def apply(rom: bytes) -> bytes:
                                    ("frame shape", shape, SHAPE, SHAPE_END),
                                    ("grid squares", squares, SQUARES, SQUARES_END),
                                    ("occupancy", occupy, OCCUPY, OCCUPY_END),
-                                   ("death", death, DEATH, DEATH_END)):
+                                   ("death", death, DEATH, DEATH_END),
+                                   ("facing", facing, FACING, FACING_END)):
         cursor += cursor & 1
         code = build()
         if cursor + len(code) > NEW_LIMIT:

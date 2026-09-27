@@ -340,13 +340,16 @@ def apply(rom: bytes, specs) -> bytes:
             raise SystemExit(f"no figure 0x{fid:02X}")
         fw, fh = SHAPE[klass]
         poses = [fit(quantise(cpic[b], pal), fw * 8, fh * 8) for b in blocks]
-        if klass == BIG:
-            # A 2x2 creature is drawn as two three-row halves and the engine
-            # puts the SECOND half on top: matching the halves against the
-            # screen finds top-half art at y+24 and bottom-half art at y,
-            # both pixel-exact, just swapped. Store them in the order it
-            # reads them.
-            poses = [p[fh * 4:] + p[:fh * 4] for p in poses]
+        # NO HALF-SWAP. A 48x48 creature used to be stored with its lower three
+        # tile rows first, because that is how it came out on screen: top-half
+        # art at y+24 and bottom-half art at y, pixel-exact and swapped. That
+        # was never the engine preferring the second half. It was the frame
+        # index landing HALF A FRAME short -- the facing added twice where a
+        # 48x48 needs it four times, see bigcreature.py's FACING -- so at
+        # facing 1 the draw read eighteen cells in, the back half of one frame
+        # followed by the front half of the next. Every frame holds the same
+        # pose, so that reads as a vertical rotation. With the index right the
+        # art goes in the right way up.
         frames = [poses[n % len(poses)] for n in range(FRAMES)]
         if klass == BIG:
             frames[DYING] = tile_skulls(skull, fw * 8, fh * 8)
