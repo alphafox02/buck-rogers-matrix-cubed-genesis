@@ -6325,3 +6325,38 @@ so a lost write to it reopens a good deal of the dock.
 It also means the fix is worth finding rather than working around: correcting
 the one mis-directed write repairs every scene on this byte at once, and
 patching the scenes individually would mean patching seven of them.
+
+## The dock's walls: wall CODES were never mapped, only wall SETS
+
+`tools/wallmap.py` maps Matrix Cubed's `LOAD_AREA_DECO` ids onto the Genesis
+wall sets. It does not map the per-square wall **code**, and that is a second
+id space.
+
+`0x0B4EC` takes the map byte, keeps a nibble as the wall code, and looks it up
+in a 16-byte table chosen by the set. Set 1 -- the dock -- is at `0x5186A`:
+
+    code:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+    piece: FF 01 02 02 01 01 03 04 05 06 02 07 07 01 03 00
+
+`FF` is "no wall". Countdown wrote that table for its own maps, where several
+codes meaning the same thing is fine. Matrix Cubed's do not mean the same
+thing: `WALLDEF1.DAX` holds **fifteen 156-byte records, one per wall code
+1-15**, every one a different wall.
+
+On the dock the collapse is severe. Codes 1, 4, 5 and 13 all resolve to piece
+1, and codes 1, 4 and 5 alone account for **246 of the 366 walls** -- which is
+why the dock reads as the same numbered door repeated down every corridor.
+
+Counting what the dock actually uses:
+
+    code   1    2    4    5    6    7    8    9   14
+    walls 159   10   26   61   73   14   11    6   12
+
+Nine distinct codes against eight pieces (0-7), so a near one-to-one remap is
+possible and would restore most of the variety. Piece 5 must stay on code 8 --
+that is the courtesy console, placed deliberately, see injectconsole.py.
+
+What is missing before the remap can be made honestly is the correspondence:
+which Countdown piece resembles which DOS wall record. `walldef.py` can decode
+the DOS records and the pieces can be rendered out of the ROM, so it is a
+comparison that can be done rather than guessed.
