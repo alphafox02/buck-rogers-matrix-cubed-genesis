@@ -6203,3 +6203,55 @@ result was a squat 40x32 panel where DOS has a tall narrow unit.
 
 `(3, 0, 3, 4)` is 24x32 -- the size this tool's header always claimed -- and
 ends exactly on cell 197.
+
+## De Sade greets you twice: the same OR writes to two different addresses
+
+Reported from play: the chancellor greets the party on arrival at the Salvation
+dock, and greets them again with the identical speech on returning to the start
+square. Reproduced headlessly in `tools/play.py`.
+
+The scene is block 17's square event. Square `(0, 2)` -- where the party is
+placed -- carries info byte 0x81, event **1**, and the 33-entry dispatch at
+DOS `0x00512` sends event 1 to `0x880A`:
+
+    0080C  AND  4, [0x4C2F], [0x7F79]    ; have I met him?
+    00815  IF_NOT_EQUALS
+    00816  GOTO [0x88B8]                 ; yes -- skip
+    0081A  PICTURE 86                    ; De Sade's portrait
+    0081D  OR   4, [0x4C2F], [0x4C2F]    ; remember that I have
+    00826  PRINT_CLEAR "'WELCOME TO CALORIS. ..."
+
+What is NOT wrong:
+
+* the gate itself. `AND` sets `0xB9F2` to 2 when the masked bits are non-zero
+  and 1 when zero; `IF_NOT_EQUALS` tests bit 1 of `0xB9F2`. Correct.
+* the store. `OR`'s tail at `0x042AA` does write the result back through the
+  third operand.
+* the memory. Planting a marker in the flag region and then fighting the
+  Romney encounter and changing area leaves every byte intact -- combat and
+  the `NEW_ECL` handoff clear nothing.
+* the flag's RAM. Once the square event fires, `0x9867` reads 0x04 and the
+  greeting is suppressed on every later visit.
+
+What IS wrong: **the same `OR` writes to a different address depending on
+which of the two firings runs it.**
+
+| firing | portrait drawn | byte written |
+|--------|----------------|--------------|
+| on arrival, after block 19's `NEW_ECL 17` | yes, PICTURE 86 | `0x9859` |
+| stepping onto (0,2) later | yes, PICTURE 86 | `0x9867` |
+
+`0x9867` is DOS `0x4C2F`, the flag the `AND` reads. `0x9859` is DOS `0x4C62`,
+a flag belonging to blocks 34 and 36. Both firings reach `PICTURE 86`, one
+instruction before the `OR`, so the arrival is executing this code and its
+operand is resolving somewhere else.
+
+So the greeting repeats exactly twice, not for ever: the arrival marks the
+wrong byte, the first return marks the right one, and it is quiet after that.
+
+Block 19 runs `NEW_ECL 17` at `0x007CB` and then keeps going -- `0x007CE` is
+more of block 19. Whether the interpreter switches buffers there, and what the
+operand fetch at `0x0404A` is reading from when it does, is the thread to pull.
+
+Play also reports the Sun King scene re-triggering on re-entry, which is the
+same shape of failure and probably the same cause.
