@@ -372,12 +372,10 @@ def main():
     # until combatgap.py gave it room to walk at all. Both are needed, and they
     # answer different questions about the same creature.
     step("bigfigures.py")
-    # NOT bigslide.py. It writes the extra display entries a sliding 48x48
-    # needs and positions them, and cannot give them their own quadrant of the
-    # art: 0x0C142 overwrites an entry's byte 0x0A with the flip bits alone
-    # and keeps the group in the FIGURE record at $8(a3), so two entries
-    # sharing a record draw the same quadrant. Read its header before touching
-    # it -- four measured attempts are in there.
+    # NOT bigslide.py. It gets a sliding 48x48 all four of its display
+    # entries, positioned and moving; what it cannot do is give each one a
+    # different quadrant of the art. Seven measured attempts are listed in its
+    # header -- read them before trying an eighth.
     step("bigcreature.py")
     # ...and keep a 48x48 creature from being placed on top of somebody. The
     # routine that CHOOSES a square handles the two oblong classes and not

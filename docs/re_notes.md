@@ -5951,3 +5951,36 @@ which is a change to how `0x09870` registers a figure rather than a patch at
 the placement. Until then a 48x48 slides as one clean quarter of itself --
 which is what `bigfigures.py` bought, the blit it reads from having previously
 had no case for size 4 at all.
+
+## Four sprites for a sliding 48x48: the count works, the art does not
+
+Following on from the section above. Raising `[0xB0B2]` to four DOES work,
+provided the entries are prepared first -- cleared, and entry two's `$c` and
+`$9` pattern extended to entries three and four -- at `0x0F9BE`, where the
+hide routine sets the count to two. All four then appear, hold their quadrant
+positions and move together every step. That was the unknown that made three
+earlier attempts end with the creature vanishing.
+
+What is still wrong is that all four draw the SAME quarter of the art.
+`0x0C1A4` is why:
+
+    0C188  movea.l a3, a2          ; the figure record
+    0C1A4  move.b  $1(a2), d1
+    0C1A8  mulu.w  #$9, d1
+    0C1AC  add.w   $b1c6.w, d1     ; -> the VRAM tile the blit starts from
+
+so the quadrant belongs to the RECORD at `0xB018`, not to the display entry,
+and four entries pointing at one record can only draw one quarter. Byte `$a`
+of an entry is not an index either -- setting it to 0, 1, 2, 3 makes
+everything vanish, and `0x0C16C` overwrites it with the flip bits alone on the
+last entry anyway.
+
+The obvious answer -- replicate the record into `0xB02A`, `0xB03C`, `0xB04E`,
+give each its own `$1`, and point each entry at its own copy through `$b` --
+also makes the creature vanish. So either `$b` is not a plain record index or
+those addresses are already in use. An eighth attempt should start by probing
+`0x0C1A4` and reading back what d1 actually becomes for each entry, rather
+than reasoning about the layout.
+
+Seven attempts are listed in `tools/bigslide.py`, which keeps the working half
+and stays out of the build.
