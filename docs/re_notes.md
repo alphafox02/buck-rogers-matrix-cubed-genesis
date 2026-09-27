@@ -6106,11 +6106,14 @@ console's LZW stream. A stream cut off part way decodes into fewer tiles than
 the piece has cells, and the cells past the end keep whatever VRAM already
 held, which on that screen is the font.
 
-The collision dates from the first build that had both tools in it. What made
-it visible was size. A stock 24x24 creature is about 600 bytes and left most of
-the console's 1868 intact, so the piece still decoded nearly right; once
-`bigfigures.py` gave figure 0x2E class 4, the same slot took 1705 bytes and
-buried it.
+The dates settle which tool trespassed. `inject_creature.py` kept its art at
+0x1BA000 until 18 Sep, when giving every creature a corpse frame needed more
+room and moved it down to 0x1B5000; its note records checking the figure
+directory at 0x1B4000 for clearance and nothing else. The console went in on
+21 Sep and picked the same address. So the console has been overwritten in
+every build with creatures since the day it was added -- it was never right,
+rather than having broken later. Figure 0x2E is the RAM ASSASSIN, the
+Amalthea security bot; it has nothing to do with the Venus dinosaur.
 
 Fixed by moving the console's tiles to **0x1B2800**, the gap between the
 monster stream (0x1B1000, about 4 KB) and the figure directory (0x1B4000).
