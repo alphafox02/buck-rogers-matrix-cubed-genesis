@@ -6018,3 +6018,31 @@ are at a screen edge.
 This is the better answer even if the four-sprite slide is ever finished. A
 48x48 sliding as four sprites has to keep four VRAM slots and four display
 entries in step for the whole glide; stepping needs none of it.
+
+## The bite out of a stepping 48x48: it was never on the squares it covers
+
+A creature that steps loses a 24-pixel chunk of itself for a few tenths of a
+second, healing again the next time anything repaints it. Measured over the
+demo's fight, 370 sampled frames with the creature on screen: 57 of them not
+whole, the worst missing 290 of 810 pixels.
+
+The cause is a mismatch this port created. `shape()` draws a 48x48 from one
+square HIGHER than its anchor -- the `addq.w #1, d5`, so its feet land on the
+square it occupies -- while `squares()` at `0x142C4` walks the anchor and the
+three below and right of it. So the top half of what is DRAWN sits on two
+squares the creature was never said to be on, the board repaints floor over
+squares it thinks are empty, and out comes a bite.
+
+`squares()` now walks six: the four it stands on and the two above, which are
+covered by the drawn box. After it, 1 of 370 frames is not whole instead of
+57, and the worst case is 667 pixels instead of 521.
+
+Six squares rather than four also means nothing can stand where the creature's
+head and shoulders are drawn, which is the right answer anyway -- a play
+session's original complaint about this creature was characters standing
+inside it.
+
+`0x0CC9A`, the animation extent, was tried again here as well, now that the
+frame index and the blit chain are both right, and the two builds differ by
+two pixels of scroll and nothing else: that path is not taken for this
+creature. Three separate attempts on it are now recorded; it is not the one.

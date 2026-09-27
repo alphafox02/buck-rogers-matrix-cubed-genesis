@@ -247,6 +247,15 @@ def squares():
     a.raw("5243").raw("4e93")               # addq.w #1,d3 / jsr (a3)   (x, y+1)
     a.raw("5304").br(0x66, "out")           # subq.b #1,d4 / bne out    -- size 2
     a.raw("5242").raw("4e93")               # addq.w #1,d2 / jsr (a3)   (x+1, y+1)
+    # ...and the row ABOVE, which only a 48x48 has. It is drawn from one
+    # square higher than its anchor -- the `addq.w #1, d5` in shape(), so its
+    # feet land on the square it occupies -- so two of the four squares it
+    # COVERS were not squares it was ever said to be on. The board repaints
+    # floor over squares it thinks are empty, and that is a 24-pixel bite out
+    # of the creature every time it steps, healing again when something else
+    # repaints it.
+    a.raw("5543").raw("4e93")               # subq.w #2,d3 / jsr (a3)   (x+1, y-1)
+    a.raw("5342").raw("4e93")               # subq.w #1,d2 / jsr (a3)   (x,   y-1)
     a.label("out")
     return a.done() + b"\x4e\xf9" + struct.pack(">I", SQUARES_END)
 
