@@ -82,6 +82,9 @@ import integrity
 # saw a solid wall; one square east at (1,7) it is 13 and they saw a door.
 DUNGEON_X, DUNGEON_Y, DUNGEON_DIR = 0x9AF7, 0x9AF6, 0x9AFA
 
+# What inject_area.py builds its flag map from. See the note in main().
+STOCK_ROM = Path(__file__).resolve().parent.parent / "roms/countdown.gen"
+
 # Areas the engine will boot into for a new game, from the dispatch above.
 ENTRIES = (0x00, 0x10)
 
@@ -157,7 +160,22 @@ ARRIVAL = ("YOU STEP OUT ONTO THE EXPANSIVE DOCK AND FIND IT THRONGED WITH "
 # OR rather than a plain write because the other bits of that byte are in
 # use elsewhere in the block.
 CHANCELLOR_PICTURE = 86
-CHANCELLOR_FLAG, CHANCELLOR_BIT = 0x9859, 4
+# The story flags the real opening sets, as DOS addresses. They are resolved
+# through flagmap at build time rather than written here as Genesis numbers:
+# this file used to carry CHANCELLOR_FLAG = 0x9859 as a literal, and 0x9859 is
+# DOS 0x4C62 -- a flag belonging to blocks 34 and 36. The chancellor's real
+# marker is DOS 0x4C2F bit 2, which is Genesis 0x9867. Marking the wrong byte
+# is why De Sade greeted the party on arrival and then greeted them again the
+# first time they stepped back onto the start square.
+CHANCELLOR_FLAG_DOS, CHANCELLOR_BIT = 0x4C2F, 4
+
+# Block 19's opening -- Buck's briefing, the kit, the walk out onto the dock --
+# is reproduced in this stub rather than jumped into, so none of the state that
+# opening sets gets set. DOS 0x4C30 is the one that matters: block 19 opens
+# with `COMPARE [0x4C30], 0 / IF_EQUALS / GOTO <the opening>`, so with it clear
+# every later `NEW_ECL 19` replays the whole briefing. That is what made LAUNCH
+# at the port loop back to Buck and the treasure instead of reaching the hub.
+OPENING_DONE_DOS = 0x4C30
 CHANCELLOR = ("'WELCOME TO CALORIS. I AM LORD BERKELEY'S CHANCELLOR, ALPHONSE "
               "DE SADE. LORD BERKELEY SENDS HIS GREETINGS. THE CORONATION "
               "WILL BEGIN SHORTLY.' HE TURNS HIS BACK AND QUICKLY MOVES AWAY.")
@@ -224,7 +242,7 @@ def _intro_pool():
 
 
 def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
-          intro=False):
+          intro=False, flags=None):
     table = G.load_opcodes()
     op = {n: o for o, (n, _) in table.items()}
 
@@ -300,8 +318,12 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         for pic, at in after:
             screen(pic, at)
         # Mark him as having spoken, so block 17 does not replay the scene.
+        chancellor = flags[CHANCELLOR_FLAG_DOS]
         out += bytes([op["OR"]]) + _imm(CHANCELLOR_BIT) \
-            + _mem(CHANCELLOR_FLAG) + _mem(CHANCELLOR_FLAG)
+            + _mem(chancellor) + _mem(chancellor)
+        # ...and mark the opening itself as done, so block 19 goes to the hub
+        # instead of replaying the briefing every time the ship launches.
+        out += bytes([op["SAVE"]]) + _imm(1) + _mem(flags[OPENING_DONE_DOS])
         # He turns his back and moves away, so take his face out of the
         # window. VIEW 0, 0xFF only restores the layout -- it was leaving him
         # sitting there until the player took a step. The clear is on the
@@ -337,7 +359,16 @@ def main():
 
     marker = "--marker" in sys.argv
     intro = "--intro" in sys.argv
-    code = build(area, wallset, x, y, map_area, facing, marker, intro)
+    # The flag map MUST be computed from the stock cartridge, not from the
+    # ROM being patched. flagmap.build scans the engine's own code for
+    # addresses it treats as spoken for, so it returns a different allocation
+    # for a half-built ROM than for the stock one -- and inject_area.py, which
+    # transpiled every script, built its map from the stock cartridge. Reading
+    # it off `rom` here put the chancellor's bit at 0x9731 instead of 0x9867:
+    # a stub that marks an address no script ever reads.
+    import flagmap
+    flags = flagmap.build(Path(STOCK_ROM).read_bytes())
+    code = build(area, wallset, x, y, map_area, facing, marker, intro, flags)
     print(f"boot stub: {len(code)} bytes, entering area 0x{area:02X} "
           f"at ({x},{y}) with wall set {wallset}, "
           f"map area 0x{(area if map_area is None else map_area):02X}, "

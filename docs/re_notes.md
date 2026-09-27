@@ -6397,3 +6397,48 @@ For reference, `--hero` sets level 12, HP 150/138/102/90/66/66, attributes 18
 and skills 16 -- not the port's ceiling, which is 255 for any of these since
 each is a single byte. DOS stored seven attributes as a current/max byte pair
 and the observed range across 24 character files was 9-19.
+
+## SOLVED: the boot stub reproduced the opening but set none of its flags
+
+The chancellor greeting twice and the Sun King scene re-triggering were one
+cause, and it was ours.
+
+`bootstub.py --intro` does not jump into block 19's opening -- it *reproduces*
+it, with its own copy of Buck's briefing, its own `TREASURE` and starting kit,
+its own arrival text and its own chancellor speech. The content matched. The
+state did not.
+
+**The chancellor.** The stub did emit an `OR` to mark him as having spoken,
+against a hardcoded `CHANCELLOR_FLAG = 0x9859`. That is DOS `0x4C62`, a flag
+belonging to blocks 34 and 36. His real marker is DOS `0x4C2F` bit 2, Genesis
+`0x9867`. So the stub set a byte no script on the dock reads, and block 17's
+square event at `(0, 2)` -- the square the party is placed on -- greeted him
+all over again.
+
+**The opening.** The stub set nothing at all for DOS `0x4C30`. Block 19 opens
+
+    00016  COMPARE [0x4C30], 0
+    0001C  IF_EQUALS
+    0001D  GOTO <the whole briefing>
+
+so with it clear, every later `NEW_ECL 19` replayed Buck, the treasure and the
+walk onto the dock. That is what made LAUNCH at the Salvation port loop back to
+the beginning instead of reaching the hub.
+
+Both are now resolved through flagmap instead of being written as literals.
+
+### The flag map is not stable across build steps
+
+Worth its own warning, because the first attempt at this fix walked straight
+into it. `flagmap.build(rom)` scans the engine's own code for addresses it
+must not allocate, so **it returns a different allocation for a half-built ROM
+than for the stock cartridge**. `inject_area.py` transpiles every script from
+the stock cartridge, so that is the map every script in the ROM was written
+against. Computing a map from the work ROM in a later step put the
+chancellor's bit at `0x9731` -- an address nothing reads.
+
+Any tool that needs a flag address must build its map from `roms/countdown.gen`,
+never from the ROM it is patching.
+
+Verified: after the opening, `0x9867` reads 0x04 and `0x976B` reads 0x01, and
+returning to the start square no longer replays the greeting.
