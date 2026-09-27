@@ -5845,3 +5845,36 @@ afterwards and still wins.
 
 With it the demo's fight opens with the dinosaur and the robot on one side and
 the party on the other, and the dinosaur walks across to reach them.
+
+## A 48x48 creature comes apart while it MOVES
+
+Only visible once `combatgap.py` gave the two sides room, because until then
+the dinosaur never left its square. Watched frame by frame: it is a whole,
+correct creature, and then for about half a second it is a **24x24 fragment**
+of itself -- its own tiles, the head top-left, bits of tail -- before snapping
+back. Zoomed, the fragment is unmistakably three tiles square.
+
+What it is NOT, each eliminated by measurement rather than argument:
+
+* **Not the fetch index.** A probe storing d0 at `0x0AE6A` reads 20 before,
+  during and after, with the facing d1 stuck at 1. The index never moves.
+* **Not the shape.** The same probe storing `-6(a6)`/`-8(a6)` reads rows-1 = 5
+  and cols-1 = 5 throughout. The figure draw really is asking for six by six.
+* **Not the third facing.** The creature owns four slots but the art loader
+  fills what a stock large creature needs, so it was worth checking whether
+  facing 2 lands in the unfilled half. Folding facing 2 onto facing 1 changed
+  nothing on screen.
+* **Not the animation rectangle at `0x0CC9A`.** Widened to six by six AND
+  lifted three tiles to match where `shape()` draws the creature -- the
+  combination that is geometrically right -- and the frames are pixel
+  identical to before.
+
+So a 24x24 of the creature's own art is being painted by a route that is not
+`0x0AD92`, not `0x0CC66`'s rectangle, and not reached through the size byte at
+`0x23`. `0x14552` and `0x15DD2` are the two readers of that byte still
+unchecked, and the sprite path at `0x0C2xx` -- which `bigfigures.py` maps out
+and the build does not use -- has never been ruled out as a second renderer
+running alongside the tile one.
+
+All four attempts are reverted. The shipped ROM animates the creature as a
+fragment while it walks and is correct the rest of the time.
