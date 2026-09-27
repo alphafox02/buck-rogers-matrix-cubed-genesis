@@ -6665,3 +6665,44 @@ story flag, so emitting a two-byte write would clobber whatever flag was
 allocated the next address along. Doing it properly means teaching flagmap
 which variables are wide and reserving room for them. The pool holds 3,587
 slots for 385 flags, so the space is there.
+
+## SOLVED: you could not reach a planet because the ship had no fuel
+
+The symptom reported from play was "I tried to click on Earth and it wouldn't
+let me -- it said I failed at jury rigging, then I was floating, then a NEO
+ship helped me". None of that is docking code. It is the flee path for a space
+interception, block 19:
+
+    014EB  COMPARE 0, [0x4D1E]          ; fuel
+    014F1  IF_EQUALS
+    014F2  PRINT_CLEAR "YOU HAVE NO FUEL TO RUN."
+    01508  GOTO -> "THEY WEREN'T IMPRESSED." -> SPACE_COMBAT
+    0150C  COMPARE [0x4C93], 1          ; a scout alone, you get away
+    01527  PARTY_SKILL_CHECK 51         ; otherwise, outrun them
+    01536  IF_LESS -> "THEY CATCH YOU!"
+
+Fuel read **0** from the first frame, so the party could never break off.
+Every attempt to cross to a planet turned into a fight it did not choose, and
+the NEO cruiser that kept appearing is the script's own safety net at
+`0x008C5`, which tops a stranded ship back up to 200.
+
+Nothing in Matrix Cubed's scripts fuels a fresh ship, because there is not
+supposed to be one: it is Volume II and it expects a party imported from
+Countdown to Doomsday, ship and all. The port starts fresh, so the ship has to
+be given its state the same way the party and the story flags are --
+`bootstub.SHIP_START`, using the numbers block 18's own REPAIR and FUEL write.
+
+Verified at free movement:
+
+    0x4D16  88   0x4D18 150   0x4D1A 150   0x4D1C  44
+    0x4D1E 194 (fuel)         0x4D20 194
+    0x4D3E   2   0x4D44   2   0x4D4A   5
+
+The values above 255 truncate, because the transpiler still emits every memory
+operand one byte wide -- see the outstanding note above. They are non-zero and
+in proportion, which is what the script's gates test, and a repair at the port
+produces exactly the same bytes.
+
+This also explains the docking gate never being the problem. `0x4C17 AND
+0x4C42` at `0x015AF` reads 0 AND 0 at the start, so clearance was always
+granted; the party simply never got there.

@@ -176,6 +176,34 @@ CHANCELLOR_FLAG_DOS, CHANCELLOR_BIT = 0x4C2F, 4
 # every later `NEW_ECL 19` replays the whole briefing. That is what made LAUNCH
 # at the port loop back to Buck and the treasure instead of reaching the hub.
 OPENING_DONE_DOS = 0x4C30
+
+# The ship starts with nothing in it, and that is not survivable.
+#
+# Matrix Cubed expects a party imported from Countdown to Doomsday, ship and
+# all, so nothing in its scripts fuels a fresh one -- and the port starts
+# fresh. Fuel read 0 from the first frame, which matters because escaping a
+# space interception begins
+#
+#     014EB  COMPARE 0, [0x4D1E]
+#     014F2  PRINT_CLEAR "YOU HAVE NO FUEL TO RUN."
+#     01508  GOTO -> "THEY WEREN'T IMPRESSED." -> SPACE_COMBAT
+#
+# With no fuel the party can never break off: every interception on the way to
+# a planet turns into a fight it did not choose. That is what "I tried to click
+# on earth and it wouldn't let me" was, and the NEO cruiser that kept turning
+# up is the script's own safety net at 0x008C5, which tops a stranded ship back
+# up to 200.
+#
+# These are the numbers block 18's own REPAIR and FUEL write, so a new ship
+# starts in the state the port would sell you. They are stored as story-flag
+# bytes, so the ones above 255 truncate exactly as they do after a repair --
+# see the note in docs/re_notes.md about operand widths.
+SHIP_START = {
+    0x4D16: 600, 0x4D18: 150, 0x4D1A: 150, 0x4D1C: 300,
+    0x4D1E: 450,            # fuel
+    0x4D20: 450,
+    0x4D3E: 2, 0x4D44: 2, 0x4D4A: 5,
+}
 CHANCELLOR = ("'WELCOME TO CALORIS. I AM LORD BERKELEY'S CHANCELLOR, ALPHONSE "
               "DE SADE. LORD BERKELEY SENDS HIS GREETINGS. THE CORONATION "
               "WILL BEGIN SHORTLY.' HE TURNS HIS BACK AND QUICKLY MOVES AWAY.")
@@ -324,6 +352,9 @@ def build(area, wallset, x, y, map_area=None, facing=0, marker=False,
         # ...and mark the opening itself as done, so block 19 goes to the hub
         # instead of replaying the briefing every time the ship launches.
         out += bytes([op["SAVE"]]) + _imm(1) + _mem(flags[OPENING_DONE_DOS])
+        # ...and give the ship its fuel and systems. See SHIP_START.
+        for dos, value in sorted(SHIP_START.items()):
+            out += bytes([op["SAVE"]]) + _imm(value & 0xFF) + _mem(flags[dos])
         # He turns his back and moves away, so take his face out of the
         # window. VIEW 0, 0xFF only restores the layout -- it was leaving him
         # sitting there until the player took a step. The clear is on the
