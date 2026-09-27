@@ -44,15 +44,35 @@ import expand
 import genesis_ecl
 import integrity
 
-# The stock ids, as the pairs appear in the script.
+# The stock kit, in the order the pairs appear in the script.
 STOCK = [0x16, 0x16, 0x16, 0x16, 0x17, 0x17, 0x21, 0x21, 0x21, 0x08, 0x08,
          0x0F, 0x06, 0x06, 0x06, 0x12, 0x0A, 0x0A, 0x23, 0x23]
 
-KIT = ([0x57] * 6) + ([0x48] * 6) + ([0x4A] * 2) + ([0x43] * 2) + ([0x21] * 4)
+# Each id replaced by the best of ITS OWN KIND, so the kit keeps every piece
+# of equipment it had. Nothing is dropped and nothing is doubled up: a laser
+# pistol becomes a better laser, the rocket rifle a better rocket, the armour
+# better armour. The one substitution that is not an upgrade is the grenade
+# launcher, and only because TREASURE throws 0x0F away -- it is in the
+# exclusion list at 0x03978, so the stock kit never delivered it either. A
+# rocket launcher stands in, which is the same shape of weapon and does arrive.
+UPGRADE = {
+    0x16: (0x57, "battle armor",     "mercurian battle armor"),
+    0x17: (0x17, "battle armor w/fields", "battle armor w/fields (no better exists)"),
+    0x21: (0x21, "grenade, treating wounds", "grenade, treating wounds (kept)"),
+    0x08: (0x48, "laser pistol",     "lunarian laser"),
+    0x0F: (0x11, "grenade launcher", "rocket launcher (0x0F is dropped by TREASURE)"),
+    0x06: (0x46, "bolt gun",         "lunarian bolt gun"),
+    0x12: (0x3E, "polearm",          "mercurian polearm"),
+    0x0A: (0x2D, "rocket rifle",     "martian rocket"),
+    0x23: (0x23, "grenade, dazzle",  "grenade, dazzle (kept)"),
+}
+KIT = [UPGRADE[i][0] for i in STOCK]
 
-NAMES = {0x57: "mercurian battle armor", 0x48: "lunarian laser rifle",
-         0x4A: "lunarian sonic stunner", 0x43: "mercurian heat gun",
-         0x21: "grenade, treating wounds"}
+# TREASURE drops an id above 0x5D or anywhere in this list, so every
+# replacement is checked against it before the build goes anywhere.
+EXCLUDED = bytes.fromhex(
+    "0102043107 0b0c0d0f13 1c1d1e2022 27292c2f30 3233343 83a"
+    "3d3f42404547494b35".replace(" ", ""))
 
 
 def find(code):
@@ -82,8 +102,11 @@ def apply(rom: bytes) -> bytes:
         print(f"  area 0x{bid:02X}: starting kit rewritten at 0x{at:04X}")
     if not touched:
         raise SystemExit("the starting kit is not where this expects it")
-    for item in sorted(set(KIT), key=KIT.index):
-        print(f"    {KIT.count(item)} x {NAMES[item]}  (0x{item:02X})")
+    from collections import Counter
+    for old_id in sorted(Counter(STOCK), key=STOCK.index):
+        new_id, was, now = UPGRADE[old_id]
+        print(f"    {STOCK.count(old_id)} x {was} (0x{old_id:02X}) -> {now} "
+              f"(0x{new_id:02X})")
 
     builder = expand.Builder(rom)
     builder.relocate_ecl(blocks)
