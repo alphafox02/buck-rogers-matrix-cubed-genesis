@@ -70,7 +70,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import integrity
 
-NEW_CODE = 0x0F1BD8          # 1024 zero bytes; music starts at 0x0F2000
+# The 1024 zero bytes at 0x0F1BD8 are shared now. bigcreature.py's blocks run
+# to 0x0F1D02 and bigplacement.py's to 0x0F1DDA, so this takes the stretch
+# above them and stops short of combatgap.py at 0x0F1F00. Every write is
+# checked against zero first, so the next tool to grow into somebody else's
+# region fails the build instead of booting to a frozen intro.
+NEW_CODE = 0x0F1DE0
 NEW_CODE_LIMIT = 0x0F1F00
 
 TABLE_A = 0xB742             # 3x6, top group then bottom
@@ -304,12 +309,17 @@ def apply(rom: bytes) -> bytes:
 
     cursor = NEW_CODE
     table, cursor = cursor, cursor + BIG_CELLS
+    if any(rom[table:cursor]):
+        raise SystemExit(f"0x{table:06X}+{BIG_CELLS} is not free")
     rom[table:cursor] = layout_48x48()
 
     blocks = []
     for name, build in (("allocator", allocator), ("lift", lift), ("tail", tail)):
         cursor += cursor & 1
         code = build(cursor)
+        if any(rom[cursor:cursor + len(code)]):
+            raise SystemExit(f"0x{cursor:06X}+{len(code)} is not free: "
+                             f"{bytes(rom[cursor:cursor + len(code)]).hex()[:32]}...")
         rom[cursor:cursor + len(code)] = code
         blocks.append((name, cursor, len(code)))
         cursor += len(code)

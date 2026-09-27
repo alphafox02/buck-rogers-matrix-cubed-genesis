@@ -357,13 +357,21 @@ def main():
     # Room for both rosters. Harmless on its own -- it widens a stack buffer
     # and nothing else -- and it is what any creature added later needs.
     step("monstercap.py")
-    # A 48x48 creature size. Stock Countdown draws 24x24, 24x48 and 48x24.
+    # A 48x48 creature size, in BOTH renderers.
     #
-    # NOT bigfigures.py: that patched the figure record's size class, which
-    # probing showed the combat board ignores -- figure class 0 with monster
-    # size 2 draws tall, figure class 2 with monster size 1 draws small. The
-    # board reads the MONSTER record's byte 0x23, and bigcreature.py extends
-    # the three routines that were measured taking that path in a live fight.
+    # The combat board draws a standing figure as plane A tiles and reads the
+    # MONSTER record's byte 0x23 for its size -- probing settled that: figure
+    # class 0 with monster size 2 draws tall, figure class 2 with monster size
+    # 1 draws small -- and bigcreature.py extends the routines measured taking
+    # that path in a live fight.
+    #
+    # A figure that is MOVING is a different renderer: hardware sprites, one
+    # three-tile-square entry per figure, sized off the FIGURE record's class
+    # nibble at 0x0C268. That is what bigfigures.py is for, and leaving it out
+    # is why a 48x48 creature walked as a 24x24 fragment of itself -- invisible
+    # until combatgap.py gave it room to walk at all. Both are needed, and they
+    # answer different questions about the same creature.
+    step("bigfigures.py")
     step("bigcreature.py")
     # ...and keep a 48x48 creature from being placed on top of somebody. The
     # routine that CHOOSES a square handles the two oblong classes and not
