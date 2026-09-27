@@ -5984,3 +5984,37 @@ than reasoning about the layout.
 
 Seven attempts are listed in `tools/bigslide.py`, which keeps the working half
 and stays out of the build.
+
+## A 48x48 creature STEPS instead of sliding
+
+The question that solved it, from a play session: "do we need to just move the
+t rex across the board as one unit, why can't we make him move, we make
+smaller characters move".
+
+Smaller characters move because a 24x24 figure is ONE hardware sprite and the
+slide at `0x0FA52` walks it 24 pixels at a time. A Genesis sprite stops at 4x4
+tiles, so a 48x48 cannot be one sprite at all -- it has to be four, each
+drawing a different quarter, and seven attempts at making four entries draw
+four quarters are recorded above and in `tools/bigslide.py`.
+
+But nothing requires the glide. `0x0FA52` is the whole of it, and returning
+from it immediately leaves `0x0F95C` to commit the new square and the board to
+redraw the creature there as PLANE A TILES -- which is the renderer that draws
+a 48x48 correctly, six rows by six, and has done since `bigcreature.py`. So a
+48x48 steps from square to square rather than gliding between them, and is a
+whole dinosaur every frame instead of a 24x24 corner of one.
+
+`tools/bigstep.py` is four instructions in front of the routine's prologue:
+`$23(a2)` is the size and a2 already holds the creature's record when the
+routine is entered, so the test costs one compare and the early exit is a
+plain `rts` with nothing of the routine's own on the stack yet. Every other
+size is untouched and still slides.
+
+Measured over the demo's fight, 870 sampled frames: the creature is whole in
+315 of the frames it is on screen for, against 290 before, and the 58 partial
+ones are the attack artefact documented above, not the movement -- only two
+are at a screen edge.
+
+This is the better answer even if the four-sprite slide is ever finished. A
+48x48 sliding as four sprites has to keep four VRAM slots and four display
+entries in step for the whole glide; stepping needs none of it.

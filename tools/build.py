@@ -376,6 +376,10 @@ def main():
     # entries, positioned and moving; what it cannot do is give each one a
     # different quadrant of the art. Seven measured attempts are listed in its
     # header -- read them before trying an eighth.
+    # A 48x48 cannot be ONE hardware sprite -- the Genesis stops at 4x4 tiles
+    # -- so it cannot glide between squares the way a 24x24 does. It steps
+    # instead, and stays a dinosaur the whole way. See tools/bigstep.py.
+    step("bigstep.py")
     step("bigcreature.py")
     # ...and keep a 48x48 creature from being placed on top of somebody. The
     # routine that CHOOSES a square handles the two oblong classes and not

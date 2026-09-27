@@ -43,9 +43,14 @@ answer and makes the creature disappear, so either `$b` is not a plain index
 or those addresses are already spoken for. That is where an eighth attempt
 should start, with a probe on `0x0C1A4` reading back what d1 actually becomes.
 
-What IS shipped is `bigfigures.py`, which fixes the blit those sprites read
-from -- it had no case for size 4 at all -- so a 48x48 slides as one clean
-quarter of itself instead of a scramble.
+What IS shipped instead is `tools/bigstep.py`, which skips the glide for a
+48x48 and lets the board redraw it at the new square as tiles -- a whole
+dinosaur every frame. That is the better answer even if this is ever finished,
+since sliding as four sprites means keeping four VRAM slots and four display
+entries in step for the whole glide and stepping needs none of it.
+
+`bigfigures.py` is shipped too, and would still be needed here: it fixes the
+blit these sprites read from, which had no case for size 4 at all.
 
 Usage:
     bigslide.py <in.gen> <out.gen>
