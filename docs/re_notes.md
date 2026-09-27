@@ -6301,3 +6301,27 @@ play as predicted. A result above 128 means the fight was not won outright,
 and DOS withholds the papers for the same reason. Fleeing the first encounter
 would skip them on either platform. The replay is the bug; the missing papers
 look like its consequence.
+
+### One byte carries the whole opening dock
+
+DOS `0x4C2F` -- Genesis `0x9867` -- is not De Sade's flag. It is the dock's
+progress byte, and block 17 uses it 22 times as seven independent markers:
+
+| bit | set at | read at | the scene |
+|-----|--------|---------|-----------|
+| 0 (1)   | `0x0124A` | `0x006E1`, `0x011D0` | |
+| 1 (2)   | `0x012F3` | `0x00AA1`, `0x00E21`, `0x00F26`, `0x011D0` | |
+| 2 (4)   | `0x0081D` | `0x0080C` | De Sade's greeting |
+| 3 (8)   | `0x01EFB` | `0x00E16`, `0x00FC5`, `0x0115E`, `0x011DE`, `0x012FD`, `0x01BC5` | the coronation hall, PICTURE2 1,114 -- the Sun King |
+| 4 (16)  | `0x00C1C` | `0x00A93` | |
+| 6 (64)  | `0x0079C` | `0x00752` | |
+| 7 (128) | `0x00682` | `0x005D5` | |
+
+This is why two separate reports from play -- the chancellor greeting twice
+and the Sun King scene re-triggering -- are one defect. Both bits live in the
+byte whose write goes astray on the arrival path. Bit 3 alone gates six reads,
+so a lost write to it reopens a good deal of the dock.
+
+It also means the fix is worth finding rather than working around: correcting
+the one mis-directed write repairs every scene on this byte at once, and
+patching the scenes individually would mean patching seven of them.
