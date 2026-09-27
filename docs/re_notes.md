@@ -6505,3 +6505,49 @@ routine at `0x04E52` distinguished by `d4`, the result comes back 0-3, and
 second operand is zero the routine resolves against the **selected** character
 (`0x9DA7`, via `0x04E80`) rather than the best of the party, and the script
 presets it to zero.
+
+## Space combat fought every enemy one slot too strong
+
+`SPACE_COMBAT`'s first argument picks the enemy ship, and the transpiler only
+renames the opcode, so the number passes straight through. **Matrix Cubed
+numbers its ships from one and the Genesis roster is zero based.**
+
+The rosters are identical, which is what makes this provable rather than
+guessed:
+
+    Countdown strings 100-104  RAM SCOUT / RAM MEDIUM / RAM HEAVY /
+                               PIRATE MEDIUM / MERCURIAN MEDIUM
+    Matrix Cubed block 19      1 RAM SCOUT  2 RAM MED.  3 RAM HVY.
+                               4 PIR. MED.  5 MER. MED.
+
+Same five ships, same order -- but block 19 compares its variable against 1
+to 5, while `0x19C60` indexes a table at `0x17722` as `id * 0x22`.
+
+The stats settle which reading is right. The first four fields of each 34-byte
+record are 16-bit:
+
+| index | fields | ship |
+|-------|--------|------|
+| 0 | 200, 65, 160, 150 | RAM SCOUT, the weakest |
+| 1 | 600, 150, 450, 450 | RAM MEDIUM |
+| 2 | 2000, 500, 1500, 1500 | RAM HEAVY, the strongest |
+| 3 | 400, 100, 300, 300 | PIRATE MEDIUM |
+| 4 | 800, 200, 600, 600 | MERCURIAN MEDIUM |
+| 5 | 600, 150, 450, 450 | the player's own ship |
+
+Zero based that reads correctly: scout weakest, heavy strongest. It also puts
+the player at index 5, which is what `0x17874` hardcodes, and index 5's 600 and
+450 are exactly the hull and fuel block 18's REPAIR and FUEL write. One based
+it would make the heavy cruiser weaker than the scout.
+
+So every encounter came out one slot too strong. A RAM MEDIUM fought as a RAM
+HEAVY -- 2000/500/1500/1500 against the player's 1650, better than three times
+the ship -- and a MERCURIAN MEDIUM fought as a copy of the player's own.
+Reported from play as "is this a thing where the enemy ships are way way more
+powerful than mine". They were.
+
+The fix cannot go in the transpiler: the argument is usually a variable, and
+block 19 fills `[0x4C93]` with `RANDOM 7` folded back into 1-5, so there is no
+constant to adjust. `tools/shipid.py` patches the handler instead, at the point
+it stores the argument, and leaves zero alone so a script that already counts
+from zero is not pushed below the table.

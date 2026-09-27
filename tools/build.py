@@ -424,6 +424,13 @@ def main():
     # zero the monsters are placed on the party's own squares. See
     # tools/combatgap.py.
     step("combatgap.py")
+    # Matrix Cubed counts its ships from one and the Genesis roster is zero
+    # based, so every space encounter came out one slot too strong -- a RAM
+    # MEDIUM fighting as a RAM HEAVY at three times the player's ship. The
+    # argument is usually a variable, so there is no constant for the
+    # transpiler to adjust and the correction is made in the handler. See
+    # tools/shipid.py.
+    step("shipid.py")
     # Matrix Cubed's own creatures, each with a slot, a name and a figure of
     # its own. The figure directory grows first: monster id and figure id are
     # the same number, and a monster with no figure takes the miss path.
