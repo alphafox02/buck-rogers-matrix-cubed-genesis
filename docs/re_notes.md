@@ -6360,3 +6360,40 @@ What is missing before the remap can be made honestly is the correspondence:
 which Countdown piece resembles which DOS wall record. `walldef.py` can decode
 the DOS records and the pieces can be rendered out of the ROM, so it is a
 comparison that can be done rather than guessed.
+
+## What a skill rank is actually worth (0x04FB0)
+
+An earlier note here said `0x04FCC` "limits a skill's contribution to twice
+the character's level". It does not cap it -- it is diminishing returns:
+
+    04FC6  move.b $31(a2,d1.w), d4   ; the skill's rank
+    04FCC  move.b $19(a2), d0        ; the character's level
+    04FD0  asl.b  #$1, d0            ; d0 = level * 2
+    04FD2  cmp.b  d0, d4
+    04FD4  bls.b  $4fe0              ; rank <= 2*level: worth 8 each
+    04FD6  sub.b  d0, d4             ; the excess
+    04FD8  asl.b  #$3, d0            ; 2*level * 8
+    04FDA  asl.b  #$1, d4            ; excess * 2
+    04FDC  add.b  d0, d4
+    ...
+    04FE0  asl.w  #$3, d4            ; rank * 8
+    04FEE  add.b  $10(a2,d0.w), d4   ; plus the governing attribute
+
+So ranks up to `2 * level` are worth **8** apiece and everything above is
+worth **2**. At level 12 the knee is rank 24.
+
+**There is an overflow above level 15.** `asl.b #$3, d0` is a BYTE shift on
+`2 * level`. At level 16 that is 32, and `32 << 3` is 256, which in a byte is
+**zero** -- so a character over level 15 whose rank exceeds `2 * level` loses
+the entire base term and keeps only `excess * 2`. Training a skill past the
+knee at level 16+ makes that skill dramatically *worse*.
+
+This is stock Countdown engine code, inherited rather than introduced. It
+matters for the boosted party: `boostparty.py --hero` sets level 12, where
+the knee is 24 and nothing overflows. Raising the level past 15 without also
+holding skills at or below `2 * level` would walk into it.
+
+For reference, `--hero` sets level 12, HP 150/138/102/90/66/66, attributes 18
+and skills 16 -- not the port's ceiling, which is 255 for any of these since
+each is a single byte. DOS stored seven attributes as a current/max byte pair
+and the observed range across 24 character files was 9-19.
