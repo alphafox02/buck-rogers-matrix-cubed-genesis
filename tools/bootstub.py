@@ -141,8 +141,6 @@ MARKER = b"*** MATRIX CUBED BOOT STUB ***"
 # the only table that matched outright.
 # And what block 19 prints after the kit, on the way into the coronation --
 # `PRINT_CLEAR` at 0x076A, immediately before its `NEW_ECL 17` at 0x07CB.
-ARRIVAL = ("YOU STEP OUT ONTO THE EXPANSIVE DOCK AND FIND IT THRONGED WITH "
-           "PEOPLE DRESSED FOR THE CORONATION. A MAN APPROACHES.")
 
 # And the man who approaches. In the DOS game he speaks the instant you
 # arrive; here the stub prints the arrival line and hands over, so block 17's
@@ -205,9 +203,6 @@ SHIP_START = {
     0x4D20: 450,
     0x4D3E: 2, 0x4D44: 2, 0x4D4A: 5,
 }
-CHANCELLOR = ("'WELCOME TO CALORIS. I AM LORD BERKELEY'S CHANCELLOR, ALPHONSE "
-              "DE SADE. LORD BERKELEY SENDS HIS GREETINGS. THE CORONATION "
-              "WILL BEGIN SHORTLY.' HE TURNS HIS BACK AND QUICKLY MOVES AWAY.")
 
 STARTING_CREDITS = 8000
 STARTING_KIT = [22, 22, 22, 22, 23, 23, 33, 33, 33, 8,
@@ -233,19 +228,71 @@ INTRO_MUSIC = 0x30
 # ordinary screen with him talking in the window.
 BRIEFING_VIEW_MODE, BRIEFING_BIGPIC = 0x01, 0x79
 
-INTRO = [
-    (101, "YOU EASE INTO ORBIT AROUND MERCURY AND FLIP THE COM SWITCH FOR A "
-          "FINAL BRIEFING. THE IMAGE OF BUCK ROGERS, NOW IN CHARGE OF SPECIAL "
-          "MISSIONS, APPEARS ONSCREEN."),
-    (57,  "'I KNOW YOU'RE ITCHING TO PULL MORE COMBAT DUTY INSTEAD OF "
-          "BABYSITTING THIS NEW SUN KING, LORD BERKELEY, BUT THIS MISSION IS "
-          "CRITICAL."),
-    (None, "'BERKELEY IS CALLING FOR A BROTHERHOOD BETWEEN ALL RACES. NOT "
-           "EVERYONE LIKES THE IDEA. PROTECT HIM FROM ANY ASSASSINATION "
-           "ATTEMPTS."),
-    (None, "'IF BERKELEY SUCCEEDS, WE WILL HAVE A UNITED FRONT AGAINST RAM. "
-           "TRY TO FORGE THIS NEW ALLIANCE. GOOD LUCK TEAM!'"),
+
+
+# The opening's words belong to Matrix Cubed, so they are read out of the DOS
+# game at build time rather than kept here. Each screen is named by the first
+# few words of its line -- enough to find it in the script, not enough to be
+# the line itself -- and looked up in ECL1.DAX.
+#
+#   (picture id or None, the opening words of the screen's text)
+# (picture id or None, opening words, where to stop)
+#
+# The last screen stops at Buck signing off. DOS carries on "YOU GO TO YOUR
+# EQUIPMENT LOCKER AS BUCK SIGNS OFF", which is true there and not here: the
+# stub hands the kit over itself, a few instructions later.
+INTRO_KEYS = [
+    (101, "YOU EASE INTO ORBIT AROUND MERCURY", None),
+    (57,  "'I KNOW YOU'RE ITCHING TO PULL MORE COMBAT DUTY", None),
+    (None, "'BERKELEY IS CALLING FOR A BROTHERHOOD", None),
+    (None, "'IF BERKELEY SUCCEEDS, WE WILL HAVE A UNITED FRONT",
+     "GOOD LUCK TEAM!'"),
 ]
+ARRIVAL_KEY = "YOU STEP OUT ONTO THE EXPANSIVE DOCK"
+CHANCELLOR_KEY = "'WELCOME TO CALORIS. I AM LORD BERKELEY'S CHANCELLOR"
+
+
+def _script_text():
+    """Every string the DOS scripts hold, for looking the opening up."""
+    import dax
+    import ecl
+    out = []
+    for _bid, blk in sorted(dax.load(REPO / "dos_game/matrix/ECL1.DAX").items()):
+        found, _e, _err = ecl.disassemble_block(blk)
+        for ins in found.values():
+            for a in ins.args:
+                v = getattr(a, "text", None)
+                if not isinstance(v, str):
+                    v = getattr(a, "value", None)
+                if isinstance(v, str) and len(v) > 20:
+                    out.append(v)
+    return out
+
+
+def _find(pool, key):
+    for s in pool:
+        if s.startswith(key):
+            return s
+    raise SystemExit(
+        f"bootstub: no line in ECL1.DAX begins {key!r}.\n"
+        f"The opening is read from the DOS game rather than stored here; a\n"
+        f"different release may word it differently.")
+
+
+def _opening():
+    """(INTRO, ARRIVAL, CHANCELLOR), read from the DOS scripts."""
+    pool = _script_text()
+    intro = []
+    for pic, key, stop in INTRO_KEYS:
+        text = _find(pool, key)
+        if stop:
+            cut = text.find(stop)
+            if cut < 0:
+                raise SystemExit(f"bootstub: {stop!r} is not in the line "
+                                 f"beginning {key!r}")
+            text = text[:cut + len(stop)]
+        intro.append((pic, text))
+    return intro, _find(pool, ARRIVAL_KEY), _find(pool, CHANCELLOR_KEY)
 
 
 def _intro_pool():
@@ -257,6 +304,7 @@ def _intro_pool():
     import transpile
     pool = bytearray(b"\0")
     before, after = [], []
+    INTRO, ARRIVAL, CHANCELLOR = _opening()
     for pic, text in INTRO:
         for k, chunk in enumerate(transpile._split(text)):
             before.append((pic if k == 0 else None, len(pool)))
