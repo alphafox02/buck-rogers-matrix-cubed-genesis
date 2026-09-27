@@ -60,7 +60,12 @@ PIECE = 5                   # wall code 8 in set 1: the courtesy console
 # full rows of nine and six spare -- so a 5-wide region's bottom-right corner
 # is cell 198, which belongs to piece 6. The console was stamping a tile onto
 # the next fitting along. 3x4 ends exactly on cell 197.
-REGION = (3, 0, 3, 4)
+# Three rows, not four. Piece 5 is 33 cells: rows 0-2 are full rows of nine
+# and the remaining six are a partial last row the renderer does not place on
+# the same grid, so a region reaching into it comes out with its bottom strip
+# shifted sideways -- which is exactly how it looked on screen. Rows 0-2 are
+# whole, so the console sits square.
+REGION = (3, 0, 3, 3)
 # Where the appended tiles go.
 #
 # This was 0x1B5000, which inject_creature.py also calls free -- and it runs
