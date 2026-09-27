@@ -101,6 +101,8 @@ PORTRAITS = {
     # three of the ten still drawing Countdown's pictures. The other seven
     # (0x79, 0x3E, 0x46-0x49) have no DOS source at all, so they stay.
     0x2A: "PIC1/042",   0x59: "PIC1/089",   0x6F: "PIC1/111",
+    # Shown by SETUPMONSTERS, not PICTURE -- see the note below.
+    0x53: "PIC1/083",
 }
 
 # Ids the stock directory does NOT hold, added by tools/expand_pictures.py.
@@ -128,6 +130,22 @@ ADDED_PORTRAITS = {
     # The last three the scripts name that the archives hold. With these the
     # only PICTURE ids left substituted are 0xFF, which means "no picture".
     0x17: "PIC1/023",   0x38: "PIC1/056",   0x6A: "PIC1/106",
+    # A second way a script puts a face in the window, missed by the survey
+    # that built this list. SETUPMONSTERS' THIRD argument is a picture id --
+    # 0x003DE2 fetches it, skips on the high bit, and stores it to 0xB525 --
+    # so `SPRITE_START 255, 0, 1, 0` means "no sprite, show picture 1". The
+    # survey only walked the PICTURE opcode, so these ids were never mapped
+    # and the loader substituted something else for them.
+    #
+    # Eight ids are shown this way across all the scripts. 0x1F, 0x20, 0x55
+    # and 0x56 were already covered; 0x53 is in the stock directory and is
+    # listed with the replacements above. These three are the rest:
+    #
+    #   0x01  the Terran leader with the rifle -- block 17, the perception
+    #         check right after Romney hands over the Sun King papers
+    #   0x0B  a rat creature          -- blocks 34 and 38
+    #   0x18  an armoured warrior     -- block 80, three uses
+    0x01: "PIC1/001",   0x0B: "PIC1/011",   0x18: "PIC1/024",
     # NOT 0x6F. It is the one opening-area picture already in the directory,
     # so it looked like a free win, but no Countdown script references it --
     # meaning whatever loads it is engine UI, and the team-selection screen

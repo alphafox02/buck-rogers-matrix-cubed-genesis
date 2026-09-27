@@ -6142,3 +6142,49 @@ track is made to end: leaving slot 10 looping hands the endless loop straight
 down the chain. An earlier note in build.py called slot 10 the menu's theme.
 It is not -- the title theme carries the intro, the MATRIX CUBED card and the
 main menu, and stops on its own shortly after the card.
+
+## A second way a script puts a face in the window
+
+The list of picture ids the scripts name was built by walking the `PICTURE`
+opcode, and its note in build.py claimed the only ids left substituted were
+`0xFF`. That was wrong, because `PICTURE` is not the only opcode that sets the
+window. `SETUPMONSTERS` -- DOS `SPRITE_START` -- takes a picture id as its
+**third** argument:
+
+    003DE2  bsr.w  $404a        ; the picture argument
+    003DE6  tst.b  d0
+    003DE8  bmi.b  $3e10        ; high bit set -> leave the picture alone
+    003E0C  move.b d0, $b525.w  ; 0x00-0x7F: this is the picture now
+
+So `SPRITE_START 255, 0, 1, 0` reads "no sprite, show picture 1", and block 17
+uses it for the perception check right after Romney hands over the Sun King
+papers: succeed, and DOS shows the Terran leader holding a rifle while the
+text describes the PURGE ring on his finger. The port showed the dock scene,
+because id 0x01 was never mapped and the loader substituted.
+
+Eight distinct ids are shown this way across every script:
+
+| id | art | where |
+|----|-----|-------|
+| 0x01 | Terran leader with a rifle | block 17, the PURGE ring |
+| 0x0B | a rat creature | blocks 34, 38 |
+| 0x18 | an armoured warrior | block 80, 3 uses |
+| 0x1F | already mapped | block 84 |
+| 0x20 | already mapped | blocks 33, 34, 37, 114 |
+| 0x53 | a scorpion, 6 frames | block 97 |
+| 0x55 | already mapped | block 33 |
+| 0x56 | already mapped | block 17 |
+
+0x53 is in the stock directory, so it is a replacement; 0x01, 0x0B and 0x18
+are added. All four are in build.py now.
+
+The lesson generalises: surveying one opcode for ids is not surveying the
+resource. Any opcode that takes an id needs its own sweep.
+
+### Still wrong here
+
+The port splits the message DOS shows as one. DOS prints
+`TANKC NOTICES THAT THE LEADER IS WEARING...` in a single box; the port shows
+`ROARKE`, waits for a button, then ` NOTICES THAT THE LEADER IS WEARING...`
+with the name gone and a leading space. The `PRINT` at 0x01846 is meant to
+append to what the name left in the box and is clearing it instead.
