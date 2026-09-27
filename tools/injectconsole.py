@@ -50,7 +50,17 @@ TABLE_A = 0x0F170E          # ten entries, one per wall set
 WALL_SET = 1                # what the Salvation dock uses
 PIECE_W, PIECE_CELLS = 9, 33
 PIECE = 5                   # wall code 8 in set 1: the courtesy console
-REGION = (2, 0, 5, 4)       # where in the piece the console hangs
+# Where in the piece the console hangs: 3 cells across, 4 down -- 24x32, the
+# size this file's header has always described.
+#
+# It was widened to (2, 0, 5, 4) when the downscaled DOS photograph was the
+# art, because that needed the room. The build draws the console instead now
+# and the wide region outlived its reason: it made a squat 40x32 panel where
+# DOS has a tall narrow unit, and it did not fit. Piece 5 is 33 cells -- three
+# full rows of nine and six spare -- so a 5-wide region's bottom-right corner
+# is cell 198, which belongs to piece 6. The console was stamping a tile onto
+# the next fitting along. 3x4 ends exactly on cell 197.
+REGION = (3, 0, 3, 4)
 # Where the appended tiles go.
 #
 # This was 0x1B5000, which inject_creature.py also calls free -- and it runs

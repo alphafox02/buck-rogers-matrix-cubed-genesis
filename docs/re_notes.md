@@ -6188,3 +6188,18 @@ The port splits the message DOS shows as one. DOS prints
 `ROARKE`, waits for a button, then ` NOTICES THAT THE LEADER IS WEARING...`
 with the name gone and a leading space. The `PRINT` at 0x01846 is meant to
 append to what the name left in the box and is clearing it instead.
+
+## The console was a cell wider than its own piece
+
+Piece 5 of wall set 1 is 33 cells: three full rows of nine and six spare. A
+region 5 cells across and 4 down, anchored at column 2, runs from cell 167 to
+cell **198** -- and the piece ends at 197. The bottom-right corner belonged to
+piece 6, so the console was stamping a tile onto the next fitting along.
+
+The width was not deliberate. It was 3x3 while the art was drawn, widened to
+5x4 in `1d30a2e` when the downscaled DOS photograph became the art and needed
+the room, and left there when the build went back to the drawn console. The
+result was a squat 40x32 panel where DOS has a tall narrow unit.
+
+`(3, 0, 3, 4)` is 24x32 -- the size this tool's header always claimed -- and
+ends exactly on cell 197.
