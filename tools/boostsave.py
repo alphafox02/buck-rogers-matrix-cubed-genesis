@@ -13,6 +13,24 @@ header, and the party is the first thing in it: six 214-byte records at 0, 214,
 stream reproduces the original file byte for byte, so there is no checksum to
 satisfy -- the round trip is checked here before anything is written.
 
+**This does not work yet, and it refuses to write.** The edited save decodes
+perfectly and re-packs to the right length, and the game then does not list it
+at all -- a play session restored and found the slot simply gone. The last
+seventeen bytes of the payload are high entropy where everything around them
+is zero:
+
+    ...00 00 00 00  ef 3e d6 69 35 05 cf ac a9 83 0a a5 85 0d 76 0f 10
+
+which is a signature over the save, and nothing here recomputes it. No simple
+sum matches: byte sum 0x5ABE and word sum 0x7872 against header words 0x0000,
+0x1234, 0x0203, 0x0300, and no 16-bit field in the payload equals the sum of
+everything but itself.
+
+Until that is worked out, the way to get a boosted party into a save is to let
+the ENGINE write it: restore the built-in PREGENERATED TEAM, which
+`boostparty.py` has already edited in the ROM, play, and save to a slot. The
+game checksums its own file correctly.
+
 The original file is copied to `<name>.before-boost` first.
 
 Usage:
@@ -67,5 +85,10 @@ if __name__ == "__main__":
     if not backup.exists():
         shutil.copy2(path, backup)
         print(f"  original copied to {backup}")
-    path.write_bytes(apply(path.read_bytes(), hero))
+    out = apply(path.read_bytes(), hero)
+    if "--i-know-it-will-be-rejected" not in sys.argv[2:]:
+        sys.exit("  NOT WRITING: the game rejects an edited save -- see the "
+                 "header of this file. Restore the PREGENERATED TEAM instead, "
+                 "which boostparty.py has already edited in the ROM.")
+    path.write_bytes(out)
     print(f"  wrote {path}")

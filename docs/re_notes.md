@@ -6046,3 +6046,39 @@ inside it.
 frame index and the blit chain are both right, and the two builds differ by
 two pixels of scroll and nothing else: that path is not taken for this
 creature. Three separate attempts on it are now recorded; it is not the one.
+
+## A saved game carries a signature, and editing one is refused
+
+`boostparty.py` edits the team in the ROM, so restoring the built-in
+PREGENERATED TEAM gives a boosted party. A game already saved to a slot keeps
+its own copy of the characters and never sees that edit -- a play session
+restored a save made before any boost existed and found level 2 and 25 hit
+points against the 150 a fresh start gets.
+
+The save itself opens cleanly. Eight-byte header, then the same LZW the engine
+uses everywhere, and the party is the first thing in the payload: six 214-byte
+records at the ROM blob's own layout, then the 26-byte summary array the
+loader also reads. Re-packing the untouched payload reproduces the file byte
+for byte, so there is no checksum over the compressed stream.
+
+There IS one over the payload. Its last seventeen bytes are high entropy where
+everything around them is zero:
+
+    ...00 00 00 00  ef 3e d6 69 35 05 cf ac a9 83 0a a5 85 0d 76 0f 10
+
+Edit the party, re-pack, and the game does not list the slot at all -- not a
+corrupt save, a missing one. No simple sum reproduces those bytes: the payload
+sums to 0x5ABE by byte and 0x7872 by word, the header words are 0x0000,
+0x1234, 0x0203 and 0x0300, and no 16-bit field inside the payload equals the
+sum of everything but itself.
+
+`tools/boostsave.py` does the edit correctly and then refuses to write, with
+the finding in its header. The way to get a boosted party into a save is to
+let the engine write it: restore PREGENERATED TEAM, play, save to a slot.
+
+**Also worth recording:** the first run of that tool walked past the party into
+game state. `boostparty.records()` yields any 214-byte slot whose first bytes
+look like a name, and in a save the data after the party is not another
+character -- it found a seventh, nameless, level 1 with no hit points, and
+wrote a level into it. The tool now stops at six. Back up before editing a
+save, always.
