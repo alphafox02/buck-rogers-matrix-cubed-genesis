@@ -49,7 +49,7 @@ back correctly on the shipped team):
     +0x31         skills, one byte each
 
 Usage:
-    boostparty.py <in.gen> <out.gen> [--veteran|--strong] [skill=value ...]
+    boostparty.py <in.gen> <out.gen> [--veteran|--hero|--strong] [skill=value ...]
 """
 
 import struct
@@ -139,6 +139,19 @@ SKILL_COUNT = 14
 # 408, which is a hard fight rather than an arithmetic impossibility.
 VETERAN_LEVEL = 8
 
+# --hero: for testing a run end to end, not for judging the balance.
+#
+# --veteran keeps the team's shape and lands it where the first area fights;
+# --strong flattens everyone to one number and loses that shape. --hero does
+# the levelling FIRST, so the warriors stay the tough ones, and then lifts
+# attributes and skills to what a character of that level can hold. The skill
+# ceiling is the engine's own: 0x04FCC caps a skill's contribution at twice
+# the character's level, so at level 12 anything above 24 is wasted and 16 is
+# a high score that still counts.
+HERO_LEVEL = 12
+HERO_ATTR = 18
+HERO_SKILL = 16
+
 
 def records(raw):
     for k in range(len(raw) // RECORD):
@@ -177,10 +190,23 @@ def veteran(raw, off, name, level):
     return raw[off + HP]
 
 
-def boost(rom: bytes, want, strong=False, vet=False):
+def hero(raw, off, name):
+    """Level up first, keeping the character's shape, then raise the rest."""
+    hp = veteran(raw, off, name, HERO_LEVEL)
+    for i in range(ATTR_COUNT):
+        raw[off + ATTRS + i] = max(raw[off + ATTRS + i], HERO_ATTR)
+    for i in range(SKILL_COUNT):
+        raw[off + SKILLS + i] = max(raw[off + SKILLS + i], HERO_SKILL)
+    return hp
+
+
+def boost(rom: bytes, want, strong=False, vet=False, hro=False):
     raw = bytearray(genesis_ecl.decompress(rom[TEAM:], limit=0x8000))
     for _k, off, name in records(raw):
         cap = raw[off + LEVEL] * 2
+        if hro:
+            summary(raw, _k, hero(raw, off, name))
+            continue
         if vet:
             hp = veteran(raw, off, name, VETERAN_LEVEL)
             summary(raw, _k, hp)
@@ -220,11 +246,12 @@ if __name__ == "__main__":
     src, dst = Path(sys.argv[1]), Path(sys.argv[2])
     strong = "--strong" in sys.argv[3:]
     vet = "--veteran" in sys.argv[3:]
+    hro = "--hero" in sys.argv[3:]
     want = dict(DEFAULT)
     for arg in sys.argv[3:]:
         if "=" in arg:
             k, v = arg.split("=")
             want[int(k)] = int(v)
-    out = integrity.repair(boost(src.read_bytes(), want, strong, vet))
+    out = integrity.repair(boost(src.read_bytes(), want, strong, vet, hro))
     dst.write_bytes(out)
     print(f"checksum {'verifies' if integrity.verify(out) else 'BAD'}; wrote {dst}")

@@ -443,7 +443,14 @@ def main():
     # is a level 1 party built for Countdown's first encounter; Matrix Cubed
     # opens on robots that expect a party carried over from it.
     if party:
-        step("boostparty.py", "--veteran")
+        # Gear to match the levels. The stock kit hands the party armour and
+        # healing grenades and NO WEAPON -- read straight out of the item pool
+        # at 0xB9F4 after the opening. See tools/startkit.py.
+        step("startkit.py")
+        # --hero, not --veteran: a party for testing a run end to end. Level 12
+        # keeping each character's own shape, then attributes and skills up to
+        # what that level can hold. Put --veteran back for balance work.
+        step("boostparty.py", "--hero")
     # DOS block 24, the attract-mode demo, is already transplanted as area
     # 0x18 and nothing has ever called it. This points the idle timeout at it.
     if demo:
