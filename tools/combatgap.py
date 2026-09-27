@@ -22,9 +22,20 @@ towards one another -- i only ever see the t rex in one spot".
 
 Forcing the gap and looking at the board gives 1 = still crowded, 2 = the DOS
 picture, two sides with room between them, 3 = the monsters placed off the
-visible board. So this raises a gap of ZERO to two and leaves every other
-value alone: where the engine found room it already knows better than a
-constant would, and where it found none the alternative is an overlap.
+visible board.
+
+The first version of this raised a gap of zero to two unconditionally, and
+that was wrong for the reason the paragraph above should have made obvious:
+`[0x9DB6]` is already the measured open space, so a gap of zero can mean "the
+engine found ONE open square" -- and two squares of separation then puts the
+monsters a square past the open ground, through whatever wall stopped the
+count. Reported from play as "the enemies are too far outside the map, they
+are on the other side of a wall".
+
+So the gap is raised to `min([0x9DB6], FLOOR)` instead. Where the map has room
+for two that is still two, the DOS picture; where it has room for one it is
+one, crowded but on the board; where it has room for none it stays zero,
+because an overlap is at least inside the map.
 
 The ambush case at `0x1505C`, which forces the gap to 1 when `[0xD8CC]` is
 set, still runs after this and still wins.
@@ -45,22 +56,36 @@ SITE = 0x15056
 SITE_END = 0x1505C
 STOCK = bytes.fromhex("11f89db6d4fe")
 
-NEW = 0x0F1F00              # free: bigplacement.py's block ends by 0x0F1E9A
-NEW_LIMIT = 0x0F1FD0        # music starts at 0x0F2004
+# 0x0F1F00 held the first, shorter version of this block. bigstep.py's block
+# sits at 0x0F1F20, immediately after it, so the longer one written here does
+# not fit there -- the free-space guard caught that rather than letting it
+# overwrite a shipped patch. 0x0F1F38 is clear from the end of bigstep's block
+# to the music at 0x0F2004.
+NEW = 0x0F1F38
+NEW_LIMIT = 0x0F2000
 
 GAP = 0xFFD4FE              # the placement multiplier
 DISTANCE = 0xFF9DB6         # min(open squares ahead, what the script asked for)
-FLOOR = 2                   # squares, when the engine found none at all
+FLOOR = 2                   # the most separation to ask for, never more
+                            # than the map actually has room for
 
 
 def block() -> bytes:
-    code = bytes.fromhex("11f8") + struct.pack(">H", DISTANCE & 0xFFFF) \
-         + struct.pack(">H", GAP & 0xFFFF)                    # the stock copy
-    code += bytes.fromhex("4a38") + struct.pack(">H", GAP & 0xFFFF)   # tst.b
-    code += bytes((0x66, 0x06))                                       # bne out
-    code += bytes.fromhex("11fc00") + bytes((FLOOR,)) \
-          + struct.pack(">H", GAP & 0xFFFF)                    # move.b #2, gap
-    return code + b"\x4e\xf9" + struct.pack(">I", SITE_END)
+    """gap = stock; if it came out zero, gap = min(open squares ahead, FLOOR).
+
+    No register is touched -- every step is memory to memory or an immediate
+    compare -- because what sits in d0 at 0x15056 belongs to the caller.
+    """
+    d = struct.pack(">H", DISTANCE & 0xFFFF)
+    g = struct.pack(">H", GAP & 0xFFFF)
+    code = bytes.fromhex("11f8") + d + g            #  0 the stock copy
+    code += bytes.fromhex("4a38") + g               #  6 tst.b  gap
+    code += bytes((0x66, 0x14))                     # 10 bne    out
+    code += bytes.fromhex("11f8") + d + g           # 12 gap = open squares
+    code += bytes.fromhex("0c38") + bytes((0, FLOOR)) + g   # 18 cmpi.b #F, gap
+    code += bytes((0x63, 0x06))                     # 24 bls    out
+    code += bytes.fromhex("11fc") + bytes((0, FLOOR)) + g   # 26 gap = FLOOR
+    return code + b"\x4e\xf9" + struct.pack(">I", SITE_END)   # 32 out
 
 
 def apply(rom: bytes) -> bytes:
@@ -78,7 +103,8 @@ def apply(rom: bytes) -> bytes:
     rom[SITE:SITE_END] = b"\x4e\xf9" + struct.pack(">I", NEW)
     print(f"  0x{SITE:05X} combat gap: jmp 0x{NEW:06X} ({len(code)} bytes), "
           f"rejoins 0x{SITE_END:05X}")
-    print(f"  a gap of none becomes {FLOOR} squares, so the two sides start apart")
+    print(f"  a gap of none becomes min(open squares ahead, {FLOOR}), "
+          f"so the sides start apart without leaving the map")
     return integrity.repair(bytes(rom))
 
 
