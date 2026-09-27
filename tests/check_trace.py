@@ -21,7 +21,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import genesis_disasm as G
 
 BASE = 0x6AF6
-BLOCK = "extracted/genesis_ecl/10.ecl.bin"
+
+# The trace was captured from Countdown's own block 0x10, as its header says,
+# so the block is read out of the cartridge rather than kept as a fixture --
+# it is SSI's bytecode and does not belong in this repository.
+#
+# It used to be read from extracted/genesis_ecl/10.ecl.bin, which is generated
+# and not committed. That file had since been overwritten by a Matrix Cubed
+# build, leaving a 195-byte boot block where a 2087-byte one was wanted, and
+# the test had been failing against it unnoticed.
+REPO = Path(__file__).resolve().parent.parent
+ROM = REPO / "roms/countdown.gen"
+TRACE_BLOCK = 0x10
 
 
 def samples(path):
@@ -33,9 +44,23 @@ def samples(path):
     return out
 
 
+def block():
+    """Countdown's block 0x10, decompressed out of the cartridge."""
+    import genesis_ecl
+    rom = ROM.read_bytes()
+    for bid, code, _text in genesis_ecl.directory(rom):
+        if bid == TRACE_BLOCK:
+            return bytes(genesis_ecl.decompress(code))
+    raise SystemExit(f"block 0x{TRACE_BLOCK:02X} is not in {ROM}")
+
+
 def main():
+    if not ROM.exists():
+        print(f"skipped: {ROM.relative_to(REPO)} is not present. This test reads\n"
+              f"the traced block out of the cartridge; supply one and run again.")
+        return 0
     table = G.load_opcodes()
-    code = Path(BLOCK).read_bytes()
+    code = block()
     ok = flow = bad = 0
 
     for run in samples(Path(__file__).with_name("trace_block10.txt")):

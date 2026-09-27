@@ -1,7 +1,8 @@
 # Development Log
 
-Newest entries at the top. This is the narrative record -- what we tried,
-what failed, and why we changed direction. Structured findings live in
+The narrative record -- what was tried, what failed, and why the direction
+changed. The first few entries are newest-first; everything after them runs
+in order. Structured findings live in
 `re_notes.md` and `formats.md`; this file is for the story.
 
 ---
@@ -150,26 +151,6 @@ The scenario translation problem is now fully characterised:
 3. **Strings** -- extract inline text into a pool, rewrite args as offsets
 
 That is a compiler back-end, not a research project.
-
-### Resume here
-
-Highest value next, in order:
-
-1. **Confirm `0x11DC4` is the Genesis text pointer table.** It is a large
-   monotonic 16-bit self-relative table pointing into `0x120D6`+. If it is
-   the main string pool, that plus the out-of-line string finding gives us
-   the whole text pipeline.
-2. **Find how ECL blocks are stored in ROM.** We know `$FFB9A4` is the ECL
-   base pointer -- find what writes it, and the resource table it indexes.
-3. **Make the tracer usable**: patch out the button-wait at the end of
-   `0x0438C` as well, or find the `"debug ecl"` menu entry (ROM `0x12651`).
-4. **Entry-point headers** for the six Matrix Cubed ECL blocks that only
-   decoded partially (36, 48, 49, 64, 65, 81).
-
-Known unknowns unchanged: map/GEO format on Genesis, whether the resource
-loader uses 32-bit ROM pointers, and the save mechanism.
-
----
 
 ## 2026-09-13 — Day 1: the asset pipeline is solved
 
@@ -572,36 +553,6 @@ locality is ~9.5 colours against a budget of 15.
 The productive method: an engine-shared variable is one the **engine writes
 and scripts read**. Intersecting those two sets gives 20 candidates instead
 of 259, and it reproduces every mapping found independently beforehand.
-
----
-
-## RESUME HERE
-
-State: 47 commits. No unknown formats remain in either game.
-
-**Working and verified:** extraction, disassembly (DOS 98.4%, Genesis 94.4%),
-compression both ways, ROM expansion to 2 MB, checksum repair, map
-transplant confirmed on screen, art conversion.
-
-**Next, in order:**
-
-1. **The last 33 engine variables** (536 references, 5.3%). Led by
-   `SAVED_TEMP_START` 0x4C00, `MONEY_NEO_ACCT` 0x4CE6, `DUNGEON_VALUE`
-   0x4BE6. Method above; `tools/correlate_vars.py` generates leads but is
-   not authoritative — confirm each against a forced constraint.
-2. **The four orphan opcodes**: `CALL` (161 sites, needs per-site work),
-   `PICTURE2`, `COPY_MEM`, `SELECT_ACTION`.
-3. **Convert the 173 recovered portraits** through `convert_art.py`.
-4. **Transplant a full area and play it** — that is the next milestone worth
-   having, and it needs 1 and 2 first.
-
-**Key facts worth not re-deriving:** ECL VM at `0x03344`, dispatch table
-`0x0336E`, opcode names `0x0446E`, argument fetcher `0x0404A`, address
-resolver `0x042E0`, checksum `0x0FFFB0` expecting `0x10D1310C`, code base
-`0x6AF6`, GEO stream `0x8FA8D`, wall sets `0x51836`.
-
-**Don't trust screen capture for boot tests.** Use `blastem -l` and count
-distinct addresses in `address.log`; stock is 985.
 
 ---
 
@@ -1518,7 +1469,11 @@ That is a smaller and better-defined problem than it was two days ago, and
 it is no longer blocking anything: every creature the port adds now draws
 whole.
 
-## A Matrix Cubed creature in Countdown's combat engine, at size
+> The three sections below revisit the same ground a session later and
+> reach different findings. Both passes are kept: each records something
+> the other does not.
+
+## 48x48, second pass: a creature at size, re-examined
 
 With the monster size byte found, the first DOS creature went in whole.
 `tools/inject_creature.py` takes `CPIC1` block ids, quantises them to the
@@ -1561,7 +1516,7 @@ walking through each other rather than merely looking odd.
 So 48x48 is worth doing after the art pipeline, not before: ten DOS sprites
 want it, and all ten already look right in the wide class.
 
-## Which field really decides the shape, and why 48x48 is still out of reach
+## 48x48, second pass: which field decides the shape
 
 Two probes settled the first half. Figure class 0 with monster size 2 draws
 **tall**; figure class 2 with monster size 1 draws **small**. So the monster
@@ -1598,7 +1553,7 @@ The DOS sprites do not fill their 48x48 square anyway -- most are a tall
 figure or a long one inside it -- so the loss from the missing square class
 is smaller than the numbers suggest.
 
-## 48x48: nearly, and exactly what is left
+## 48x48, second pass: the probe and the real sheet disagree
 
 `tools/bigcreature.py` extends the three routines a live fight showed taking
 the monster size byte, each relocated whole into free ROM with a size 4 case
