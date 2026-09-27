@@ -6551,3 +6551,62 @@ block 19 fills `[0x4C93]` with `RANDOM 7` folded back into 1-5, so there is no
 constant to adjust. `tools/shipid.py` patches the handler instead, at the point
 it stores the argument, and leaves zero alone so a script that already counts
 from zero is not pushed below the table.
+
+## Where the ship actually lives, and how Countdown repairs it
+
+The player's ship is built at boot:
+
+    01190  moveq  #$5, d0        ; ship type 5
+    01192  lea    $98f6.w, a0    ; the player's ship
+    01196  jsr    $19c60.l       ; copy record 5 into it
+
+So `0xFF98F6` is the ship, 34 bytes, and `0x19C7E` copies its first ten bytes
+to `+0x24` -- `0x991A`-`0x9923`. Countdown's own repair scene writes the
+`0x991A` copy, so **`0x98F6` holds the maxima and `0x991A` the current values**.
+
+Countdown has the same scene as Matrix Cubed, word for word -- "THE NEO
+MECHANICS REPAIR YOUR SHIP." -- so its script is the reference implementation.
+Block 0x11:
+
+    006D1  SAVE 0x258, [0x9E6F]   GOSUB [0x723B]   SAVE [0x9E6F], [0x991A]
+    006E3  SAVE 0x96,  [0x9E6F]   GOSUB [0x723B]   SAVE [0x9E6F], [0x991C]
+    006F4  SAVE 0x1C2, [0x9E6F]   GOSUB [0x723B]   SAVE [0x9E6F], [0x9920]
+    00706  SAVE 0x2, [0x9909]     SAVE 0x2, [0x990E]     SAVE 0x5, [0x9913]
+    0071D  SAVE 0xC, [0x990A]     SAVE 0x5, [0x990B]
+    00729  SAVE 0x8, [0x990F]     SAVE 0x7, [0x9910]     ; weapons and ammo
+
+0x258, 0x96 and 0x1C2 are 600, 150 and 450 -- the same numbers Matrix Cubed
+writes -- and the 2, 2, 5 match exactly too. Pairing them by value:
+
+| Matrix Cubed | value | Countdown |
+|--------------|-------|-----------|
+| 0x4D16 | 600 | 0x991A |
+| 0x4D18 | 150 | 0x991C |
+| 0x4D20 | 450 | 0x9920 |
+| 0x4D3E | 2 | 0x9909 |
+| 0x4D44 | 2 | 0x990E |
+| 0x4D4A | 5 | 0x9913 |
+
+`0x4D1A` (150) and `0x4D1C` (300) have no counterpart in this scene, and the
+fuel at `0x4D1E` (450) is not written here either, so three of the nine still
+need evidence.
+
+### The 16-bit values are not a straight store -- do not map these yet
+
+`GOSUB [0x723B]` is the part to understand before changing anything:
+
+    00745  SAVE [0x9E6F], [0x9E71]
+    0074C  SAVE [0x9E70], [0x9E6F]
+    00753  SAVE [0x9E71], [0x9E70]
+    0075A  RETURN
+
+That is a byte swap of the two bytes at `0x9E6F`/`0x9E70`, and Countdown runs
+it between writing each 16-bit value and storing it. The reason is in the store
+tail at `0x042AA`, which writes the low byte first and ascends -- little-endian
+-- while the ship's fields are big-endian 16-bit words (record 5 reads `02 58`
+for 600).
+
+So a plain remap of `0x4D16` onto `0x991A` would store 600 byte-swapped.
+Getting this right means reproducing Countdown's swap idiom, not just the
+address, and that should be verified against a running ship rather than
+reasoned out. Recorded here so the next attempt starts from the evidence.
