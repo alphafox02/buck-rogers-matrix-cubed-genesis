@@ -69,12 +69,6 @@ class Asm:
         self.code += b"\x4e\xf9" + struct.pack(">I", target)
         return self
 
-    def dbra(self, reg, label):
-        """dbra Dn, <a label already passed> -- 16-bit, so backwards is fine."""
-        self.code += bytes((0x51, 0xC8 | reg))
-        self.code += struct.pack(">h", self.labels[label] - len(self.code))
-        return self
-
     def label(self, n):
         self.labels[n] = len(self.code)
         return self
@@ -140,59 +134,6 @@ OCCUPY_END = 0x1052E
 # not reproduced: there is no draw left to put them in, and a frame that
 # persists is not a flash. See docs/re_notes.md for the two frame-index
 # rewrites that were tried for that and backed out.
-# A 48x48 creature is repainted when anything walks out from under it.
-#
-# Moving a figure is `0x0F4FA`: show it, erase it (0x0F996), REPAIR whatever
-# the erase uncovered (0x0F9F4), write the new square, draw it there (0x0F986).
-# The repair is the part that does not scale. It walks the figure array looking
-# for another figure whose `$12` matches the mover's as a WORD -- the same x AND
-# the same y -- redraws the first one it finds and stops. That is exactly right
-# for the case SSI wrote it for, two figures stacked on one square.
-#
-# A 48x48 creature covers four squares and is drawn from one square north of
-# its anchor, so a 24x24 figure walking off any square under that box erases a
-# 3x3 patch of the creature and the repair never looks at it: its anchor is a
-# different square. Nothing redraws a combat figure otherwise -- they are plane
-# A tiles, painted once -- so the bite stays until something else happens to
-# repaint the creature. Watching the demo's dinosaur frame by frame, its tail
-# and hind legs vanish and come back through the fight, and at 117.40s the whole
-# animal is gone for a tenth of a second.
-#
-# So the repair is replaced with one that also redraws every size 4 creature on
-# the board, whatever square it stands on. Redrawing one is idempotent and there
-# are at most a handful in a combat, so the cost is a few tile writes per move.
-# The stock same-square case is kept, minus its "stop at the first" -- redrawing
-# all of them is no more expensive and no less correct.
-# How many tiles across and down a figure covers, asked by the attack animation.
-#
-# `0x0CC66` turns a figure into a tile rectangle -- d2, d3 its top-left corner
-# and d4, d5 its extent -- and the action dispatcher at `0x0CAEA` uses it twice:
-# once at `0x0CBF0` to blit an animation frame over the figure, and once at
-# `0x0CC26`, right after `bset #2, $1(a3)` hides it, to blank the tiles it was
-# occupying. Stock starts both at 3 by 3 and widens one of them to 6 for a
-# 24x48 or a 48x24. A 48x48 gets 3 by 3, so an attack on one blits and blanks a
-# quarter of it and leaves the other three quarters to whatever was there.
-#
-# On screen that is a 24-pixel column of the dinosaur going missing whenever it
-# is shot at -- tail and hind leg gone, healing again the next time anything
-# repaints it. Measured over the demo's fight: three separate bites, the worst
-# 215 of its 810 pixels, plus one frame at 117.40s with the whole animal gone.
-#
-# This is the site `bigcreature.py` claimed in its own header to have extended
-# and had not.
-EXTENT = 0x0CC9A
-EXTENT_END = 0x0CCAE
-EXTENT_STOCK = bytes.fromhex("1c2a0023bc3c000266027a06bc3c000366027806")
-
-
-REPAIR = 0x0F9F4
-REPAIR_END = 0x0FA20        # the stock body, dead after this; nothing branches in
-REPAIR_STOCK = bytes.fromhex("2f0b41f8c470")
-FIGURES = 0xC470            # the combat figure array, 0x1A bytes a slot
-FIGURE_COUNT = 0xBA64
-DRAW_ONE = 0x0AD5A          # draw one figure, a3 = its record
-
-
 DEATH = 0x07676
 DEATH_END = 0x0767E
 DEATH_STOCK = bytes.fromhex("244b4eb9000142a8")
@@ -322,51 +263,6 @@ def index():
     return a.done() + b"\x4e\xf9" + struct.pack(">I", INDEX_END)
 
 
-def extent():
-    """3x3 tiles, 3x6 for a 24x48, 6x3 for a 48x24 -- and 6x6 for a 48x48."""
-    a = Asm()
-    a.raw("1c2a0023")                              # move.b $23(a2), d6
-    a.raw("bc3c").raw(f"{BIG:04x}").br(0x66, "n4")
-    a.raw("7a06").raw("7806").br(0x60, "out")      # moveq #6,d5 / moveq #6,d4
-    a.label("n4").raw("bc3c0002").br(0x66, "n2")
-    a.raw("7a06")                                  # 24x48: six rows
-    a.label("n2").raw("bc3c0003").br(0x66, "out")
-    a.raw("7806")                                  # 48x24: six columns
-    a.label("out")
-    return a.done() + b"\x4e\xf9" + struct.pack(">I", EXTENT_END)
-
-
-def repair():
-    """Redraw the mover's square-mates AND every 48x48 creature.
-
-    Everything is saved: `0x0AD5A` keeps d2-d7 and a2 but not d0, d1, a0 or a1,
-    and this has to survive its own loop across the call.
-    """
-    a = Asm()
-    a.raw("48e7fffe")                              # movem.l d0-d7/a0-a6, -(a7)
-    a.raw("2c0b")                                  # move.l  a3, d6   the mover
-    a.raw("45f8").raw(f"{FIGURES:04x}")            # lea     $c470.w, a2
-    a.raw("3638").raw(f"{FIGURE_COUNT:04x}")       # move.w  $ba64.w, d3
-    a.raw("342b0012")                              # move.w  $12(a3), d2
-    a.label("loop")
-    a.raw("4a12").br(0x67, "next")                 # tst.b (a2) / beq  empty slot
-    a.raw("bc8a").br(0x67, "next")                 # cmp.l a2, d6 / beq  itself
-    a.raw("b46a0012").br(0x67, "draw")             # same square as the mover?
-    a.raw("7000").raw("102a0002")                  # moveq #0,d0 / move.b $2(a2),d0
-    a.raw("4eb9").raw(f"{RECORD:08x}")             # jsr $6f14  -> a1
-    a.raw("0c29").raw(f"{BIG:04x}").raw("0023")    # cmpi.b #4, $23(a1)
-    a.br(0x66, "next")
-    a.label("draw")
-    a.raw("264a")                                  # movea.l a2, a3
-    a.raw("4eb9").raw(f"{DRAW_ONE:08x}")           # jsr $ad5a
-    a.label("next")
-    a.raw("d4fc001a")                              # adda.w #$1a, a2
-    a.dbra(3, "loop")
-    a.raw("4cdf7fff")                              # movem.l (a7)+, d0-d7/a0-a6
-    a.raw("4e75")                                  # rts
-    return a.done()
-
-
 def death():
     """Erase a dead 48x48 creature and stop the board ever drawing it again.
 
@@ -391,9 +287,7 @@ def death():
 def apply(rom: bytes) -> bytes:
     rom = bytearray(rom)
     for at, name, stock in ((SLOTS, "slot count", SLOTS_STOCK),
-                            (DEATH, "death", DEATH_STOCK),
-                            (REPAIR, "repair", REPAIR_STOCK),
-                            (EXTENT, "tile extent", EXTENT_STOCK)):
+                            (DEATH, "death", DEATH_STOCK)):
         if bytes(rom[at:at + len(stock)]) != stock:
             raise SystemExit(f"0x{at:05X} is not the {name}: "
                              f"{bytes(rom[at:at + len(stock)]).hex()}")
@@ -403,9 +297,7 @@ def apply(rom: bytes) -> bytes:
                                    ("frame shape", shape, SHAPE, SHAPE_END),
                                    ("grid squares", squares, SQUARES, SQUARES_END),
                                    ("occupancy", occupy, OCCUPY, OCCUPY_END),
-                                   ("death", death, DEATH, DEATH_END),
-                                   ("repair", repair, REPAIR, REPAIR_END),
-                                   ("tile extent", extent, EXTENT, EXTENT_END)):
+                                   ("death", death, DEATH, DEATH_END)):
         cursor += cursor & 1
         code = build()
         if cursor + len(code) > NEW_LIMIT:

@@ -5701,8 +5701,11 @@ Two things it was NOT, both checked before patching anything:
   written, built and measured: the bites were unchanged, because nothing was
   moving. It is kept anyway, being correct and nearly free.
 
-It is `0x0CC66`, which turns a figure into a tile rectangle for the attack
-animation -- d2, d3 the corner and d4, d5 the extent. The action dispatcher at
+**Both of the fixes tried for it were wrong and are reverted.** What follows
+is what they were and how they failed, so nobody walks it again.
+
+The first was `0x0CC66`, which turns a figure into a tile rectangle for the
+attack animation -- d2, d3 the corner and d4, d5 the extent. The action dispatcher at
 `0x0CAEA` calls it twice, at `0x0CBF0` to blit an animation frame over the
 figure and at `0x0CC26`, right after `bset #2, $1(a3)` hides it, to blank the
 tiles it occupied. `0x0CC9A` starts both at 3 by 3 and widens one to 6 for a
@@ -5712,15 +5715,34 @@ tiles it occupied. `0x0CC9A` starts both at 3 by 3 and widens one to 6 for a
     0CC9E  cmp.b  #$2, d6 / bne  -> moveq #$6, d5
     0CCA6  cmp.b  #$3, d6 / bne  -> moveq #$6, d4
 
-A 48x48 matches neither and keeps 3 by 3, so an attack blits and blanks a
-quarter of the creature and leaves the rest to whatever was underneath.
-`bigcreature.py` adds the size 4 case, six by six. After it, all three bites
-are gone and the dinosaur holds 1066 to 1204 pixels through every attack.
+A 48x48 matches neither and keeps 3 by 3. Widening it to six by six removed
+all three bites and held the creature at 1066 to 1204 pixels through every
+attack -- and a play session called the result **far worse**, because the
+rectangle's corner comes straight from `$12/$13`, the square the creature
+stands on, while a 48x48 is DRAWN one square higher (the `addq.w #1, d5` in
+`shape()`). Six by six at the unlifted corner blits a full-size copy of the
+creature one square low, across the party standing below it. Lifting the
+rectangle three tiles put it in the right place -- verified by logging d2, d3,
+d4, d5 at the routine's exit: tile (30,27), six by six, for a creature on
+square (10,10) -- and the mangling stayed.
 
-This is the site `bigcreature.py` claimed in its own header to have extended
-and had not. Two of the five it listed were real; `0x14552` and `0x15DD2` are
-still unchecked.
+So the second attempt went after what is blitted rather than where. `0x0CBAA`
+scales the animation step by the creature's size: `asl.w #$2` for a 24x24 and
+`asl.w #$1` for anything larger, in nine-cell units. A 48x48 frame is four
+units and so wants the larger shift and a doubled base. That was written,
+built and watched frame by frame: no better.
 
-What is left is a one- or two-frame artefact while the creature WALKS -- a
-trailing part-copy a square behind it, gone by the next frame. Different path,
-not chased.
+Both are reverted. The shipped ROM has the three bites and no ghost, which is
+where a play session left it saying the disappearing worked.
+
+What is actually happening, on the evidence: the attack blits a frame of the
+creature's OWN sheet over it, fetched at an offset that is not a frame
+boundary, so the pose lands half a frame out -- the same half-frame problem
+the standing draw has, where the two halves come from blocks 1 and 12 and
+`inject_creature.py`'s half-swap papers over it. Until that is understood, any
+change to the size of the blit only changes how much of the wrong pose gets
+drawn. Do not widen the rectangle again without fixing the fetch first.
+
+`0x0CC9A` is the site `bigcreature.py` claimed in its own header to have
+extended and had not. Two of the five it listed were real; `0x14552` and
+`0x15DD2` are still unchecked.
