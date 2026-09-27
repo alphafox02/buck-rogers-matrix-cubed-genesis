@@ -13,23 +13,39 @@ header, and the party is the first thing in it: six 214-byte records at 0, 214,
 stream reproduces the original file byte for byte, so there is no checksum to
 satisfy -- the round trip is checked here before anything is written.
 
-**This does not work yet, and it refuses to write.** The edited save decodes
-perfectly and re-packs to the right length, and the game then does not list it
-at all -- a play session restored and found the slot simply gone. The last
-seventeen bytes of the payload are high entropy where everything around them
-is zero:
+**This does not work, and it refuses to write.** Three attempts, each one
+ruling something out, and the slot vanishes from the restore list every time
+-- not a corrupt save, a missing one:
+
+    what was touched                     stream     result
+    records + the summary array at 1712  719 bytes  slot gone
+    records only                         721 bytes  slot gone
+    records only                         711 bytes  slot gone
+
+The first was a genuine mistake: the 26-byte summary array at 8 * 214 is real
+in the ROM BLOB, where the loader copies it to 0xC470, and a save is not the
+blob. The other two touched nothing but the six character records, at a stream
+both longer and shorter than the original, so it is neither where the edit
+lands nor how long the result is.
+
+What is left is the last seventeen bytes of the payload, high entropy where
+everything around them is zero:
 
     ...00 00 00 00  ef 3e d6 69 35 05 cf ac a9 83 0a a5 85 0d 76 0f 10
 
-which is a signature over the save, and nothing here recomputes it. No simple
-sum matches: byte sum 0x5ABE and word sum 0x7872 against header words 0x0000,
-0x1234, 0x0203, 0x0300, and no 16-bit field in the payload equals the sum of
-everything but itself.
+That is a signature over the save and nothing here recomputes it. No simple
+sum matches: the payload sums to 0x5ABE by byte and 0x7872 by word, the header
+words are 0x0000, 0x1234, 0x0203 and 0x0300, and no 16-bit field inside equals
+the sum of everything but itself.
 
-Until that is worked out, the way to get a boosted party into a save is to let
-the ENGINE write it: restore the built-in PREGENERATED TEAM, which
-`boostparty.py` has already edited in the ROM, play, and save to a slot. The
-game checksums its own file correctly.
+So the way to get a boosted party into a save is to let the ENGINE write it:
+restore the built-in PREGENERATED TEAM, which boostparty.py has already edited
+in the ROM and which startkit.py has given the upgraded gear, play, and save.
+The game signs its own file correctly.
+
+The other way, not built: patch the ROM to raise the party in RAM after a save
+is loaded, which leaves the file alone entirely. That needs the point where a
+restore finishes writing 0xFFBA68, which is not yet found.
 
 The original file is copied to `<name>.before-boost` first.
 
@@ -60,11 +76,16 @@ def apply(raw: bytes, hero=True) -> bytes:
     # comes game state, and `records()` walking on into it found a seventh
     # "character" with no name, level 1 and no hit points -- writing a level
     # into that is writing into whatever the engine keeps there.
+    # ONLY the character records. `boostparty` also writes a 26-byte summary
+    # array at 8 * 214 = 1712, which is right for the ROM blob -- the loader
+    # copies it to 0xC470 -- but a save is not the blob, and there is no reason
+    # to believe 1712 means the same thing in one as in the other. The first
+    # attempt wrote there and the game stopped listing the slot.
     for k, off, name in list(bp.records(body))[:PARTY]:
         if hero:
-            bp.summary(body, k, bp.hero(body, off, name))
+            bp.hero(body, off, name)
         else:
-            bp.summary(body, k, bp.veteran(body, off, name, bp.VETERAN_LEVEL))
+            bp.veteran(body, off, name, bp.VETERAN_LEVEL)
     packed = lzw_encode.compress(bytes(body))
     if genesis_ecl.decompress(packed, limit=0x8000) != bytes(body):
         raise SystemExit("the edited save does not round-trip")
@@ -86,9 +107,9 @@ if __name__ == "__main__":
         shutil.copy2(path, backup)
         print(f"  original copied to {backup}")
     out = apply(path.read_bytes(), hero)
-    if "--i-know-it-will-be-rejected" not in sys.argv[2:]:
-        sys.exit("  NOT WRITING: the game rejects an edited save -- see the "
-                 "header of this file. Restore the PREGENERATED TEAM instead, "
-                 "which boostparty.py has already edited in the ROM.")
+    if "--i-know-the-game-will-reject-it" not in sys.argv[2:]:
+        sys.exit("  NOT WRITING -- see the header. Restore the PREGENERATED "
+                 "TEAM instead: it is boosted in the ROM and carries the "
+                 "upgraded kit.")
     path.write_bytes(out)
     print(f"  wrote {path}")

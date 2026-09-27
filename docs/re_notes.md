@@ -6072,6 +6072,11 @@ sums to 0x5ABE by byte and 0x7872 by word, the header words are 0x0000,
 0x1234, 0x0203 and 0x0300, and no 16-bit field inside the payload equals the
 sum of everything but itself.
 
+Three attempts settled that it is the signature and not something simpler --
+records plus the summary array at 1712 (719-byte stream), records only at 721,
+records only at 711. Neither where the edit lands nor how long the result is
+makes any difference: the slot vanishes from the restore list every time.
+
 `tools/boostsave.py` does the edit correctly and then refuses to write, with
 the finding in its header. The way to get a boosted party into a save is to
 let the engine write it: restore PREGENERATED TEAM, play, save to a slot.
