@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Drive the built ROM programmatically: press buttons, read RAM, see frames.
 

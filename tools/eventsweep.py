@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Stand on every event square of an area and report what the game says.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Add a 48x48 creature size to the combat board.
 

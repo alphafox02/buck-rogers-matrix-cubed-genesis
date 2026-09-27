@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Run Matrix Cubed's own demo instead of nothing.
 

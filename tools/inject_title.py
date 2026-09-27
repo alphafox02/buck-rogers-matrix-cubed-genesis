@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Replace the intro screens.
 

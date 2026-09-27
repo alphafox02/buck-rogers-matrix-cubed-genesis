@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """The game's level graph, read out of the DOS scripts.
 
 Each ECL block is one place, and NEW_ECL is the door between them. Printing

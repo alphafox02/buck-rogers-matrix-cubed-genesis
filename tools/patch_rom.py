@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Apply research patches to the Genesis Countdown to Doomsday ROM.
 

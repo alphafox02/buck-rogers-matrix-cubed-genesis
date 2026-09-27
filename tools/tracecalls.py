@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Count how often a routine is entered, by making it say so.
 

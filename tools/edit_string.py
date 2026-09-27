@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Edit a string inside a Genesis ECL text resource and rebuild the ROM.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Match DOS engine variables to their Genesis counterparts by behaviour.
 

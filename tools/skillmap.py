@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Translate DOS Buck Rogers skill ids into the Genesis engine's 19.
 

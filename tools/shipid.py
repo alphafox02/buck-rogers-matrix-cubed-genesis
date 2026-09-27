@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Matrix Cubed numbers its ships from one; the Genesis table is zero based.
 

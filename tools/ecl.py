@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 ECL bytecode disassembler for SSI Gold Box games.
 

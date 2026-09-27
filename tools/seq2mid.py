@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Export a Genesis music track as a standard MIDI file.
 

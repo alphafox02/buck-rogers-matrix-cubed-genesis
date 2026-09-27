@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Step a 48x48 creature square to square instead of sliding it.
 

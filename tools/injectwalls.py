@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Put Matrix Cubed's wall pixels into the Genesis wall sets.
 

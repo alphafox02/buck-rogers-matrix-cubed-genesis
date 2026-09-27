@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Never start a combat with the two sides standing on top of each other.
 

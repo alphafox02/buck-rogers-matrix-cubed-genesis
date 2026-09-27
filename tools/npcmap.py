@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Translate Matrix Cubed's NPC ids into Countdown's ADDNPC table.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Route through the opening dock using the map the ROM actually carries."""
 import struct, sys
 from pathlib import Path

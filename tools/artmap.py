@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Guard Matrix Cubed's art references against the resources the ROM has.
 

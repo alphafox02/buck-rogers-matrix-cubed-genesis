@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Give Matrix Cubed's own creatures slots in the roster.
 

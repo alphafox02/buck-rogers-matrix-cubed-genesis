@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 The cartridge's anti-tamper checksum, and how to satisfy it.
 

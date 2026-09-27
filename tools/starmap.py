@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Hand the port's star map to the engine that already has one.
 

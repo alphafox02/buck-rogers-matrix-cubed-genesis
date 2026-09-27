@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Replace area 0x00 with a boot stub that drops the player into a chosen area.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Convert XMI to the Genesis driver's sequence format.
 

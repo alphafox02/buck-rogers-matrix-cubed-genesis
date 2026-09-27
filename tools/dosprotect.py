@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Answer Matrix Cubed's DOS copy-protection question.
 
 Starting an adventure asks a manual lookup -- "in the log book on page 44,

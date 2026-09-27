@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Read the DOS game's ECL variables out of a running DOSBox.
 

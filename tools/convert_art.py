@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Bulk-convert the extracted DOS artwork to Genesis tiles.
 

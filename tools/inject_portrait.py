@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Put Matrix Cubed's portraits into the Genesis ECL picture directory.
 

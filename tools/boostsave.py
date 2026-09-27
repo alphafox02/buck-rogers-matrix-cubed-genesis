@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Boost a party that is already saved, in the emulator's SRAM.
 

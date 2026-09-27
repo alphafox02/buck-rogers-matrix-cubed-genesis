@@ -4437,8 +4437,8 @@ is the wrong table. Finding the right one is the remaining step.
 
 ### Why every portrait was washed out
 
-A play session said Buck Rogers looked "really white looking and washed out" in
-the opening briefing. He did, and so did every other face in the game.
+Buck Rogers came out pale and washed out in the opening briefing, and so did
+every other face in the game.
 
 The palette loader at `0x09D66` does not upload all sixteen entries. With
 `[0xB4BD]` clear it runs

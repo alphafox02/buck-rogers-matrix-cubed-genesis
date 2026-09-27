@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Find the palette the engine gives combat figures, by asking it.
 

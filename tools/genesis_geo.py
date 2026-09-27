@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Genesis dungeon map (GEO) extraction.
 

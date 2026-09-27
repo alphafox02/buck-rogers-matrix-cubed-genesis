@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Put Matrix Cubed's own artwork into the Genesis picture directory.
 

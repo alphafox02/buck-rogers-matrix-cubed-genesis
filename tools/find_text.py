@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Locate string tables in the Genesis Countdown to Doomsday ROM.
 

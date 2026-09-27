@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Gold Box "VGA dependent" image decoder — the format Matrix Cubed uses for
 its portraits and sprites.

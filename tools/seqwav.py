@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Render music to a WAV so it can be judged by ear without a MIDI player.
 

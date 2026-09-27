@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Build synthetic dungeon maps for unambiguous transplant testing.
 

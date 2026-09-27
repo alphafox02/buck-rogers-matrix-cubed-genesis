@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Walk into one transplanted area and write down everything it says.
 

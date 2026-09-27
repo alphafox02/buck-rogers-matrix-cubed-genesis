@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Genesis Countdown to Doomsday: ECL resource extraction.
 

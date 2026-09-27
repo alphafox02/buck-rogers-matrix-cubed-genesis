@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Translate DOS Gold Box ECL into Genesis ECL.
 

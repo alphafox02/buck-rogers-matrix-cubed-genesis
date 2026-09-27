@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Build a ROM that drops the party straight into one area.
 

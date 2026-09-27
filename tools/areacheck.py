@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Check each transplanted area against its DOS original, without playing it.
 

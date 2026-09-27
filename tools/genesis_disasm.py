@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Disassemble extracted Genesis ECL bytecode.
 

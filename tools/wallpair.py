@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Pair Genesis wall tiles with Matrix Cubed's, by standing in the same place.
 

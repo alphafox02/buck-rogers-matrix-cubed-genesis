@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Translate DOS sound ids into ones the Genesis driver will act on.
 

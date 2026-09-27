@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Disassemble every ECL block in a .DAX file to readable text.
 

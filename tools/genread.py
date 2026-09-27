@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Read the Genesis screen as text, off the tilemap rather than the pixels.
 

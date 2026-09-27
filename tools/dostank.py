@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Make an indestructible DOS party, for walking the game rather than playing it.
 

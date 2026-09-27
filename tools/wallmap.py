@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Map Matrix Cubed's wall-set ids onto the ones the Genesis engine has.
 

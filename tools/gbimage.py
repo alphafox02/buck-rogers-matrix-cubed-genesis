@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Gold Box VGA image decoder.
 

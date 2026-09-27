@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Compressor for the Genesis ECL streams -- the inverse of the decoder in
 tools/genesis_ecl.py.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Convert Gold Box VGA artwork to Genesis format.
 

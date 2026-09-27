@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Render Gold Box DAX image blocks to PNG.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Parse XMI (Extended MIDI), the format DOS Matrix Cubed's music is in.
 

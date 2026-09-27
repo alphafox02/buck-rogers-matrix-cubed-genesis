@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Make the combat figure directory additive.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Hand the starting party gear it can fight with.
 

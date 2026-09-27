@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Give ADDNPC a bigger table, so Matrix Cubed's own NPCs can join.
 

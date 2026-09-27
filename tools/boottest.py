@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Check a built ROM actually boots, without a person watching it.
 

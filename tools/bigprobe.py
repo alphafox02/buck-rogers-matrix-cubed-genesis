@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Prove the 48x48 class draws, by giving a creature a test sheet and fighting it.
 

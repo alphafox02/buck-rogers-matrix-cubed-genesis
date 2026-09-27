@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Stop a 48x48 creature being placed on top of somebody.
 

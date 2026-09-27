@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Decode the Genesis engine's picture container.
 

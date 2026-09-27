@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Show what Matrix Cubed's creatures will look like on the Genesis.
 

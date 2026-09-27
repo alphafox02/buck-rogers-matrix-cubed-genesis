@@ -1,0 +1,27 @@
+# The research instruments. None of this is needed to build the ROM.
+#
+# These are for reading the two games rather than converting them: driving a
+# build under a scriptable Genesis core, disassembling 68000 and Z80, and
+# capturing frames from DOSBox to compare the original's behaviour against the
+# port's. Install them if you intend to investigate something, not if you only
+# want the cartridge.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+-r requirements.txt
+
+# tools/play.py -- presses buttons, reads RAM, captures frames. This is how
+# almost every behavioural claim in docs/re_notes.md was checked. It is also
+# the one dependency that is awkward to install; nothing else needs it.
+stable-retro>=0.9
+
+# tools/tracecalls.py, tools/whocalls.py -- 68000 disassembly, used to find
+# which code reaches a given address.
+capstone>=4.0
+
+# tools/z80dump.py -- the sound driver runs on the Z80.
+z80dis>=1.0
+
+# tools/dosdrive.py -- drives the DOS original under DOSBox and reads its
+# window, so the two games can be put side by side. X11 only.
+python-xlib>=0.31

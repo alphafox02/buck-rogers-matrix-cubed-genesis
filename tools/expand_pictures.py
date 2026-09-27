@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Make the ECL picture directory additive.
 

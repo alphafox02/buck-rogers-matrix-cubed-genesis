@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Grow the cartridge and relocate its resources into the new space.
 

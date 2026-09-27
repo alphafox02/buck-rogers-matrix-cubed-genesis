@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Read the text off a DOSBox screen.
 
 Driving the DOS original by keystroke only gets so far: to compare it with

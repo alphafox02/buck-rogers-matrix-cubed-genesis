@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Recover the atlas cut list by matching DOS screenshots against the records.
 

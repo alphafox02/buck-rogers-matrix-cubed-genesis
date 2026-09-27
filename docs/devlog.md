@@ -8,13 +8,13 @@ what failed, and why we changed direction. Structured findings live in
 
 ## 2026-09-14 -- Day 2: both sides decode, and the live trace pays off
 
-Ran mostly unattended overnight after Aaron got BlastEm's debugger working.
+Ran mostly unattended overnight once BlastEm's debugger was working.
 
 ### The trace
 
 BlastEm would not take piped input, but `di/x a2` at a breakpoint on the
 opcode fetch prints the ECL program counter on every instruction -- so the
-gaps between samples are exact instruction sizes. Aaron hand-fed `c` for a
+gaps between samples are exact instruction sizes. `c` was hand-fed for a
 few hundred iterations and pasted the output.
 
 That trace did three things:
@@ -83,7 +83,7 @@ mixes data with code reached from native routines rather than ECL jumps.
 
 Static analysis found the formats; the emulator found the bugs in my reading
 of them. Neither alone was enough. The trace was worth more than the previous
-several hours of parameter guessing, and it took Aaron about ten minutes.
+several hours of parameter guessing, and it took about ten minutes by hand.
 
 ### Next
 
@@ -372,7 +372,7 @@ grid. No level designer draws that, so there is nothing to confuse it with.
 Stock area `0x10` is the spaceport tarmac: **open ground** with two small
 one-square structures.
 
-Aaron's report: *"i'm out on the tarmac and i'm running into walls getting
+The play report: *"i'm out on the tarmac and i'm running into walls getting
 explosions"*.
 
 The script is untouched, so the game still places him on the tarmac and still
@@ -453,7 +453,7 @@ The prediction made from that table was: head northwest, expect a long
 east-west wall run across the top and a complex of small rooms with doors in
 the corner.
 
-Aaron, having walked there: *"seems to be exactly as you described"*.
+A play session, having walked there: *"seems to be exactly as you described"*.
 
 ### Why this is the stronger result
 
@@ -523,7 +523,7 @@ loader pointers (`0x38CE2` ECL code, `0x42B0A` ECL text, `0x0576E` maps).
 ### Transplants, and a test-design failure
 
 `countdown_mcmap.gen` put Matrix Cubed map 18 into area `0x10`. First
-play-test looked different, then Aaron second-guessed it — rightly, since
+play-test looked different, then it was second-guessed — rightly, since
 neither of us had the stock layout memorised. Recorded as inconclusive and
 an earlier over-claimed commit was amended.
 

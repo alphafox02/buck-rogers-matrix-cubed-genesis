@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Gold Box dungeon map (GEO) decoder.
 

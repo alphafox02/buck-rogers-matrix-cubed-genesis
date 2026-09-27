@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Validate the Genesis ECL disassembler against a live instruction trace.
 

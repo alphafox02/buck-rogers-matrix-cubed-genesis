@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Decode Matrix Cubed's wall pieces, the art the port does not yet carry.
 

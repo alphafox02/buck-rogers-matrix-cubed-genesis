@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 DAX container reader for SSI Gold Box game data.
 

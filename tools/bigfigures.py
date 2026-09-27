@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Teach the combat engine a 48x48 creature.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Raise the engine's 64-monster ceiling.
 

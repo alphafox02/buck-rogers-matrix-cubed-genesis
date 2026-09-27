@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Make a missing art resource degrade instead of stopping the game.
 

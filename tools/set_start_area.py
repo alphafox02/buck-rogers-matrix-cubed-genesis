@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Change which area the game boots into.
 

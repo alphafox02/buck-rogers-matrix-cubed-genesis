@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Refresh the facing wall value when the party TURNS, not only when it moves.
 

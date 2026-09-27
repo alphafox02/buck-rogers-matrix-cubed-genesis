@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Translate Matrix Cubed monster ids into Countdown's roster.
 

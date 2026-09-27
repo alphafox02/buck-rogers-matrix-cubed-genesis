@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Disassemble the Genesis sound driver.
 

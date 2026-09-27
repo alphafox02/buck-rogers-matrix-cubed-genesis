@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Allocate Matrix Cubed's script-only flags into Genesis RAM.
 

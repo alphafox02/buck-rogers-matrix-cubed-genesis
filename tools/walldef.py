@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Decode Matrix Cubed's 3D wall art.
 

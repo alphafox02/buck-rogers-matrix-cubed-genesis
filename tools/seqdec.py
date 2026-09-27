@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Decode a track for the SHayes1991 sound driver.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Find text that still overflows the Genesis window, in a built ROM.
 

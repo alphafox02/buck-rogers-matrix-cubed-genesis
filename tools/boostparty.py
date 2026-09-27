@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Give the port's pregenerated team a working perception score.
 

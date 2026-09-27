@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Put Matrix Cubed's own credits into the port.
 

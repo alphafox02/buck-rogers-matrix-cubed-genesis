@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Read the Genesis wall resources, the containers the port must eventually
 carry Matrix Cubed's own corridors in.

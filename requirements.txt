@@ -1,0 +1,16 @@
+# What tools/build.py needs to turn the two originals into a ROM.
+#
+# That is all it needs. The build is plain Python plus these two: the art
+# conversion reads DOS images and writes Genesis tiles through Pillow, and a
+# few of the converters use numpy for the per-pixel work. No emulator, no
+# disassembler and no capture tooling is required to produce the cartridge --
+# those are in requirements-dev.txt and are only for reading the games.
+#
+#   python3 -m venv .venv
+#   . .venv/bin/activate
+#   pip install -r requirements.txt
+#   python3 tools/checkinputs.py
+#   python3 tools/build.py
+
+Pillow>=9.0
+numpy>=1.21

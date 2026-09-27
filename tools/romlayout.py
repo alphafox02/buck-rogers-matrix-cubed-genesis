@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Catch two things writing to the same place in the ROM.
 

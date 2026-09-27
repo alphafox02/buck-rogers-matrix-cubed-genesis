@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Slide a 48x48 creature between squares as four sprites, not one.
 

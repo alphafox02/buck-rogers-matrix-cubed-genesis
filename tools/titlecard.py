@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Redraw the title card with more than sixteen colours.
 

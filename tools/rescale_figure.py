@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Shrink a large-class figure so the combat board draws the whole creature.
 

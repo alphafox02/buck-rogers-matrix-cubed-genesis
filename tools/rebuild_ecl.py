@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Rebuild the Genesis ROM's ECL resources from decompressed sources.
 

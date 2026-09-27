@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 End the intro after Matrix Cubed's title cards, and stop the attract demo.
 

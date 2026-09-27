@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Drive the DOS original under DOSBox, to compare it against the port.
 
