@@ -193,6 +193,40 @@ def genesis_opcodes():
     return {name: (op, argc) for op, (name, argc) in table.items()}
 
 
+# Writing a literal to one of the ship's systems has to reach the ENGINE's
+# ship, not just the script's own copy of the number.
+#
+# The two cannot share storage. The ECL reads and writes 16-bit variables low
+# byte first -- see 0x0404A and 0x042AA -- while the engine keeps the ship's
+# fields as big-endian words, and Matrix Cubed does arithmetic on its copies
+# (15 SUBTRACTs and 9 COMPAREs against other variables), which a byte-swapped
+# value would get wrong. So the script keeps its own numbers and the engine's
+# ship is written alongside them, converted.
+#
+# That is precisely what Countdown does. Its own "THE NEO MECHANICS REPAIR
+# YOUR SHIP." scene, block 0x11 at 0x006D1, writes each value to a temporary,
+# calls a subroutine that swaps the two bytes, and stores the result:
+#
+#     SAVE 0x258, [0x9E6F]   GOSUB [0x723B]   SAVE [0x9E6F], [0x991A]
+#     SAVE 0x96,  [0x9E6F]   GOSUB [0x723B]   SAVE [0x9E6F], [0x991C]
+#     SAVE 0x1C2, [0x9E6F]   GOSUB [0x723B]   SAVE [0x9E6F], [0x9920]
+#
+# 0x258, 0x96 and 0x1C2 are 600, 150 and 450 -- the same three numbers Matrix
+# Cubed writes to 0x4D16, 0x4D18 and 0x4D20 -- which is what pairs the two
+# games' addresses. The swap is done here instead, on the literal, so no
+# temporary or subroutine is needed.
+#
+# Only these three. Countdown's repair writes these and no others, so matching
+# it is evidence rather than guesswork; 0x4D1A, 0x4D1C and the fuel at 0x4D1E
+# have no counterpart in that scene and are deliberately left alone.
+SHIP_SYNC = {0x4D16: 0x991A, 0x4D18: 0x991C, 0x4D20: 0x9920}
+
+
+def _swap16(v):
+    """Little-endian ECL literal that lands as a big-endian engine word."""
+    return ((v & 0xFF) << 8) | ((v >> 8) & 0xFF)
+
+
 STUB_OPCODE = 0xFF          # outside the valid 0x00-0x5D range
 
 # The widest label sets stock Countdown ever gives each menu opcode. Past
@@ -262,6 +296,12 @@ def _encode_arg(kind, value):
         return bytes([0x80]) + struct.pack("<H", value)
     if kind in ("code", "var", "skip"):
         return bytes([0x01]) + struct.pack("<H", value & 0xFFFF)
+    if kind == "var16":
+        # Type 0x03 is a variable the engine reads and writes as TWO bytes --
+        # 0x0404A takes a second byte when the type is non-zero, and the store
+        # tail at 0x042AA writes one when the type is 3 or more. DOS marks the
+        # ship's fields 0x03 for exactly this reason.
+        return bytes([0x03]) + struct.pack("<H", value & 0xFFFF)
     if kind == "strptr":
         # Type 0x81 is "the string is at this address", not "this is a
         # variable". Both engines read it the same way. Collapsing it to
@@ -1193,6 +1233,21 @@ def transpile(block: bytes, flags=None, walk_as_step=False,
         layout[off] = redraw_pos.get(off, pos)
         pieces.append((off, opcode, args, size))
         pos += size
+        # A literal written to one of the ship's systems is mirrored into the
+        # engine's own ship, byte-swapped. See SHIP_SYNC.
+        if ins.name == "WRITE_MEM" and len(ins.args) == 2 \
+                and getattr(ins.args[1], "is_memory", False) \
+                and ins.args[1].value in SHIP_SYNC \
+                and not getattr(ins.args[0], "is_memory", False):
+            dest = SHIP_SYNC[ins.args[1].value]
+            sargs = [("imm", _swap16(ins.args[0].value)), ("var16", dest)]
+            ssize = 1 + sum(len(_encode_arg(k, v)) for k, v in sargs)
+            pieces.append((off, opcode, sargs, ssize))
+            pos += ssize
+            report.append((off, "ship",
+                           f"{ins.args[0].value} -> [0x{ins.args[1].value:04X}] "
+                           f"also written to the engine's ship at "
+                           f"0x{dest:04X}"))
         # Continued screens follow, each behind a wait so the player reads
         # one before the next replaces it. `layout[off]` already points at
         # the first piece, so every jump to this instruction still lands on

@@ -6610,3 +6610,58 @@ So a plain remap of `0x4D16` onto `0x991A` would store 600 byte-swapped.
 Getting this right means reproducing Countdown's swap idiom, not just the
 address, and that should be verified against a running ship rather than
 reasoned out. Recorded here so the next attempt starts from the evidence.
+
+## SHIPPED: repairing the ship now reaches the ship
+
+Verified in the emulator rather than reasoned about. At free movement:
+
+    ship record 5 in ROM : 0258009601c201c20600 = [600, 150, 450, 450, 1536]
+    maxima  at 0x98F6    : identical
+    current at 0x991A    : identical
+
+So the layout is settled: five big-endian 16-bit systems, maxima at `0x98F6`
+and current values at `0x991A`, both seeded from record 5 at `0x01190`.
+
+The script's copies and the engine's ship **cannot share storage**, which is
+why a plain remap was the wrong instinct. The ECL reads and writes 16-bit
+variables low byte first (`0x0404A`, `0x042AA`) while the ship's fields are
+big-endian, and Matrix Cubed does arithmetic on its own copies -- 15
+`SUBTRACT`s and 9 `COMPARE`s against other variables -- which a byte-swapped
+value would get wrong.
+
+Countdown solves it by keeping both and converting at the point of repair, and
+`transpile.SHIP_SYNC` now does the same: a literal written to `0x4D16`,
+`0x4D18` or `0x4D20` is followed by a second write of the same number,
+byte-swapped, to `0x991A`, `0x991C` or `0x9920` as a **type 0x03** two-byte
+operand. The swap is done on the literal, so no temporary or subroutine is
+needed:
+
+    09 02 58 02 01 9e 98      the script's own copy, unchanged
+    09 02 02 58 03 1a 99      SAVE 0x5802 -> [0x991A] as two bytes
+
+The store writes 0x02 then 0x58, so `0x991A` reads `02 58` -- big-endian 600,
+byte for byte what the ship record holds.
+
+Sixteen writes are mirrored: the port's REPAIR and FUEL in block 18, the same
+scene in block 95, and ten damage events in block 19, which should reach the
+ship as well.
+
+Only those three addresses. Countdown's repair writes these and no others, so
+the pairing is evidence rather than guesswork.
+
+### Still outstanding: the transpiler drops every operand's width
+
+Found while doing the above and worth fixing on its own. DOS marks a memory
+operand's width in its type byte -- 0x01 one byte, 0x03 two, 0x05 four -- and
+`map_variable` emits every one of them as 0x01. Across the scripts **41
+addresses are used two or four bytes wide**, including the ship's own fields,
+`0x4CE6` and `0x7C2B` (53 and 40 uses, four bytes wide).
+
+So `WRITE_MEM 600, [0x4D16]` still stores 88 in the script's own copy. That is
+why the fix above writes the engine's ship directly instead of relying on it.
+
+The reason this was not simply fixed: `flagmap` hands out **one byte** per
+story flag, so emitting a two-byte write would clobber whatever flag was
+allocated the next address along. Doing it properly means teaching flagmap
+which variables are wide and reserving room for them. The pool holds 3,587
+slots for 385 flags, so the space is there.
