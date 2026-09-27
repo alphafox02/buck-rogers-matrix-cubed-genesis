@@ -6087,3 +6087,36 @@ look like a name, and in a save the data after the party is not another
 character -- it found a seventh, nameless, level 1 with no hit points, and
 wrote a level into it. The tool now stops at six. Back up before editing a
 save, always.
+
+## The cargo elevator drawn in letters and digits
+
+The Salvation dock's cargo elevator, and every wall panel near it, came out as
+blocks of font glyphs -- `3456789:;<`, `ABCD` -- in the colours of the wall
+palette. Nothing about the wall tables was wrong. Two injectors were writing to
+the same address:
+
+    injectconsole.py   1868 bytes at 0x1B5000
+    inject_creature.py figure 0x2E, 1705 bytes at 0x1B5000
+
+`injectconsole.py` appends the courtesy console's tiles to wall set 1 and
+parks them in what its header called free space. `inject_creature.py` calls the
+same address free -- its own header says "0x1B5000 is clear" -- and it runs
+about fifty build steps later, so it wrote a creature straight over the
+console's LZW stream. A stream cut off part way decodes into fewer tiles than
+the piece has cells, and the cells past the end keep whatever VRAM already
+held, which on that screen is the font.
+
+The collision dates from the first build that had both tools in it. What made
+it visible was size. A stock 24x24 creature is about 600 bytes and left most of
+the console's 1868 intact, so the piece still decoded nearly right; once
+`bigfigures.py` gave figure 0x2E class 4, the same slot took 1705 bytes and
+buried it.
+
+Fixed by moving the console's tiles to **0x1B2800**, the gap between the
+monster stream (0x1B1000, about 4 KB) and the figure directory (0x1B4000).
+
+`romlayout.py` exists precisely to fail a build on this and did not, because
+its table had no pattern for the line `injectconsole.py` prints. It has one
+now, and the same build reports 84 regions instead of 83. Any injector added
+later must print what it wrote in a shape that table matches, or it is not
+being checked at all.

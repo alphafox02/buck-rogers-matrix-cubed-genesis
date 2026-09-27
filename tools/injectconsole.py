@@ -51,7 +51,20 @@ WALL_SET = 1                # what the Salvation dock uses
 PIECE_W, PIECE_CELLS = 9, 33
 PIECE = 5                   # wall code 8 in set 1: the courtesy console
 REGION = (2, 0, 5, 4)       # where in the piece the console hangs
-FREE, FREE_LIMIT = 0x1B5000, 0x1C0000
+# Where the appended tiles go.
+#
+# This was 0x1B5000, which inject_creature.py also calls free -- and it runs
+# later in the build, so every creature ROM quietly wrote figure 0x2E over the
+# console's art. The console then decoded as whatever was left in VRAM, which
+# is the font: the Salvation dock's cargo elevator came out as blocks of
+# letters and digits. It only showed up once the added creatures went in,
+# which is why art that had been right for months appeared to break on its own.
+#
+# 0x1B2800 is the gap between the monster stream (0x1B1000, about 4 KB) and
+# the figure directory (0x1B4000), and romlayout.py now reads this tool's
+# report too, so a repeat collision fails the build instead of reaching a
+# screenshot.
+FREE, FREE_LIMIT = 0x1B2800, 0x1B4000
 CONSOLE = REPO / "art_preview/walls/console_cut_from_atlas.png"
 CROP = (96, 84, 244, 268)     # the console face alone -- no silver pillars
 

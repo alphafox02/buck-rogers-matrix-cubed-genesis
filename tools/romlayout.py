@@ -41,6 +41,8 @@ PATTERNS = (
      lambda m: (int(m[2], 16), int(m[1]), "monster stream")),
     (r"(\d+) records at (0x[0-9A-F]+)",
      lambda m: (int(m[2], 16), int(m[1]) * 8, "figure directory")),
+    (r"(\d+) bytes at (0x[0-9A-F]+); table entry",
+     lambda m: (int(m[2], 16), int(m[1]), "wall fitting")),
     (r"music\[\d+\] .*? at (0x[0-9A-F]+), ends (0x[0-9A-F]+)",
      lambda m: (int(m[1], 16), int(m[2], 16) - int(m[1], 16), "music")),
     (r"(\w[\w ]*?), (\d+) bytes\s*$",
