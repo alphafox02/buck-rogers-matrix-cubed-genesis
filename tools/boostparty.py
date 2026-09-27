@@ -66,6 +66,7 @@ TEAM_LEA = 0x001F34         # the operand of `lea.l $6baad.l, a0`
 RECORD = 214
 SKILLS = 0x31               # first skill byte within a record
 LEVEL = 0x19
+EXP_NEXT = 0x1E             # experience for the next level, a longword
 
 # The blob holds TWO structures, and the loader at 0x001F3C reads them both:
 #
@@ -148,7 +149,20 @@ VETERAN_LEVEL = 8
 # ceiling is the engine's own: 0x04FCC caps a skill's contribution at twice
 # the character's level, so at level 12 anything above 24 is wasted and 16 is
 # a high score that still counts.
-HERO_LEVEL = 12
+# 8, not 12. The engine's experience tables at 0x00C36 hold seven thresholds
+# per career and then 0xFFFFFFFF, so **level 8 is the highest level the engine
+# can express**. A level-12 character is off the end of its own career's table,
+# and the trainer -- which exists to turn experience into levels -- was handed
+# one and could not be left: it offered advancement picks computed from a level
+# it has no row for, and would not close until they were spent.
+#
+# Reported from play as "I chose to train and now I can't exit the area".
+HERO_LEVEL = 8
+# Hit points do not have to track the level. They are a single byte at +0x2E
+# with no separate maximum anywhere in the record, so clamping the level to 8
+# need not cost the party the durability it had at 12. This restores it:
+# 12/8, which reproduces the 150/138/102/90/66/66 the level-12 team carried.
+HERO_HP_SCALE = 12 / 8
 HERO_ATTR = 18
 HERO_SKILL = 16
 
@@ -173,6 +187,13 @@ def veteran(raw, off, name, level):
     was = raw[off + LEVEL] or 1
     hp_was = raw[off + HP]
     raw[off + LEVEL] = level
+    # Experience has to agree with the level or the trainer cannot reconcile
+    # them. A character the engine considers finished carries 0xFFFFFFFF in
+    # exp-to-next -- that is the terminator each career's table ends with --
+    # and at HERO_LEVEL, which is the engine's maximum, that is the honest
+    # value. Leaving the pregens' level-2 threshold here is what handed the
+    # trainer a level-8 character who still owed six levels of advancement.
+    struct.pack_into(">I", raw, off + EXP_NEXT, 0xFFFFFFFF)
     raw[off + HP] = min(250, round(hp_was / was * level))
     cap = level * 2
     grown = []
@@ -193,6 +214,8 @@ def veteran(raw, off, name, level):
 def hero(raw, off, name):
     """Level up first, keeping the character's shape, then raise the rest."""
     hp = veteran(raw, off, name, HERO_LEVEL)
+    raw[off + HP] = min(250, round(raw[off + HP] * HERO_HP_SCALE))
+    hp = raw[off + HP]
     for i in range(ATTR_COUNT):
         raw[off + ATTRS + i] = max(raw[off + ATTRS + i], HERO_ATTR)
     for i in range(SKILL_COUNT):
