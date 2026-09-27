@@ -6249,9 +6249,21 @@ operand is resolving somewhere else.
 So the greeting repeats exactly twice, not for ever: the arrival marks the
 wrong byte, the first return marks the right one, and it is quiet after that.
 
-Block 19 runs `NEW_ECL 17` at `0x007CB` and then keeps going -- `0x007CE` is
-more of block 19. Whether the interpreter switches buffers there, and what the
-operand fetch at `0x0404A` is reading from when it does, is the thread to pull.
+The 14-byte gap between the two addresses is a red herring: flagmap allocates
+by how often a flag is used, so neighbouring Genesis addresses say nothing
+about their DOS origins. `0x4C2F` and `0x4C62` are 0x33 apart in DOS.
+
+What the arrival actually ran is an `OR` whose operand encodes DOS `0x4C62`
+with mask 4 -- and exactly one such instruction exists in the DOS scripts:
+
+    ECL1/034  0x01E56  OR 4, [0x4C62], [0x4C62]
+
+So the arrival is executing an instruction that belongs to **block 34**, while
+printing block 17's string and drawing block 17's picture. Block 19 runs
+`NEW_ECL 17` at `0x007CB` and then keeps going -- `0x007CE` is more of block
+19 -- so the thread to pull is what the interpreter has resident at that
+moment, and whether `transpile.CALL_EXPANSION` has emitted this scene twice
+with one copy carrying the wrong flag operand.
 
 Play also reports the Sun King scene re-triggering on re-entry, which is the
 same shape of failure and probably the same cause.
