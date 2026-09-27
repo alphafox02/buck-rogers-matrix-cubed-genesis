@@ -5807,3 +5807,41 @@ and the death still erases it cleanly. Do not reintroduce the half-swap, and
 do not widen the animation rectangle at `0x0CC9A` -- with the fetch correct,
 every frame of the sheet holds the same pose, so the blit paints the creature
 over itself and nothing moves.
+
+## Both sides start a combat on the same squares
+
+Reported from play: "the fight has the people all together instead of apart
+like in the dos game so they can walk towards one another -- i only ever see
+the t rex in one spot".
+
+The Genesis engine works the starting gap out from the MAP, not from the
+script:
+
+    035BE  move.b $9afa.w, d0 / asl.w #1 / bsr $4daa   ; open squares ahead
+    035C8  move.b d0, $9db6.w
+    035CC  cmp.b  $9db7.w, d0 / bcs -> keep            ; or the script's number,
+    035D2  move.b $9db7.w, $9db6.w                     ; whichever is smaller
+    03652  tst.b  $9db6.w / beq -> subq.b #$1, $9db6.w ; then one off
+    15056  move.b $9db6.w, $d4fe.w                     ; -> the placement
+    14844  muls.w d4, d2 / muls.w d4, d3               ; multiplies the offsets
+
+`0x04DAA` stops counting at two (`cmp.w #$2, d7 / bge`), so two is the most
+the engine ever produces, and `0x03652` takes one off that. Read live through
+the demo's fight the value falls 2, 1, 0 as the party walks, and it is 0 when
+COMBAT runs -- so the offsets are multiplied by nothing and the monsters are
+placed on the party's own squares.
+
+Forcing `[0xD4FE]` and looking at the board settles what it should be:
+
+    1   still crowded, the sides touching
+    2   the DOS picture: two sides with room between them
+    3   the monsters placed off the visible board
+
+`tools/combatgap.py` raises a gap of ZERO to two and leaves every other value
+alone -- where the engine found room it knows the map better than a constant
+does, and where it found none the alternative is an overlap. The ambush case
+at `0x1505C`, which forces the gap to 1 when `[0xD8CC]` is set, still runs
+afterwards and still wins.
+
+With it the demo's fight opens with the dinosaur and the robot on one side and
+the party on the other, and the dinosaur walks across to reach them.

@@ -369,6 +369,12 @@ def main():
     # routine that CHOOSES a square handles the two oblong classes and not
     # this one, so it tested only the anchor. See tools/bigplacement.py.
     step("bigplacement.py")
+
+    # The starting gap between the two sides. Nothing to do with creature
+    # size, but it is the same encounter that shows it up: with the gap at
+    # zero the monsters are placed on the party's own squares. See
+    # tools/combatgap.py.
+    step("combatgap.py")
     # Matrix Cubed's own creatures, each with a slot, a name and a figure of
     # its own. The figure directory grows first: monster id and figure id are
     # the same number, and a monster with no figure takes the miss path.
