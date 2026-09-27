@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 #!/usr/bin/env python3
 """
 Build the playable ROM.
@@ -328,6 +329,27 @@ def main():
     def step(tool, *args):
         run([sys.executable, str(REPO / "tools" / tool),
              str(work), str(work), *args])
+
+    # The art steps read PNGs out of extracted/, which is generated rather
+    # than committed -- it is 36 MB of the two games' own pictures. On a clean
+    # checkout it does not exist, so the build makes it first. This is what
+    # keeps "a pure function of the two inputs" true: nothing has to be
+    # extracted by hand before building.
+    #
+    # Two extractors, because the archives are in two formats. PIC1, SPRIT1,
+    # PIC7 and PIC8 are the "VGA dependent" format and decode by a different
+    # path; PIC1 is the one the PICTURE opcode indexes, so without it there
+    # are no faces in the picture window.
+    if art:
+        plain = REPO / "extracted" / "images"
+        vd = REPO / "extracted" / "images_vd"
+        dos = REPO / "dos_game" / "matrix"
+        if not (plain / "BIGPIC1").is_dir() or not (plain / "TITLE").is_dir():
+            run([sys.executable, str(REPO / "tools/extract_images.py"), str(plain)]
+                + [str(dos / f"{a}.DAX") for a in ("BIGPIC1", "TITLE", "BACK1")])
+        if not (vd / "PIC1").is_dir():
+            run([sys.executable, str(REPO / "tools/extract_images_vd.py"), str(vd)]
+                + [str(dos / f"{a}.DAX") for a in ("PIC1", "SPRIT1", "PIC7", "PIC8")])
 
     run([sys.executable, str(REPO / "tools/inject_area.py"),
          str(STOCK), str(work)] + specs())

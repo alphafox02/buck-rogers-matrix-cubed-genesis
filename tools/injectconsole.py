@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Put Matrix Cubed's courtesy console onto a Genesis wall as a fitting.
 
@@ -256,12 +257,22 @@ def build(rom: bytes, piece: int, region, state: Path, preview=None,
     if recolour:
         pal.update(RECOLOUR)
     if style == "dos":
+        if not CONSOLE.exists():
+            raise SystemExit(
+                f"style 'dos' needs {CONSOLE.relative_to(REPO)}, which is a cut\n"
+                f"from the DOS wall atlas and is generated rather than committed.\n"
+                f"The build uses style 'drawn', which needs no such file.")
         art = Image.open(CONSOLE).convert("RGB").crop(CROP)
         art = art.resize((w * 8, h * 8), Image.LANCZOS)
         idx = quantise(art, pal)
     else:
         idx = drawn_console(w, h)
     if preview:
+        # art_preview/ is generated, not committed, so on a clean checkout
+        # this directory does not exist and saving into it killed the build.
+        # The preview is a debug aid -- make room for it rather than requiring
+        # somebody to have run something else first.
+        Path(preview).parent.mkdir(parents=True, exist_ok=True)
         out = Image.new("RGB", (w * 8, h * 8))
         for i, v in enumerate(idx):
             out.putpixel((i % (w * 8), i // (w * 8)), pal[v])

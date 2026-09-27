@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 Check the two games are present and are the right dumps, before building.
 
@@ -49,6 +50,44 @@ def sha1(path):
     return hashlib.sha1(path.read_bytes()).hexdigest()
 
 
+def rescue(rel):
+    """Look for a missing input somewhere else and say where it is.
+
+    Getting the layout right is the one genuine obstacle to building this,
+    and it is not obvious from a bare "file not found". A DOS installation
+    can arrive as an archive, in a directory of another name, or with its
+    filenames lowercased by whatever unpacked it -- all of which are easy to
+    fix once somebody says which of the three happened.
+    """
+    want = Path(rel).name
+    hits = []
+    for found in REPO.rglob("*"):
+        if not found.is_file() or found.name.upper() != want.upper():
+            continue
+        if ".git" in found.parts:
+            continue
+        hits.append(found)
+        if len(hits) >= 3:
+            break
+    return hits
+
+
+def archives():
+    """Archives in the repository that hold the DOS game, and their prefix."""
+    import zipfile
+    out = []
+    for z in sorted(REPO.glob("*.zip")):
+        try:
+            with zipfile.ZipFile(z) as zf:
+                names = zf.namelist()
+        except Exception:
+            continue
+        dax = [n for n in names if n.upper().endswith("ECL1.DAX")]
+        if dax:
+            out.append((z, dax[0].rsplit("/", 1)[0] if "/" in dax[0] else ""))
+    return out
+
+
 def check(verbose=True):
     missing, wrong = [], []
     for rel, want in REQUIRED.items():
@@ -78,8 +117,25 @@ if __name__ == "__main__":
     if missing:
         print("\nThis repository ships no game data. Provide your own copies:\n"
               "    roms/countdown.gen        a Countdown to Doomsday cartridge dump\n"
-              "    dos_game/matrix/          a Matrix Cubed DOS installation\n"
-              "and run this again.")
+              "    dos_game/matrix/          a Matrix Cubed DOS installation\n")
+        # Say where the files actually are, if they are anywhere.
+        helped = False
+        for rel in missing:
+            for found in rescue(rel):
+                print(f"  {Path(rel).name} looks like it is already here:\n"
+                      f"      {found.relative_to(REPO)}\n"
+                      f"      wanted at {rel}")
+                helped = True
+        for z, prefix in archives():
+            inner = f"{prefix}/" if prefix else ""
+            print(f"  {z.name} contains the DOS game under {inner or '(no prefix)'}\n"
+                  f"      unzip '{z.name}' -d dos_game/"
+                  + ("" if prefix == "matrix" else
+                     f"\n      then arrange it so the .DAX files sit in dos_game/matrix/"))
+            helped = True
+        if not helped:
+            print("  Nothing resembling either game was found in this directory.")
+        print("\nThen run this again.")
         sys.exit(1)
     if wrong:
         print("\nBuilding anyway. Every offset in tools/ was measured against\n"
