@@ -6267,3 +6267,37 @@ with one copy carrying the wrong flag operand.
 
 Play also reports the Sun King scene re-triggering on re-entry, which is the
 same shape of failure and probably the same cause.
+
+### Two theories ruled out
+
+**Not a duplicated scene.** `transpile.CALL_EXPANSION` does not emit this code
+twice with a wrong operand. In block 17's emitted bytecode the flag operand
+for DOS `0x4C2F` appears 29 times and DOS `0x4C62` appears **0** times; block
+34 is the mirror image, 19 and 0. Neither block carries the other's flag.
+
+**Not set-then-cleared.** Watching `0x9867` every single frame across the
+whole arrival -- six taps, 150 frames each -- it is never non-zero, not for
+one frame. The `OR` at `0x0081D` simply does not execute on that path.
+
+Since the arrival draws `PICTURE 86` (`0x0081A`) and prints the string at
+`0x00826`, control is entering the scene *between* those two instructions.
+Nothing in the DOS script jumps to `0x8826`, so the entry comes from the
+`NEW_ECL 17` handoff in block 19.
+
+### Romney's papers may not be a bug
+
+Play reports not receiving the papers on the first run and receiving them on
+the replay. That branch is
+
+    01684  COMBAT
+    01685  COMPARE [0x7EC7], 128
+    0168B  IF_GREATER
+    0168C  GOTO [0x857A]        ; no papers
+
+`0x7EC7` is COMBAT_RESULT and its mapping to `0x9DBD` is well established --
+four independent mappings agree on the 0x1EF6 offset for that bank, and
+COMBAT_MORALE_BASE falls out at `0x9DBC`, which does write {80, 90, 100} in
+play as predicted. A result above 128 means the fight was not won outright,
+and DOS withholds the papers for the same reason. Fleeing the first encounter
+would skip them on either platform. The replay is the bug; the missing papers
+look like its consequence.
