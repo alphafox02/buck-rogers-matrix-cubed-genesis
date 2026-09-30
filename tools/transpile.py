@@ -875,6 +875,37 @@ def transpile(block: bytes, flags=None, walk_as_step=False,
             report.append((off, "window",
                            f"{found[off].name} removed: the window is full"))
             continue
+        # A conditional gates exactly the next instruction, so a page break
+        # inserted in front of that instruction takes the guard for itself and
+        # what was meant to be conditional runs every time. Block 17's
+        # chancellor is the case that showed it:
+        #
+        #     AND 2, [0x4C2D], [0x7F79]
+        #     IF_NOT_EQUALS
+        #     PRINT "WITH BERKELEY DEAD, ..."
+        #     IF_EQUALS
+        #     PRINT "IT IS GOOD THAT YOU WERE HERE, ..."
+        #
+        # Both prints overflow the window, so both earned a break, and both
+        # breaks landed on a guard. The player was told Berkeley was dead
+        # whatever they had just done about it, and then told the opposite.
+        #
+        # So when this instruction is a conditional and the one it guards
+        # wants a break, the break is emitted HERE, ahead of the conditional.
+        # It reads the same and leaves the pair adjacent.
+        _here = found.get(off)
+        if _here is not None and _here.name in ecl._CONDITIONAL:
+            _guarded = off + _here.size
+            if breaks.get(_guarded) in ("clear", "drop"):
+                cont, _ = gen["CONTINUE"]
+                layout.setdefault(off, pos)
+                pieces.append((off, cont, [], 1))
+                pos += 1
+                report.append((off, "window",
+                               f"page break moved ahead of {_here.name}, "
+                               f"which would have lost its guard"))
+                if breaks[_guarded] == "clear":
+                    del breaks[_guarded]      # 'drop' still removes the print
         if brk:
             cont, _ = gen["CONTINUE"]
             layout.setdefault(off, pos)
