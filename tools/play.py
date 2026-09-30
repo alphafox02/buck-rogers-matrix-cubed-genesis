@@ -233,6 +233,42 @@ class Game:
         self.clear()
         return bool(self.walk(direction))
 
+    IN_COMBAT = 0xFF9BBC          # 2 while a fight is on
+
+    def fighting(self):
+        return self.save()[0x10 + ((self.IN_COMBAT & 0xFFFF) ^ 1)] == 2
+
+    def fight(self, limit=800):
+        """Resolve a fight with the engine's own QUICK COMBAT option.
+
+        Mashing the button does nothing: the targeting cursor starts on a
+        party member, the panel reads FRIENDLY, and an attack on a friend is
+        simply refused -- which is why this harness used to stall at every
+        encounter and every post-combat branch had to be checked by a person.
+
+        The engine offers QUICK COMBAT, which resolves the round itself. It is
+        not always on screen, so this cycles the d-pad until the option
+        appears and confirms it, once per character, until the fight ends.
+
+        The text comes off the tilemap with its first letters eaten by the
+        weapon icons sharing those cells -- QUICK survives intact, which is
+        why that is what this matches on rather than a tidier label.
+
+        Returns COMBAT_RESULT (0x7EC7 -> 0xFF9DBD): 0 on a win. The scripts
+        test it with `COMPARE [0x7EC7], 128 / IF_GREATER`, so anything above
+        128 is the branch where the party did not win outright -- no reward
+        from Romney, no thanks from the Sun King.
+        """
+        turn = ("UP", "LEFT", "DOWN", "RIGHT")
+        for k in range(limit):
+            if not self.fighting():
+                return self.save()[0x10 + ((0xFF9DBD & 0xFFFF) ^ 1)]
+            if "QUICK" in " ".join(self.text().split()).upper():
+                self.tap("C", hold=12, rest=200)
+            else:
+                self.tap(turn[k % 4], hold=10, rest=60)
+        return None
+
     def to_dungeon(self):
         """
         Boot all the way to free movement on the opening dock.
