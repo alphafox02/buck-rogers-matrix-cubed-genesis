@@ -6706,3 +6706,30 @@ produces exactly the same bytes.
 This also explains the docking gate never being the problem. `0x4C17 AND
 0x4C42` at `0x015AF` reads 0 AND 0 at the start, so clearance was always
 granted; the party simply never got there.
+
+## A saved game does not survive a rebuild
+
+`flagmap` allocates Matrix Cubed's story flags into whatever RAM the engine
+leaves free, ordered by how often each flag is used. The allocation is
+deterministic for a given set of tools -- but it is **not stable when the
+tools change**. Anything that adds a mapped address removes a slot from the
+pool and shifts every allocation after it. Adding `transpile.SHIP_SYNC` moved
+DOS `0x4C30` from `0x976B` to `0x9777`, one build to the next.
+
+Inside any one build this is harmless: `bootstub.py` and the transpiled
+scripts both take their addresses from the same `flagmap.build()` call, so
+they always agree. Verified in the shipped ROM -- the stub writes
+`SAVE 0x1, [0x976B]` and block 19 reads `COMPARE [0x976B], 0`.
+
+Across builds it is not harmless. **A saved game written by one build carries
+its flags at addresses the next build does not read**, so the game forgets
+what the player has done: the opening replays, scenes re-trigger, doors that
+were unlocked are shut. Reported from play as being stuck in "the first level
+loop" after a rebuild.
+
+So: after rebuilding, start a new game. A save is only valid for the ROM that
+wrote it.
+
+Making saves portable would mean pinning the allocation -- writing the map out
+and reusing it rather than recomputing -- which is worth doing before anyone
+plays far enough to care about losing a save.
