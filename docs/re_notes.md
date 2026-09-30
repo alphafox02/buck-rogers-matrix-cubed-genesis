@@ -6733,3 +6733,37 @@ wrote it.
 Making saves portable would mean pinning the allocation -- writing the map out
 and reusing it rather than recomputing -- which is worth doing before anyone
 plays far enough to care about losing a save.
+
+## Menu choices are 0-based, measured
+
+`SELECT_ACTION` becomes `WHMENU`, and the value it writes back is the option's
+index counting from **zero**. Measured rather than read: drive to the Romney
+menu, poison the destination variable to 0xEE, take the leftmost option, read
+it back. It is 0.
+
+That settles a scene it is easy to get wrong. Block 17's assassination
+attempt offers
+
+    01DBA  SELECT_ACTION [0x7F79], 3, {"WAIT", "ATTACK", "KNOCK DOWN THE SUN KING"}
+    01DE4  COMPARE [0x7F79], 2
+    01DEA  IF_EQUALS
+    01DEB  GOTO  -> the Sun King lives
+    01DEF  OR 2, [0x4C2D]   -> he dies
+
+so 0-based makes the saving action **KNOCK DOWN THE SUN KING**, the third
+option, not ATTACK. Pushing him clear of the shot is what works, which is also
+the reading that makes sense of the scene. `ON_GOTO` indexes the same way, so
+the two agree.
+
+Berkeley IS the Sun King -- the briefing calls him "THIS NEW SUN KING, LORD
+BERKELEY" -- so the chancellor's "with Berkeley dead" line later is the same
+man, gated on bit 1 of `0x4C2D` being set by the scene above.
+
+### The harness cannot fight
+
+There is no auto-resolve in the engine. The combat UI is icon-driven, so
+`tools/play.py` can reach a fight and cannot finish one, which is why every
+question about a post-combat branch -- Romney's papers, the Sun King's
+survival, both gated on `COMBAT_RESULT` at `0x7EC7` -- has had to be answered
+by a person playing. Teaching the harness to drive combat would close the
+largest remaining gap in what can be verified without one.
